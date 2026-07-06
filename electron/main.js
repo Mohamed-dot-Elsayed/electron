@@ -21,12 +21,13 @@ const { createServer } = require('../local-server/dist/app');
 
 const PORT = 3001;
 let mainWindow;
+let serverInstance;
 
 async function startServer() {
   await initDb();
   const expressApp = createServer();
   return new Promise((resolve, reject) => {
-    const server = expressApp.listen(PORT, () => {
+    serverInstance = expressApp.listen(PORT, () => {
       console.log(`Local server listening on http://localhost:${PORT}`);
       resolve(server);
     });
@@ -149,6 +150,10 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on('before-quit', () => {
+  if (serverInstance) serverInstance.close();
 });
 
 app.on('window-all-closed', () => {
