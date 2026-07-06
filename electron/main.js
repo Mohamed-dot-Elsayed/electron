@@ -29,9 +29,9 @@ async function startServer() {
   return new Promise((resolve, reject) => {
     serverInstance = expressApp.listen(PORT, () => {
       console.log(`Local server listening on http://localhost:${PORT}`);
-      resolve(server);
+      resolve(serverInstance);
     });
-    server.on('error', reject);
+    serverInstance.on('error', reject);
   });
 }
 
