@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
+app.setName('SyncDemo');
 
 // REMOTE_API_URL points at your "cloud" server. In this demo it's the
 // remote-server folder running locally on port 4000. In real life this
