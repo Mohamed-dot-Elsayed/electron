@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
@@ -65,10 +65,13 @@ function loadEmbeddedToken() {
   }
 }
 
+function notify(title, body) {
+  if (Notification.isSupported()) {
+    new Notification({ title, body }).show();
+  }
+}
+
 function setupAutoUpdates() {
-  // Everything auto-updater does gets written to a plain text log file, since
-  // a packaged app has no visible console. Check this file first whenever
-  // updates seem to "do nothing" - it'll show exactly what happened.
   const logPath = path.join(app.getPath('userData'), 'update-log.txt');
   const log = (msg) => {
     const line = `[${new Date().toISOString()}] ${msg}\n`;
@@ -79,12 +82,10 @@ function setupAutoUpdates() {
   log(`App starting. Current version: ${app.getVersion()}. isPackaged: ${app.isPackaged}`);
 
   if (!app.isPackaged) {
-    log('Skipping update check - app is not packaged (running via `npm start`/`electron .` never checks for updates). Test using the installed app instead.');
+    log('Skipping update check - app is not packaged.');
     return;
   }
 
-  // The repo is private, so update checks need auth. This token was baked in
-  // at build time by scripts/generate-token-file.js (from electron-builder.env).
   const token = loadEmbeddedToken();
   if (token) {
     process.env.GH_TOKEN = token;
@@ -93,18 +94,28 @@ function setupAutoUpdates() {
     log('WARNING: no embedded token found - update checks against the private repo will fail with 404.');
   }
 
-  autoUpdater.on('checking-for-update', () => log('Checking for update...'));
+  autoUpdater.on('checking-for-update', () => {
+    log('Checking for update...');
+  });
 
-  autoUpdater.on('update-available', (info) => log(`Update available: v${info.version}. Downloading...`));
+  autoUpdater.on('update-available', (info) => {
+    log(`Update available: v${info.version}. Downloading...`);
+    notify('Update found', `Version ${info.version} is downloading in the background.`);
+  });
 
   autoUpdater.on('update-not-available', (info) => {
     log(`No update available. Latest published version is v${info.version}, this is v${app.getVersion()}.`);
   });
 
-  autoUpdater.on('download-progress', (p) => log(`Downloading update: ${Math.round(p.percent)}%`));
+  autoUpdater.on('download-progress', (p) => {
+    log(`Downloading update: ${Math.round(p.percent)}%`);
+    if (mainWindow) mainWindow.setProgressBar(p.percent / 100); // shows progress on the taskbar icon
+  });
 
   autoUpdater.on('update-downloaded', (info) => {
     log(`Update v${info.version} downloaded. Prompting to restart.`);
+    if (mainWindow) mainWindow.setProgressBar(-1); // clear taskbar progress bar
+    notify('Update ready', `Version ${info.version} is ready to install.`);
     dialog
       .showMessageBox(mainWindow, {
         type: 'info',
