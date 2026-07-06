@@ -1,0 +1,144 @@
+const { app, BrowserWindow, dialog } = require('electron');
+const path = require('path');
+const fs = require('fs');
+const { autoUpdater } = require('electron-updater');
+
+// REMOTE_API_URL points at your "cloud" server. In this demo it's the
+// remote-server folder running locally on port 4000. In real life this
+// would be your deployed backend URL (e.g. your EC2 instance).
+process.env.REMOTE_API_URL = process.env.REMOTE_API_URL || 'http://localhost:4000';
+
+// IMPORTANT: local-server/dist ends up inside the read-only app.asar once packaged,
+// so the sqlite file can't live next to it like it does in dev. Point it at
+// Electron's userData folder (a real writable per-user directory) instead.
+// This MUST be set before requiring local-server/dist/db, since it reads this
+// env var at module load time.
+process.env.LOCAL_DB_PATH = path.join(app.getPath('userData'), 'local.db');
+
+const { initDb } = require('../local-server/dist/db');
+const { createServer } = require('../local-server/dist/app');
+
+const PORT = 3001;
+let mainWindow;
+
+async function startServer() {
+  await initDb();
+  const expressApp = createServer();
+  return new Promise((resolve, reject) => {
+    const server = expressApp.listen(PORT, () => {
+      console.log(`Local server listening on http://localhost:${PORT}`);
+      resolve(server);
+    });
+    server.on('error', reject);
+  });
+}
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1100,
+    height: 750,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  mainWindow.loadURL(`http://localhost:${PORT}`);
+  mainWindow.on('closed', () => (mainWindow = null));
+
+  // If the page fails to load for any reason, show it instead of a blank window
+  mainWindow.webContents.on('did-fail-load', (_e, errorCode, errorDescription) => {
+    dialog.showErrorBox(
+      'Failed to load app',
+      `Could not load http://localhost:${PORT}\n\n${errorDescription} (${errorCode})`
+    );
+  });
+}
+
+function loadEmbeddedToken() {
+  try {
+    const data = JSON.parse(fs.readFileSync(path.join(__dirname, 'embedded-token.json'), 'utf-8'));
+    return data.token || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function setupAutoUpdates() {
+  // Everything auto-updater does gets written to a plain text log file, since
+  // a packaged app has no visible console. Check this file first whenever
+  // updates seem to "do nothing" - it'll show exactly what happened.
+  const logPath = path.join(app.getPath('userData'), 'update-log.txt');
+  const log = (msg) => {
+    const line = `[${new Date().toISOString()}] ${msg}\n`;
+    console.log(line.trim());
+    fs.appendFileSync(logPath, line);
+  };
+
+  log(`App starting. Current version: ${app.getVersion()}. isPackaged: ${app.isPackaged}`);
+
+  if (!app.isPackaged) {
+    log('Skipping update check - app is not packaged (running via `npm start`/`electron .` never checks for updates). Test using the installed app instead.');
+    return;
+  }
+
+  // The repo is private, so update checks need auth. This token was baked in
+  // at build time by scripts/generate-token-file.js (from electron-builder.env).
+  const token = loadEmbeddedToken();
+  if (token) {
+    autoUpdater.requestHeaders = { Authorization: `token ${token}` };
+    log('Loaded embedded token for private-repo update checks.');
+  } else {
+    log('WARNING: no embedded token found - update checks against the private repo will fail with 404.');
+  }
+
+  autoUpdater.on('checking-for-update', () => log('Checking for update...'));
+
+  autoUpdater.on('update-available', (info) => log(`Update available: v${info.version}. Downloading...`));
+
+  autoUpdater.on('update-not-available', (info) => {
+    log(`No update available. Latest published version is v${info.version}, this is v${app.getVersion()}.`);
+  });
+
+  autoUpdater.on('download-progress', (p) => log(`Downloading update: ${Math.round(p.percent)}%`));
+
+  autoUpdater.on('update-downloaded', (info) => {
+    log(`Update v${info.version} downloaded. Prompting to restart.`);
+    dialog
+      .showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Update ready',
+        message: `Version ${info.version} has been downloaded. Restart now to install it?`,
+        buttons: ['Restart now', 'Later'],
+      })
+      .then((result) => {
+        if (result.response === 0) autoUpdater.quitAndInstall();
+      });
+  });
+
+  autoUpdater.on('error', (err) => {
+    log(`ERROR: ${err && err.stack ? err.stack : err}`);
+    dialog.showErrorBox('Update check failed', String(err && err.message ? err.message : err));
+  });
+
+  autoUpdater.checkForUpdatesAndNotify();
+}
+
+app.whenReady().then(async () => {
+  try {
+    await startServer();
+  } catch (err) {
+    dialog.showErrorBox('Failed to start local server', String(err && err.stack ? err.stack : err));
+    app.quit();
+    return;
+  }
+  createWindow();
+  setupAutoUpdates();
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
+});

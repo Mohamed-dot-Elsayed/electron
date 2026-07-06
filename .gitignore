@@ -1,0 +1,6 @@
+node_modules/
+dist/
+release/
+*.db
+electron-builder.env
+electron/embedded-token.json

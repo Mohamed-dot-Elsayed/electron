@@ -1,0 +1,61 @@
+{
+  "name": "electron-sync-demo",
+  "version": "1.0.0",
+  "main": "electron/main.js",
+  "scripts": {
+    "install:all": "npm install && cd remote-server && npm install && cd ../client && npm install",
+    "build:local-server": "tsc -p local-server",
+    "build:client": "cd client && npm run build",
+    "build": "node scripts/generate-token-file.js && npm run build:local-server && npm run build:client",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && electron-builder",
+    "dist:publish": "npm run build && electron-builder --publish always",
+    "start:remote": "cd remote-server && npm run dev"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.0",
+    "express": "^4.19.2",
+    "sql.js": "^1.11.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.0",
+    "@types/sql.js": "^1.4.9",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "typescript": "^5.5.4"
+  },
+  "build": {
+    "appId": "com.demo.syncapp",
+    "productName": "SyncDemo",
+    "files": [
+      "electron/**/*",
+      "local-server/dist/**/*",
+      "client/dist/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "asarUnpack": [
+      "node_modules/sql.js/**",
+      "**/node_modules/sql.js/**"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Mohamed-dot-Elsayed",
+      "repo": "electron",
+      "releaseType": "release",
+      "private": true
+    }
+  }
+}
