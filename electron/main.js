@@ -10,11 +10,6 @@ app.setName("SyncDemo");
 process.env.REMOTE_API_URL =
   process.env.REMOTE_API_URL || "http://localhost:4000";
 
-// IMPORTANT: local-server/dist ends up inside the read-only app.asar once packaged,
-// so the sqlite file can't live next to it like it does in dev. Point it at
-// Electron's userData folder (a real writable per-user directory) instead.
-// This MUST be set before requiring local-server/dist/db, since it reads this
-// env var at module load time.
 process.env.LOCAL_DB_PATH = path.join(app.getPath("userData"), "local.db");
 
 const { initDb } = require("../local-server/dist/db");
@@ -30,18 +25,36 @@ if (!gotSingleInstanceLock) {
   app.quit();
 }
 
+// ⭐ IMPROVED: Force-kill any existing server connections
 function stopServer() {
   return new Promise((resolve) => {
     if (!serverInstance) {
+      console.log("No server instance to stop");
       resolve();
       return;
     }
+    
+    console.log("Stopping server...");
     const server = serverInstance;
     serverInstance = null;
+    
+    // Force close all connections immediately
     if (typeof server.closeAllConnections === "function") {
       server.closeAllConnections();
     }
-    server.close(() => resolve());
+    
+    // Set a timeout to force close
+    const forceTimeout = setTimeout(() => {
+      console.log("Force closing server after timeout");
+      server.close();
+      resolve();
+    }, 2000);
+    
+    server.close(() => {
+      clearTimeout(forceTimeout);
+      console.log("Server stopped gracefully");
+      resolve();
+    });
   });
 }
 
@@ -70,7 +83,6 @@ function createWindow() {
   mainWindow.loadURL(`http://localhost:${PORT}`);
   mainWindow.on("closed", () => (mainWindow = null));
 
-  // If the page fails to load for any reason, show it instead of a blank window
   mainWindow.webContents.on(
     "did-fail-load",
     (_e, errorCode, errorDescription) => {
@@ -150,13 +162,15 @@ function setupAutoUpdates() {
 
   autoUpdater.on("download-progress", (p) => {
     log(`Downloading update: ${Math.round(p.percent)}%`);
-    if (mainWindow) mainWindow.setProgressBar(p.percent / 100); // shows progress on the taskbar icon
+    if (mainWindow) mainWindow.setProgressBar(p.percent / 100);
   });
 
+  // ⭐ FIXED: Updated update-downloaded handler
   autoUpdater.on("update-downloaded", (info) => {
     log(`Update v${info.version} downloaded. Prompting to restart.`);
-    if (mainWindow) mainWindow.setProgressBar(-1); // clear taskbar progress bar
+    if (mainWindow) mainWindow.setProgressBar(-1);
     notify("Update ready", `Version ${info.version} is ready to install.`);
+    
     dialog
       .showMessageBox(mainWindow, {
         type: "info",
@@ -166,9 +180,23 @@ function setupAutoUpdates() {
       })
       .then(async (result) => {
         if (result.response === 0) {
+          log("User chose to restart. Stopping services...");
+          
+          // ⭐ Close all windows first
+          if (mainWindow) {
+            mainWindow.close();
+            mainWindow = null;
+          }
+          
+          // ⭐ Stop the server and wait for it
           isQuitting = true;
           await stopServer();
-          autoUpdater.quitAndInstall();
+          
+          // ⭐ Give Node.js time to cleanup event loop
+          log("Services stopped. Starting update installation...");
+          setTimeout(() => {
+            autoUpdater.quitAndInstall(true, true);
+          }, 500);
         }
       });
   });
@@ -212,23 +240,26 @@ if (gotSingleInstanceLock) {
   });
 }
 
-app.on("before-quit-for-update", () => {
-  isQuitting = true;
-  if (!serverInstance) return;
-  if (typeof serverInstance.closeAllConnections === "function") {
-    serverInstance.closeAllConnections();
+// ⭐ IMPROVED: Clean up server on quit
+app.on("before-quit", async (event) => {
+  if (!isQuitting) {
+    event.preventDefault();
+    isQuitting = true;
+    
+    // Close all windows
+    BrowserWindow.getAllWindows().forEach(window => window.destroy());
+    
+    // Stop the server
+    await stopServer();
+    
+    // Now actually quit
+    app.quit();
   }
-  serverInstance.close();
-  serverInstance = null;
 });
 
-app.on("before-quit", (event) => {
-  if (isQuitting) return;
-  event.preventDefault();
-  stopServer().then(() => {
-    isQuitting = true;
-    app.quit();
-  });
+// ⭐ ADDED: Handle the quit event from updater
+app.on('quit', () => {
+  console.log('App is quitting...');
 });
 
 app.on("window-all-closed", () => {
