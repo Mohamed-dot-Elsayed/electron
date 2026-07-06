@@ -23,6 +23,27 @@ const { createServer } = require("../local-server/dist/app");
 const PORT = 3001;
 let mainWindow;
 let serverInstance;
+let isQuitting = false;
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
+
+function stopServer() {
+  return new Promise((resolve) => {
+    if (!serverInstance) {
+      resolve();
+      return;
+    }
+    const server = serverInstance;
+    serverInstance = null;
+    if (typeof server.closeAllConnections === "function") {
+      server.closeAllConnections();
+    }
+    server.close(() => resolve());
+  });
+}
 
 async function startServer() {
   await initDb();
@@ -143,10 +164,11 @@ function setupAutoUpdates() {
         message: `Version ${info.version} has been downloaded. Restart now to install it?`,
         buttons: ["Restart now", "Later"],
       })
-      .then((result) => {
+      .then(async (result) => {
         if (result.response === 0) {
-          if (serverInstance) serverInstance.close();
-          setTimeout(() => autoUpdater.quitAndInstall(), 500);
+          isQuitting = true;
+          await stopServer();
+          autoUpdater.quitAndInstall();
         }
       });
   });
@@ -162,26 +184,51 @@ function setupAutoUpdates() {
   autoUpdater.checkForUpdatesAndNotify();
 }
 
-app.whenReady().then(async () => {
-  try {
-    await startServer();
-  } catch (err) {
-    dialog.showErrorBox(
-      "Failed to start local server",
-      String(err && err.stack ? err.stack : err)
-    );
-    app.quit();
-    return;
-  }
-  createWindow();
-  setupAutoUpdates();
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+if (gotSingleInstanceLock) {
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
   });
+
+  app.whenReady().then(async () => {
+    try {
+      await startServer();
+    } catch (err) {
+      const detail =
+        err && err.code === "EADDRINUSE"
+          ? `Port ${PORT} is already in use.\n\nClose any running SyncDemo from Task Manager (or end the process using that port), then try again.\n\n${err.stack || err}`
+          : String(err && err.stack ? err.stack : err);
+      dialog.showErrorBox("Failed to start local server", detail);
+      app.quit();
+      return;
+    }
+    createWindow();
+    setupAutoUpdates();
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+}
+
+app.on("before-quit-for-update", () => {
+  isQuitting = true;
+  if (!serverInstance) return;
+  if (typeof serverInstance.closeAllConnections === "function") {
+    serverInstance.closeAllConnections();
+  }
+  serverInstance.close();
+  serverInstance = null;
 });
 
-app.on("before-quit", () => {
-  if (serverInstance) serverInstance.close();
+app.on("before-quit", (event) => {
+  if (isQuitting) return;
+  event.preventDefault();
+  stopServer().then(() => {
+    isQuitting = true;
+    app.quit();
+  });
 });
 
 app.on("window-all-closed", () => {
