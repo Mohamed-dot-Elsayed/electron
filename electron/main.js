@@ -86,7 +86,7 @@ function setupAutoUpdates() {
   // at build time by scripts/generate-token-file.js (from electron-builder.env).
   const token = loadEmbeddedToken();
   if (token) {
-    autoUpdater.requestHeaders = { Authorization: `token ${token}` };
+    process.env.GH_TOKEN = token;
     log('Loaded embedded token for private-repo update checks.');
   } else {
     log('WARNING: no embedded token found - update checks against the private repo will fail with 404.');
