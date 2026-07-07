@@ -1,6 +1,6 @@
 {
   "name": "electron-sync-demo",
-  "version": "1.0.24",
+  "version": "1.0.25",
   "main": "electron/main.js",
   "scripts": {
     "install:all": "npm install &&  cd client && npm install",
