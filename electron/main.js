@@ -2,7 +2,6 @@ const { app, BrowserWindow, dialog, Notification } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { autoUpdater } = require("electron-updater");
-const { exec } = require("child_process");
 app.setName("SyncDemo");
 
 process.env.REMOTE_API_URL =
@@ -30,19 +29,19 @@ function stopServer() {
       resolve();
       return;
     }
-    
+
     console.log("Stopping server...");
-    
+
     // Close all connections first
     serverInstance.closeAllConnections?.();
-    
+
     // Set a timeout to force close
     const forceClose = setTimeout(() => {
       console.log("Force closing server...");
       serverInstance.closeAllConnections?.();
       resolve();
     }, 3000);
-    
+
     // Try graceful shutdown
     serverInstance.close(() => {
       clearTimeout(forceClose);
@@ -56,11 +55,11 @@ function stopServer() {
 async function startServer() {
   await initDb();
   const expressApp = createServer();
-  
+
   // Disable keep-alive to prevent hanging connections
   expressApp.set('keepAliveTimeout', 1000);
   expressApp.set('headersTimeout', 2000);
-  
+
   return new Promise((resolve, reject) => {
     serverInstance = expressApp.listen(PORT, () => {
       console.log(`Local server listening on http://localhost:${PORT}`);
@@ -152,12 +151,12 @@ function setupAutoUpdates() {
     if (mainWindow) mainWindow.setProgressBar(p.percent / 100);
   });
 
-  // ⭐ FIXED: Complete rewrite of update-downloaded handler
+  // ⭐ FIXED: Let electron-updater handle the quit/install/relaunch itself
   autoUpdater.on("update-downloaded", (info) => {
     log(`Update v${info.version} downloaded. Prompting to restart.`);
     if (mainWindow) mainWindow.setProgressBar(-1);
     notify("Update ready", `Version ${info.version} is ready to install.`);
-    
+
     dialog
       .showMessageBox(mainWindow, {
         type: "info",
@@ -169,58 +168,24 @@ function setupAutoUpdates() {
         if (result.response === 0) {
           log("User chose to restart. Starting update process...");
           isQuitting = true;
-          
+
           // Step 1: Close main window
           if (mainWindow) {
             log("Closing main window...");
             mainWindow.close();
             mainWindow = null;
           }
-          
+
           // Step 2: Stop server and wait
           log("Stopping server...");
           await stopServer();
           log("Server stopped.");
-          
-          // Step 3: Force kill the app process using a batch script
-          // This is the most reliable way to ensure the process is gone
-          const batchPath = path.join(app.getPath('temp'), 'sync-demo-update.bat');
-          const installerPath = path.join(
-            app.getPath('userData'),
-            '..',
-            'electron-sync-demo-updater',
-            'pending',
-            `SyncDemo-Setup-${info.version}.exe`
-          );
-          
-          const batchContent = `@echo off
-echo Waiting for SyncDemo to close...
-timeout /t 3 /nobreak >nul
-echo Running installer...
-start /wait "" "${installerPath}" --updated --force-run
-if %ERRORLEVEL% EQU 0 (
-    echo Update installed successfully
-) else (
-    echo Installer exited with code %ERRORLEVEL%
-    pause
-)
-del "%~f0"
-`;
-          
-          fs.writeFileSync(batchPath, batchContent);
-          log(`Batch script created at: ${batchPath}`);
-          log(`Installer path: ${installerPath}`);
-          
-          // Step 4: Launch the batch script and immediately exit
-          exec(`start "" cmd /c "${batchPath}"`, (error) => {
-            if (error) {
-              log(`Error launching batch: ${error}`);
-            }
-          });
-          
-          // Step 5: Force exit the app immediately
-          log("Exiting app...");
-          app.exit(0);
+
+          // Step 3: Hand off to electron-updater. It quits the app,
+          // launches the NSIS installer, and relaunches the app after
+          // install completes. No manual batch script needed.
+          log("Calling quitAndInstall...");
+          autoUpdater.quitAndInstall();
         }
       });
   });
@@ -268,13 +233,13 @@ app.on("before-quit", async (event) => {
   if (!isQuitting) {
     event.preventDefault();
     isQuitting = true;
-    
+
     // Close all windows
     BrowserWindow.getAllWindows().forEach(w => w.close());
-    
+
     // Stop server
     await stopServer();
-    
+
     app.quit();
   }
 });
