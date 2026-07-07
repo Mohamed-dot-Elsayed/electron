@@ -104,6 +104,12 @@ async function startServer() {
 // VITE DEV SERVER — dev only, never in packaged builds
 // ============================================
 function startVite() {
+
+   if (app.isPackaged) {
+    console.log("Packaged app - skipping Vite dev server");
+    return Promise.resolve();
+  }
+
   return new Promise((resolve, reject) => {
     console.log(">>> startVite() called");
     viteProcess = spawn('npm', ['run', 'dev'], {
@@ -180,7 +186,14 @@ function createWindow() {
 
   console.log(">>> BrowserWindow created, id:", mainWindow.id);
 
-  const loadUrl = `http://localhost:${actualVitePort}`;
+  let loadUrl;
+  if (app.isPackaged) {
+    // In packaged app, load from the built files
+    loadUrl = `file://${path.join(__dirname, '../client/dist/index.html')}`;
+  } else {
+    // In development, use Vite dev server
+    loadUrl = `http://localhost:${actualVitePort}`;
+  }
 
   console.log(">>> Loading URL:", loadUrl);
 
