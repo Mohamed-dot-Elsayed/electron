@@ -327,9 +327,7 @@ if (gotSingleInstanceLock) {
   app.whenReady().then(async () => {
     try {
       await startServer();
-      if (!app.isPackaged) {
-        await startVite();
-      }
+      await startVite();  
     } catch (err) {
       const detail =
         err && err.code === "EADDRINUSE"
