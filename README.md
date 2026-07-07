@@ -1,12 +1,13 @@
-# Electron + Express + React — Local/Cloud Sync Demo
+# Electron + Express + React — Local/Backend Sync Demo
 
 A working demo of an offline-first desktop app: Electron holds a **local SQLite
-database**, and a separate small server simulates your **cloud backend**. A "Sync now"
-button pushes local changes up and pulls remote changes down, with last-write-wins
-conflict resolution.
+database**, and syncs with your **POS web backend** (the same backend your web app
+uses). A "Sync now" button pushes local changes up and pulls remote changes down,
+with last-write-wins conflict resolution.
 
-Tested end-to-end: pushing new local rows to remote, pulling rows created "on another
-device" back into local, and delete propagation — all confirmed working before packaging.
+Tested end-to-end: pushing new local rows to the backend, pulling rows created "on
+another device" back into local, and delete propagation — all confirmed working
+before packaging.
 
 ## Structure
 
@@ -15,7 +16,6 @@ electron-sync-demo/
 ├── electron/         # Electron main process + preload
 ├── local-server/     # Runs INSIDE Electron. Express + local SQLite (sql.js).
 │                      # No package.json/node_modules of its own on purpose (see note below)
-├── remote-server/     # Runs SEPARATELY. Simulates your hosted cloud backend, own package.json
 └── client/           # React frontend (categories + notes CRUD, Sync button)
 ```
 
@@ -44,12 +44,14 @@ a live file handle — irrelevant at this scale.
 Every row has:
 - `updated_at` (ms timestamp) — lets us ask "what changed since X" and resolve conflicts
 - `deleted` (0/1) — soft delete, so deletions propagate through sync instead of just disappearing locally
-- `id` is a UUID (not autoincrement) — required since local and remote generate IDs independently
+- `id` is a UUID (not autoincrement) — required since local and the backend generate IDs independently
 
 **Push**: send every local row with `updated_at` newer than the last successful push.
-**Pull**: ask remote for every row with `updated_at` newer than the last successful pull, then upsert locally — but only overwrite if the incoming row is actually newer (`WHERE excluded.updated_at > existing.updated_at`). That's the conflict resolution: last write wins.
+**Pull**: ask the backend for every row with `updated_at` newer than the last successful pull, then upsert locally — but only overwrite if the incoming row is actually newer (`WHERE excluded.updated_at > existing.updated_at`). That's the conflict resolution: last write wins.
 
-See `local-server/src/sync.ts` and `remote-server/src/app.ts` (`/sync/push`, `/sync/pull`) for the actual logic.
+See `local-server/src/sync.ts` for the sync logic. It talks to your **POS web backend**
+directly — there's no separate local "remote-server" simulator anymore; sync targets
+the real backend endpoint via `REMOTE_API_URL`.
 
 ## Run it
 
@@ -58,37 +60,35 @@ See `local-server/src/sync.ts` and `remote-server/src/app.ts` (`/sync/push`, `/s
 npm run install:all
 ```
 This installs root dependencies (which now includes `express`/`sql.js` for
-`local-server`), then `remote-server`'s and `client`'s own dependencies separately.
+`local-server`), then `client`'s own dependencies.
 
-**2. Start the "cloud" server** (separate terminal — this simulates your deployed backend, e.g. your EC2 instance)
-```bash
-npm run start:remote
-```
-This runs on `http://localhost:4000`.
-
-**3. Launch the Electron app**
+**2. Launch the Electron app**
 ```bash
 npm start
 ```
-This builds the local server + React app, then opens the Electron window on `http://localhost:3001`.
+This builds the local server + React app, then opens the Electron window pointed at
+the local Express server (packaged) or the Vite dev server (development).
+
+**3. Client-only dev mode**
+
+To iterate on the React UI without launching Electron or the local Express server:
+```bash
+npm run dev:client
+```
+This runs just the Vite dev server (`client/`) on its own — useful for fast UI
+iteration when you don't need the Electron shell or local SQLite running.
 
 **4. Try it**
 - Add categories/notes in the window.
-- Click **Sync now** — it pushes your local changes to the "cloud" server and pulls anything new from it.
-- To see the pull direction: while the app is running, POST directly to the remote server to simulate "another device":
-  ```bash
-  curl -X POST http://localhost:4000/sync/push -H "Content-Type: application/json" -d '{
-    "categories": [{"id":"demo-2","name":"Personal","updated_at":'$(node -e "console.log(Date.now())")',"deleted":0}],
-    "notes": []
-  }'
-  ```
-  Then click **Sync now** in the app again — "Personal" appears.
+- Click **Sync now** — it pushes your local changes to the POS web backend and pulls
+  anything new from it.
 
-## Pointing at a real cloud backend
+## Pointing at your POS web backend
 
-Change the `REMOTE_API_URL` env var (set in `electron/main.js`) to your actual deployed
-server instead of `localhost:4000`. Your real backend just needs to implement the same
-two endpoints: `GET /sync/pull?since=<timestamp>` and `POST /sync/push`.
+Set `REMOTE_API_URL` (in `local-server/.env`, loaded by `electron/main.js`) to your
+actual deployed POS backend URL. The backend needs to implement the same two
+endpoints local-server expects: `GET /sync/pull?since=<timestamp>` and
+`POST /sync/push`.
 
 ## Packaging into an installer
 
@@ -200,7 +200,7 @@ errors encountered.
 - `client/src/App.jsx` — replace with your real React components/pages.
 
 **Important**: this pattern (local SQLite + sync) is a genuinely different architecture
-than "Express + Postgres always-online" (like Quiziverse). It only makes sense if you
-actually want offline-capable desktop behavior. If your app can assume it's always
-online, the earlier simpler demo (Electron → Express → remote Postgres directly, no
-local DB, no sync) is less code and less to maintain.
+than "Express + Postgres always-online" (like your POS web app might already be). It
+only makes sense if you actually want offline-capable desktop behavior. If the app can
+assume it's always online, the earlier simpler pattern (Electron → Express → POS
+backend directly, no local DB, no sync) is less code and less to maintain.
