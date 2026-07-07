@@ -72,7 +72,7 @@ export default function App() {
   return (
     <div style={{ fontFamily: 'sans-serif', maxWidth: 900, margin: '0 auto', padding: '2rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1>Local + Cloud Sync Demo None. Test Again & Again</h1>
+        <h1>Local + Cloud Sync Demo None. Test Again & Again & And so on</h1>
         <div style={{ textAlign: 'right' }}>
           <button onClick={runSync} disabled={syncing} style={{ padding: '0.5rem 1rem', fontSize: '1rem' }}>
             {syncing ? 'Syncing…' : 'Sync now'}
