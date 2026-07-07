@@ -3,14 +3,14 @@
   "version": "1.0.23",
   "main": "electron/main.js",
   "scripts": {
-    "install:all": "npm install && cd remote-server && npm install && cd ../client && npm install",
+    "install:all": "npm install &&  cd client && npm install",
     "build:local-server": "tsc -p local-server",
     "build:client": "cd client && npm run build",
     "build": "node scripts/generate-token-file.js && npm run build:local-server && npm run build:client",
     "start": "npm run build && electron .",
     "dist": "npm run build && electron-builder",
     "dist:publish": "npm run build && electron-builder --publish always",
-    "start:remote": "cd remote-server && npm run dev"
+    "dev:client": "cd client && npm run dev"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
