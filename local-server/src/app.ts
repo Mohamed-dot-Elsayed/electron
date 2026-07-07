@@ -86,13 +86,5 @@ export function createServer() {
     res.json({ lastSyncedAt });
   });
 
-  // ---------------- Serve built React app ----------------
-
-  const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
-  app.use(express.static(clientDist));
-  app.get(/^(?!\/api).*/, (_req, res) => {
-    res.sendFile(path.join(clientDist, 'index.html'));
-  });
-
   return app;
 }

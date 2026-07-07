@@ -17,9 +17,9 @@ export default function App() {
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
 
   const loadAll = async () => {
-    setCategories(await api.get('/api/categories'));
-    setNotes(await api.get('/api/notes'));
-    const status = await api.get('/api/sync/status');
+    setCategories(await api.get('/local-server/categories'));
+    setNotes(await api.get('/local-server/notes'));
+    const status = await api.get('/local-server/sync/status');
     setLastSyncedAt(status.lastSyncedAt);
   };
 
@@ -30,26 +30,26 @@ export default function App() {
   const addCategory = async (e) => {
     e.preventDefault();
     if (!newCategory.trim()) return;
-    await api.post('/api/categories', { name: newCategory.trim() });
+    await api.post('/local-server/categories', { name: newCategory.trim() });
     setNewCategory('');
     loadAll();
   };
 
   const deleteCategory = async (id) => {
-    await api.del(`/api/categories/${id}`);
+    await api.del(`/local-server/categories/${id}`);
     loadAll();
   };
 
   const addNote = async (e) => {
     e.preventDefault();
     if (!newNote.title.trim()) return;
-    await api.post('/api/notes', newNote);
+    await api.post('/local-server/notes', newNote);
     setNewNote({ title: '', body: '', category_id: '' });
     loadAll();
   };
 
   const deleteNote = async (id) => {
-    await api.del(`/api/notes/${id}`);
+    await api.del(`/local-server/notes/${id}`);
     loadAll();
   };
 
@@ -57,7 +57,7 @@ export default function App() {
     setSyncing(true);
     setSyncResult(null);
     try {
-      const result = await api.post('/api/sync', {});
+      const result = await api.post('/local-server/sync', {});
       setSyncResult(result);
       await loadAll();
     } catch (err) {

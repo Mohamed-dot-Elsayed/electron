@@ -1,6 +1,6 @@
 import { all, runMany, runNoPersist, getMeta, setMeta } from './db';
 
-const REMOTE_URL = process.env.REMOTE_API_URL || 'http://localhost:4000';
+const REMOTE_URL = process.env.REMOTE_API_URL;
 
 const upsertCategorySql = `
   INSERT INTO categories (id, name, updated_at, deleted)

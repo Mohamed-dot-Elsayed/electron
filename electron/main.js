@@ -1,27 +1,63 @@
-const { app, BrowserWindow, dialog, Notification } = require("electron");
+console.log(">>> MAIN.JS LOADED - TOP OF FILE");
+const { app, BrowserWindow, dialog, Notification, ipcMain } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const { spawn } = require("child_process");
 const { autoUpdater } = require("electron-updater");
+const dotenv = require('dotenv');
 app.setName("SyncDemo");
 
-process.env.REMOTE_API_URL =
-  process.env.REMOTE_API_URL || "http://localhost:4000";
+// ============================================
+// SERVER ENV — must load BEFORE requiring local-server
+// ============================================
+const serverEnvPath = app.isPackaged
+  ? path.join(process.resourcesPath, 'server.env')
+  : path.join(__dirname, '../local-server/.env');
+
+try {
+  dotenv.config({ path: serverEnvPath });
+  console.log('Loaded server env from', serverEnvPath);
+} catch (err) {
+  console.error('Failed to load server.env:', err.message);
+}
+
+// ============================================
+// CLIENT ENV — parsed only, exposed via IPC
+// ============================================
+const clientEnvPath = app.isPackaged
+  ? path.join(process.resourcesPath, 'client.env')
+  : path.join(__dirname, '../client/.env');
+
+let clientConfig = {};
+try {
+  clientConfig = dotenv.parse(fs.readFileSync(clientEnvPath));
+} catch (err) {
+  console.error('Failed to load client.env:', err.message);
+}
+
+ipcMain.handle('get-client-env', () => clientConfig);
+
+// ============================================
+// LOCAL DB PATH
+// ============================================
 process.env.LOCAL_DB_PATH = path.join(app.getPath("userData"), "local.db");
 
 const { initDb } = require("../local-server/dist/db");
 const { createServer } = require("../local-server/dist/app");
 
 const PORT = 3001;
+const VITE_PORT = 5173;
 let mainWindow;
 let serverInstance;
+let viteProcess;
 let isQuitting = false;
+let actualVitePort = VITE_PORT;
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
 }
 
-// ⭐ FIXED: Don't nullify server before closing
 function stopServer() {
   return new Promise((resolve) => {
     if (!serverInstance || !serverInstance.listening) {
@@ -31,18 +67,14 @@ function stopServer() {
     }
 
     console.log("Stopping server...");
-
-    // Close all connections first
     serverInstance.closeAllConnections?.();
 
-    // Set a timeout to force close
     const forceClose = setTimeout(() => {
       console.log("Force closing server...");
       serverInstance.closeAllConnections?.();
       resolve();
     }, 3000);
 
-    // Try graceful shutdown
     serverInstance.close(() => {
       clearTimeout(forceClose);
       console.log("Server stopped gracefully");
@@ -56,7 +88,6 @@ async function startServer() {
   await initDb();
   const expressApp = createServer();
 
-  // Disable keep-alive to prevent hanging connections
   expressApp.set('keepAliveTimeout', 1000);
   expressApp.set('headersTimeout', 2000);
 
@@ -69,26 +100,117 @@ async function startServer() {
   });
 }
 
+// ============================================
+// VITE DEV SERVER — dev only, never in packaged builds
+// ============================================
+function startVite() {
+  return new Promise((resolve, reject) => {
+    console.log(">>> startVite() called");
+    viteProcess = spawn('npm', ['run', 'dev'], {
+      cwd: path.join(__dirname, '../client'),
+      shell: true,
+    });
+
+    let resolved = false;
+    let buffer = '';
+
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        console.log(">>> startVite() TIMEOUT - resolving with default port");
+        resolved = true;
+        resolve();
+      }
+    }, 15000); // give it more headroom
+
+    viteProcess.stdout.on('data', (data) => {
+      const output = data.toString();
+      console.log(`[vite] ${output}`);
+
+      buffer += output;
+      // strip ANSI codes before matching
+      const clean = buffer.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
+      const match = clean.match(/localhost:(\d+)\//);
+
+      if (!resolved && match) {
+        resolved = true;
+        actualVitePort = parseInt(match[1], 10);
+        console.log(">>> RESOLVED with port:", actualVitePort);
+        clearTimeout(timeout);
+        resolve();
+      }
+    });
+
+    viteProcess.stderr.on('data', (data) => {
+      console.error(`[vite err] ${data}`);
+    });
+
+    viteProcess.on('error', (err) => {
+      console.log(">>> viteProcess error event:", err);
+      reject(err);
+    });
+
+    viteProcess.on('exit', (code) => {
+      console.log(">>> viteProcess exit event, code:", code);
+      if (!resolved) reject(new Error(`Vite exited early with code ${code}`));
+    });
+  });
+}
+
+function stopVite() {
+  if (viteProcess) {
+    console.log("Stopping Vite dev server...");
+    viteProcess.kill();
+    viteProcess = null;
+  }
+}
+
 function createWindow() {
+  console.log(">>> createWindow() called");
+
   mainWindow = new BrowserWindow({
-    width: 1100,
-    height: 750,
+    width: 1200,
+    height: 800,
+    show: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
-  mainWindow.loadURL(`http://localhost:${PORT}`);
-  mainWindow.on("closed", () => (mainWindow = null));
+
+  console.log(">>> BrowserWindow created, id:", mainWindow.id);
+
+  const loadUrl = app.isPackaged
+  ? `http://localhost:${PORT}`
+  : `http://localhost:${actualVitePort}`;
+
+  console.log(">>> Loading URL:", loadUrl);
+
+  mainWindow.loadURL(loadUrl).catch(err => {
+    console.log(">>> loadURL rejected:", err);
+  });
+
+  mainWindow.webContents.once('did-finish-load', () => {
+    console.log(">>> did-finish-load fired");
+  });
+
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    console.log(">>> RENDERER CRASHED:", details);
+  });
+
+  mainWindow.on('unresponsive', () => {
+    console.log(">>> Window became unresponsive");
+  });
+
+  mainWindow.on("closed", () => {
+    console.log(">>> Window closed event fired");
+    mainWindow = null;
+  });
 
   mainWindow.webContents.on(
     "did-fail-load",
     (_e, errorCode, errorDescription) => {
-      dialog.showErrorBox(
-        "Failed to load app",
-        `Could not load http://localhost:${PORT}\n\n${errorDescription} (${errorCode})`
-      );
+      console.log(">>> did-fail-load:", errorCode, errorDescription);
     }
   );
 }
@@ -151,7 +273,6 @@ function setupAutoUpdates() {
     if (mainWindow) mainWindow.setProgressBar(p.percent / 100);
   });
 
-  // ⭐ FIXED: Let electron-updater handle the quit/install/relaunch itself
   autoUpdater.on("update-downloaded", (info) => {
     log(`Update v${info.version} downloaded. Prompting to restart.`);
     if (mainWindow) mainWindow.setProgressBar(-1);
@@ -169,21 +290,17 @@ function setupAutoUpdates() {
           log("User chose to restart. Starting update process...");
           isQuitting = true;
 
-          // Step 1: Close main window
           if (mainWindow) {
             log("Closing main window...");
             mainWindow.close();
             mainWindow = null;
           }
 
-          // Step 2: Stop server and wait
           log("Stopping server...");
           await stopServer();
+          stopVite();
           log("Server stopped.");
 
-          // Step 3: Hand off to electron-updater. It quits the app,
-          // launches the NSIS installer, and relaunches the app after
-          // install completes. No manual batch script needed.
           log("Calling quitAndInstall...");
           autoUpdater.quitAndInstall();
         }
@@ -212,6 +329,9 @@ if (gotSingleInstanceLock) {
   app.whenReady().then(async () => {
     try {
       await startServer();
+      if (!app.isPackaged) {
+        await startVite();
+      }
     } catch (err) {
       const detail =
         err && err.code === "EADDRINUSE"
@@ -221,6 +341,7 @@ if (gotSingleInstanceLock) {
       app.quit();
       return;
     }
+    console.log(">>> About to call createWindow()");
     createWindow();
     setupAutoUpdates();
     app.on("activate", () => {
@@ -234,11 +355,9 @@ app.on("before-quit", async (event) => {
     event.preventDefault();
     isQuitting = true;
 
-    // Close all windows
     BrowserWindow.getAllWindows().forEach(w => w.close());
-
-    // Stop server
     await stopServer();
+    stopVite();
 
     app.quit();
   }

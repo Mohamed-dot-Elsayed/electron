@@ -13,6 +13,7 @@
     "start:remote": "cd remote-server && npm run dev"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "electron-updater": "^6.3.0",
     "express": "^4.19.2",
     "sql.js": "^1.11.0"
@@ -28,6 +29,16 @@
   "build": {
     "appId": "com.demo.syncapp",
     "productName": "SyncDemo",
+    "extraResources": [
+      {
+        "from": "local-server/.env",
+        "to": "server.env"
+      },
+      {
+        "from": "client/.env",
+        "to": "client.env"
+      }
+    ],
     "files": [
       "electron/**/*",
       "local-server/dist/**/*",
