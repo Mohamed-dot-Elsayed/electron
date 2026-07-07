@@ -180,9 +180,7 @@ function createWindow() {
 
   console.log(">>> BrowserWindow created, id:", mainWindow.id);
 
-  const loadUrl = app.isPackaged
-  ? `http://localhost:${PORT}`
-  : `http://localhost:${actualVitePort}`;
+  const loadUrl = `http://localhost:${actualVitePort}`;
 
   console.log(">>> Loading URL:", loadUrl);
 
