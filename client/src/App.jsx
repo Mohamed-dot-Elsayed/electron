@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
+import { apiUrl } from './baseApi';
 
 const api = {
-  get: (url) => fetch(url).then((r) => r.json()),
-  post: (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json()),
-  put: (url, body) => fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json()),
-  del: (url) => fetch(url, { method: 'DELETE' }).then((r) => r.json()),
+  get: (url) => fetch(apiUrl(url)).then((r) => r.json()),
+  post: (url, body) => fetch(apiUrl(url), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json()),
+  put: (url, body) => fetch(apiUrl(url), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json()),
+  del: (url) => fetch(apiUrl(url), { method: 'DELETE' }).then((r) => r.json()),
 };
 
 export default function App() {
