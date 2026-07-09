@@ -42,8 +42,8 @@ ipcMain.handle('get-client-env', () => clientConfig);
 // ============================================
 process.env.LOCAL_DB_PATH = path.join(app.getPath("userData"), "local.db");
 
-const { initDb } = require("../local-server/dist/db");
-const { createServer } = require("../local-server/dist/app");
+const { initDb } = require("../local-server/dist/src/db/db");
+const { createServer } = require("../local-server/dist/src/server");
 
 const PORT = 3001;
 const VITE_PORT = 5173;
@@ -86,13 +86,10 @@ function stopServer() {
 
 async function startServer() {
   await initDb();
-  const expressApp = createServer();
-
-  expressApp.set('keepAliveTimeout', 1000);
-  expressApp.set('headersTimeout', 2000);
+  const server = createServer(); // http.Server, already wired with express + socket.io
 
   return new Promise((resolve, reject) => {
-    serverInstance = expressApp.listen(PORT, () => {
+    serverInstance = server.listen(PORT, () => {
       console.log(`Local server listening on http://localhost:${PORT}`);
       resolve(serverInstance);
     });
