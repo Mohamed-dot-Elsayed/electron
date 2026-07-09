@@ -209,9 +209,3 @@ export const signup = async (req: Request, res: Response) => {
     201
   );
 };
-
-export const getUsers = async (req: Request, res: Response, next: NextFunction) => {
-  const users = UserModel.find();
-  SuccessResponse(res,{users})
-
-}
