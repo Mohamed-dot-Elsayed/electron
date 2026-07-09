@@ -85,64 +85,44 @@ function validateField(
     return;
   }
 
-
   if (def.type !== "object" && def.type !== "array") {
     validatePrimitive(key, def, value);
     return;
   }
 
-
   if (def.type === "object") {
-    if (
-      typeof value !== "object" ||
-      Array.isArray(value)
-    ) {
+    if (typeof value !== "object" || Array.isArray(value)) {
       throw new Error(`${key} must be object`);
     }
 
-
-    validateSchema(
-      def.schema,
-      value,
-      partial
-    );
+    validateSchema(def.schema, value, partial);
 
     return;
   }
-
 
   if (!Array.isArray(value)) {
     throw new Error(`${key} must be array`);
   }
 
-
   for (const item of value) {
-    validateField(
-      `${key}[]`,
-      def.items,
-      item,
-      partial
-    );
+    validateField(`${key}[]`, def.items, item, partial);
   }
 }
 
-function validateSchema(
-  schema: SchemaDef,
-  data: any,
-  partial = false
-) {
+function validateSchema(schema: SchemaDef, data: any, partial = false) {
   for (const [key, def] of Object.entries(schema)) {
-    validateField(
-      key,
-      def,
-      data[key],
-      partial
-    );
+    validateField(key, def, data[key], partial);
   }
 }
 
 function serializeField(def: FieldDef, value: any): any {
-  if (value === undefined || value === null) return value;
+  if (value === undefined || value === null) {
+    // Return null for SQL instead of undefined
+    if (def.type === "object" || def.type === "array") {
+      return null;
+    }
+    return null;
+  }
 
   switch (def.type) {
     case "boolean":
@@ -153,6 +133,10 @@ function serializeField(def: FieldDef, value: any): any {
 
     case "object":
     case "array":
+      // Ensure we always have a valid JSON string
+      if (value === undefined || value === null) {
+        return null;
+      }
       return JSON.stringify(value);
 
     default:
@@ -172,7 +156,19 @@ function deserializeField(def: FieldDef, value: any): any {
 
     case "object":
     case "array":
-      return JSON.parse(value);
+      // Handle empty strings, null, or invalid JSON
+      if (typeof value !== "string" || value.trim() === "") {
+        return def.type === "array" ? [] : {};
+      }
+      try {
+        return JSON.parse(value);
+      } catch (error) {
+        console.error(
+          `Failed to parse JSON for field type ${def.type}:`,
+          value
+        );
+        return def.type === "array" ? [] : {};
+      }
 
     default:
       return value;
@@ -242,17 +238,14 @@ function addNestedIds(def: FieldDef, value: any): any {
 }
 
 function buildWhere(where: Where) {
-  const keys = Object.keys(where);
+  const keys = Object.keys(where).filter((k) => where[k] !== undefined);
 
-  if (!keys.length)
-    return {
-      clause: "",
-      values: [],
-    };
+  if (!keys.length) {
+    return { clause: "", values: [] };
+  }
 
   return {
     clause: "WHERE " + keys.map((k) => `${k} = ?`).join(" AND "),
-
     values: keys.map((k) => where[k]),
   };
 }
@@ -293,23 +286,25 @@ export function createModel(
 
   function rowsFrom(where: Where = {}) {
     const db = getDB();
-
     const { clause, values } = buildWhere(where);
-
     const stmt = db.prepare(`SELECT * FROM ${tableName} ${clause}`);
 
-    stmt.bind(values);
+    // Filter out undefined values
+    const safeValues = values.map((v) => (v === undefined ? null : v));
 
-    const rows: any[] = [];
-
-    while (stmt.step()) {
-      const row = stmt.getAsObject();
-
-      rows.push(deserializeRow(schema, row));
+    try {
+      stmt.bind(safeValues);
+    } catch (error) {
+      console.error("Bind error:", { values, safeValues, clause });
+      throw error;
     }
 
+    const rows: any[] = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      rows.push(deserializeRow(schema, row));
+    }
     stmt.free();
-
     return rows;
   }
 
@@ -335,12 +330,26 @@ export function createModel(
     create(data: Record<string, any>) {
       const db = getDB();
 
+      // Clean the input data - remove undefined values
+      const cleanData: Record<string, any> = {};
+      for (const [key, value] of Object.entries(data)) {
+        if (value !== undefined) {
+          cleanData[key] = value;
+        }
+      }
+
       // apply defaults
-      let row = applyDefaults(schema, data);
+      let row = applyDefaults(schema, cleanData);
 
       for (const [key, def] of Object.entries(schema)) {
         if (row[key] !== undefined) {
           row[key] = addNestedIds(def, row[key]);
+        } else if (def.type === "array") {
+          // Ensure arrays are never undefined
+          row[key] = [];
+        } else if (def.type === "object") {
+          // Ensure objects are never undefined
+          row[key] = {};
         }
       }
 
@@ -354,7 +363,6 @@ export function createModel(
 
       if (timestamps) {
         const now = new Date().toISOString();
-
         row.createdAt = now;
         row.updatedAt = now;
       }
@@ -365,51 +373,48 @@ export function createModel(
       const keys = Object.keys(row);
 
       db.run(
-        `
-      INSERT INTO ${tableName}
-      (${keys.join(", ")})
-      VALUES (${keys.map(() => "?").join(", ")})
-      `,
+        `INSERT INTO ${tableName} (${keys.join(", ")}) VALUES (${keys
+          .map(() => "?")
+          .join(", ")})`,
         keys.map((key) => serialized[key])
       );
 
       saveDB();
-
       return deserializeRow(schema, row);
     },
 
     updateOne(where: Where, data: Record<string, any>) {
       const target = this.findOne(where);
-
       if (!target) return null;
 
-      validateSchema(schema, data,true);
+      // Clean the input data - remove undefined values
+      const cleanData: Record<string, any> = {};
+      for (const [key, value] of Object.entries(data)) {
+        if (value !== undefined) {
+          cleanData[key] = value;
+        }
+      }
 
-      const patch = {
-        ...data,
-      };
+      validateSchema(schema, cleanData, true);
+
+      const patch = { ...cleanData };
 
       if (timestamps) {
         patch.updatedAt = new Date().toISOString();
       }
 
       const serialized = serializeRow(schema, patch);
-
       const keys = Object.keys(patch);
 
       const db = getDB();
-
       db.run(
-        `
-      UPDATE ${tableName}
-      SET ${keys.map((key) => `${key} = ?`).join(", ")}
-      WHERE _id = ?
-      `,
+        `UPDATE ${tableName} SET ${keys
+          .map((key) => `${key} = ?`)
+          .join(", ")} WHERE _id = ?`,
         [...keys.map((key) => serialized[key]), target._id]
       );
 
       saveDB();
-
       return this.findById(target._id);
     },
 

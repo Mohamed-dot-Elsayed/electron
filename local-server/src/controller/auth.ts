@@ -175,14 +175,13 @@ export const signup = async (req: Request, res: Response) => {
   const hashedPassword = await bcrypt.hash(data.password, 10);
 
   // ✅ create new user
-  const newUser = await UserModel.create({
+  const newUser = UserModel.create({
     username: data.username,
     email: data.email,
     password_hash: hashedPassword,
     phone: data.phone,
     company_name: data.company_name,
     role: data.role, // default = admin لو مش مبعوتة
-    possitionId: data.possitionId,
     address: data.address,
     vat_number: data.vat_number,
     state: data.state,
@@ -210,3 +209,9 @@ export const signup = async (req: Request, res: Response) => {
     201
   );
 };
+
+export const getUsers = async (req: Request, res: Response, next: NextFunction) => {
+  const users = UserModel.find();
+  SuccessResponse(res,{users})
+
+}

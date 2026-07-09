@@ -28,7 +28,9 @@
     "nodemailer": "^7.0.5",
     "pdfkit": "^0.19.1",
     "socket.io": "^4.8.1",
-    "sql.js": "^1.11.0"
+    "sql.js": "^1.11.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5"
   },
   "devDependencies": {
     "@types/axios": "^0.9.36",
@@ -43,7 +45,9 @@
     "@types/sql.js": "^1.4.9",
     "electron": "^31.0.0",
     "electron-builder": "^24.13.3",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "@types/cookie-parser": "^1.4.9",
+    "@types/cors": "^2.8.19"
   },
   "build": {
     "appId": "com.demo.syncapp",

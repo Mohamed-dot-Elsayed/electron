@@ -12,10 +12,14 @@ import ApiRoute from "./routes/index";
 import { errorHandler } from "./middlewares/errorHandler";
 import { NotFound } from "./Errors";
 import { startCron } from "./utils/expiry_lowstock";
+import cors from "cors";
+import cookieParser from "cookie-parser";
 
 export function createServer() {
   const app = express();
 
+  app.use(cors({ origin: "*" }));
+  app.use(cookieParser());
   app.use(express.json({ limit: "20mb" }));
   app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
