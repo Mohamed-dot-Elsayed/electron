@@ -1,49 +1,54 @@
 console.log(">>> MAIN.JS LOADED - TOP OF FILE");
-const { app, BrowserWindow, dialog, Notification, ipcMain } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  dialog,
+  Notification,
+  ipcMain,
+} = require("electron");
 const path = require("path");
 const fs = require("fs");
-const { spawn } = require("child_process");
+const { spawn, exec } = require("child_process");
 const { autoUpdater } = require("electron-updater");
-const dotenv = require('dotenv');
-app.setName("SyncDemo");
+const dotenv = require("dotenv");
+app.setName("SysteGo");
 
 // ============================================
 // SERVER ENV — must load BEFORE requiring local-server
 // ============================================
 const serverEnvPath = app.isPackaged
-  ? path.join(process.resourcesPath, 'server.env')
-  : path.join(__dirname, '../local-server/.env');
+  ? path.join(process.resourcesPath, "server.env")
+  : path.join(__dirname, "../local-server/.env");
 
 try {
   dotenv.config({ path: serverEnvPath });
-  console.log('Loaded server env from', serverEnvPath);
+  console.log("Loaded server env from", serverEnvPath);
 } catch (err) {
-  console.error('Failed to load server.env:', err.message);
+  console.error("Failed to load server.env:", err.message);
 }
 
 // ============================================
 // CLIENT ENV — parsed only, exposed via IPC
 // ============================================
 const clientEnvPath = app.isPackaged
-  ? path.join(process.resourcesPath, 'client.env')
-  : path.join(__dirname, '../client/.env');
+  ? path.join(process.resourcesPath, "client.env")
+  : path.join(__dirname, "../client/.env");
 
 let clientConfig = {};
 try {
   clientConfig = dotenv.parse(fs.readFileSync(clientEnvPath));
 } catch (err) {
-  console.error('Failed to load client.env:', err.message);
+  console.error("Failed to load client.env:", err.message);
 }
 
-ipcMain.handle('get-client-env', () => clientConfig);
+ipcMain.handle("get-client-env", () => clientConfig);
 
 // ============================================
 // LOCAL DB PATH
 // ============================================
 process.env.LOCAL_DB_PATH = path.join(app.getPath("userData"), "local.db");
 
-const { initDb } = require("../local-server/dist/src/db/db");
-const { createServer } = require("../local-server/dist/src/server");
+const { startServer } = require("../local-server/dist/src/index");
 
 const PORT = 3001;
 const VITE_PORT = 5173;
@@ -84,38 +89,24 @@ function stopServer() {
   });
 }
 
-async function startServer() {
-  await initDb();
-  const server = createServer(); // http.Server, already wired with express + socket.io
-
-  return new Promise((resolve, reject) => {
-    serverInstance = server.listen(PORT, () => {
-      console.log(`Local server listening on http://localhost:${PORT}`);
-      resolve(serverInstance);
-    });
-    serverInstance.on("error", reject);
-  });
-}
-
 // ============================================
 // VITE DEV SERVER — dev only, never in packaged builds
 // ============================================
 function startVite() {
-
-   if (app.isPackaged) {
+  if (app.isPackaged) {
     console.log("Packaged app - skipping Vite dev server");
     return Promise.resolve();
   }
 
   return new Promise((resolve, reject) => {
     console.log(">>> startVite() called");
-    viteProcess = spawn('npm', ['run', 'dev'], {
-      cwd: path.join(__dirname, '../client'),
+    viteProcess = spawn("npm", ["run", "dev"], {
+      cwd: path.join(__dirname, "../client"),
       shell: true,
     });
 
     let resolved = false;
-    let buffer = '';
+    let buffer = "";
 
     const timeout = setTimeout(() => {
       if (!resolved) {
@@ -125,13 +116,13 @@ function startVite() {
       }
     }, 15000); // give it more headroom
 
-    viteProcess.stdout.on('data', (data) => {
+    viteProcess.stdout.on("data", (data) => {
       const output = data.toString();
       console.log(`[vite] ${output}`);
 
       buffer += output;
       // strip ANSI codes before matching
-      const clean = buffer.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
+      const clean = buffer.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
       const match = clean.match(/localhost:(\d+)\//);
 
       if (!resolved && match) {
@@ -143,16 +134,16 @@ function startVite() {
       }
     });
 
-    viteProcess.stderr.on('data', (data) => {
+    viteProcess.stderr.on("data", (data) => {
       console.error(`[vite err] ${data}`);
     });
 
-    viteProcess.on('error', (err) => {
+    viteProcess.on("error", (err) => {
       console.log(">>> viteProcess error event:", err);
       reject(err);
     });
 
-    viteProcess.on('exit', (code) => {
+    viteProcess.on("exit", (code) => {
       console.log(">>> viteProcess exit event, code:", code);
       if (!resolved) reject(new Error(`Vite exited early with code ${code}`));
     });
@@ -160,11 +151,10 @@ function startVite() {
 }
 
 function stopVite() {
-  if (viteProcess) {
-    console.log("Stopping Vite dev server...");
-    viteProcess.kill();
-    viteProcess = null;
-  }
+  if (!viteProcess) return;
+  console.log("Stopping Vite dev server...");
+  exec(`taskkill /PID ${viteProcess.pid} /T /F`);
+  viteProcess = null;
 }
 
 function createWindow() {
@@ -186,7 +176,7 @@ function createWindow() {
   let loadUrl;
   if (app.isPackaged) {
     // In packaged app, load from the built files
-    loadUrl = `file://${path.join(__dirname, '../client/dist/index.html')}`;
+    loadUrl = `file://${path.join(__dirname, "../client/dist/index.html")}`;
   } else {
     // In development, use Vite dev server
     loadUrl = `http://localhost:${actualVitePort}`;
@@ -194,19 +184,19 @@ function createWindow() {
 
   console.log(">>> Loading URL:", loadUrl);
 
-  mainWindow.loadURL(loadUrl).catch(err => {
+  mainWindow.loadURL(loadUrl).catch((err) => {
     console.log(">>> loadURL rejected:", err);
   });
 
-  mainWindow.webContents.once('did-finish-load', () => {
+  mainWindow.webContents.once("did-finish-load", () => {
     console.log(">>> did-finish-load fired");
   });
 
-  mainWindow.webContents.on('render-process-gone', (event, details) => {
+  mainWindow.webContents.on("render-process-gone", (event, details) => {
     console.log(">>> RENDERER CRASHED:", details);
   });
 
-  mainWindow.on('unresponsive', () => {
+  mainWindow.on("unresponsive", () => {
     console.log(">>> Window became unresponsive");
   });
 
@@ -249,7 +239,9 @@ function setupAutoUpdates() {
   };
 
   log(
-    `App starting. Current version: ${app.getVersion()}. isPackaged: ${app.isPackaged}`
+    `App starting. Current version: ${app.getVersion()}. isPackaged: ${
+      app.isPackaged
+    }`
   );
 
   if (!app.isPackaged) {
@@ -262,18 +254,27 @@ function setupAutoUpdates() {
     process.env.GH_TOKEN = token;
     log("Loaded embedded token for private-repo update checks.");
   } else {
-    log("WARNING: no embedded token found - update checks against the private repo will fail with 404.");
+    log(
+      "WARNING: no embedded token found - update checks against the private repo will fail with 404."
+    );
   }
 
   autoUpdater.on("checking-for-update", () => log("Checking for update..."));
 
   autoUpdater.on("update-available", (info) => {
     log(`Update available: v${info.version}. Downloading...`);
-    notify("Update found", `Version ${info.version} is downloading in the background.`);
+    notify(
+      "Update found",
+      `Version ${info.version} is downloading in the background.`
+    );
   });
 
   autoUpdater.on("update-not-available", (info) => {
-    log(`No update available. Latest published version is v${info.version}, this is v${app.getVersion()}.`);
+    log(
+      `No update available. Latest published version is v${
+        info.version
+      }, this is v${app.getVersion()}.`
+    );
   });
 
   autoUpdater.on("download-progress", (p) => {
@@ -337,11 +338,13 @@ if (gotSingleInstanceLock) {
   app.whenReady().then(async () => {
     try {
       await startServer();
-      await startVite();  
+      await startVite();
     } catch (err) {
       const detail =
         err && err.code === "EADDRINUSE"
-          ? `Port ${PORT} is already in use.\n\nClose any running SyncDemo from Task Manager (or end the process using that port), then try again.\n\n${err.stack || err}`
+          ? `Port ${PORT} is already in use.\n\nClose any running SyncDemo from Task Manager (or end the process using that port), then try again.\n\n${
+              err.stack || err
+            }`
           : String(err && err.stack ? err.stack : err);
       dialog.showErrorBox("Failed to start local server", detail);
       app.quit();
@@ -361,11 +364,11 @@ app.on("before-quit", async (event) => {
     event.preventDefault();
     isQuitting = true;
 
-    BrowserWindow.getAllWindows().forEach(w => w.close());
+    BrowserWindow.getAllWindows().forEach((w) => w.close());
     await stopServer();
-    stopVite();
+    await stopVite();
 
-    app.quit();
+    app.exit(0);
   }
 });
 

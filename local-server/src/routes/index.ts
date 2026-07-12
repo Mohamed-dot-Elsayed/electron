@@ -11,10 +11,11 @@ import ExpensesRouter from './expenses'
 import DiscountRouter from './discount'
 import ReturnRouter from "./ReturnSaleRoutes"
 import TaxesRouter from './Taxes'
+import syncRouter from "./sync";
 
 export const route = Router();
-route.use("/", tenantInfoRouter)
-
+route.use("/", tenantInfoRouter);
+route.use("/sync",syncRouter);
 route.use("/auth", authRouter);
 route.use(authenticated, authorizeRoles("admin", "superadmin"));
 route.use(enforceWarehouseScope);
@@ -25,5 +26,6 @@ route.use("/expense", ExpensesRouter)
 route.use("/discount", DiscountRouter)
 route.use("/return-sale", ReturnRouter)
 route.use("/taxes", TaxesRouter)
+
 
 export default route;

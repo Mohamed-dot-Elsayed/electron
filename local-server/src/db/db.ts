@@ -1,6 +1,7 @@
 import initSqlJs, { Database } from "sql.js";
 import fs from "fs";
 import path from "path";
+import { installChangeLogTriggers } from "./changeLogTrigger";
 
 const DB_PATH = path.join(__dirname, "../../data/app.sqlite");
 
@@ -17,12 +18,11 @@ export async function initDb() {
 
   const sqlJsWasmDir = path.dirname(require.resolve("sql.js/dist/sql-wasm.js"));
 
-const SQL = await initSqlJs({
-  locateFile: (file) => path.join(sqlJsWasmDir, file),
-});
+  const SQL = await initSqlJs({
+    locateFile: (file) => path.join(sqlJsWasmDir, file),
+  });
 
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-
   db = fs.existsSync(DB_PATH)
     ? new SQL.Database(fs.readFileSync(DB_PATH))
     : new SQL.Database();
@@ -33,14 +33,17 @@ const SQL = await initSqlJs({
   for (const sql of pendingTableSql) {
     db.run(sql);
   }
-
+  installChangeLogTriggers(db);
   saveDB();
-  console.log(`🗄️  SQLite ready (${pendingTableSql.length} tables) -> ${DB_PATH}`);
+  console.log(
+    `🗄️  SQLite ready (${pendingTableSql.length} tables) -> ${DB_PATH}`
+  );
   return db;
 }
 
 export function getDB(): Database {
-  if (!db) throw new Error("DB not initialized — call initDb() before querying");
+  if (!db)
+    throw new Error("DB not initialized — call initDb() before querying");
   return db;
 }
 

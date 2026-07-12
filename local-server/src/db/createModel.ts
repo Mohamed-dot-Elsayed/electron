@@ -277,7 +277,10 @@ export function createModel(
   }
 
   if (timestamps) {
-    columns.push("createdAt TEXT NOT NULL", "updatedAt TEXT NOT NULL");
+    columns.push(
+      "createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+      "updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"
+    );
   }
 
   registerTable(
@@ -338,7 +341,7 @@ export function createModel(
         }
       }
 
-      // apply defaults
+      // Apply defaults
       let row = applyDefaults(schema, cleanData);
 
       for (const [key, def] of Object.entries(schema)) {
@@ -353,13 +356,11 @@ export function createModel(
         }
       }
 
-      // validate
+      // Validate
       validateSchema(schema, row);
 
-      row = {
-        _id: randomUUID(),
-        ...row,
-      };
+      // Set _id (prefer _id, then id, otherwise generate one)
+      row._id = row._id ?? data.id ?? randomUUID();
 
       if (timestamps) {
         const now = new Date().toISOString();
@@ -367,7 +368,7 @@ export function createModel(
         row.updatedAt = now;
       }
 
-      // convert object/array/date/bool
+      // Convert object/array/date/bool
       const serialized = serializeRow(schema, row);
 
       const keys = Object.keys(row);
@@ -380,6 +381,7 @@ export function createModel(
       );
 
       saveDB();
+
       return deserializeRow(schema, row);
     },
 
