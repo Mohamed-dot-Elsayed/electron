@@ -34,6 +34,6 @@ const BankAccountSchema: SchemaDef = {
   },
 };
 
-export const BankAccountModel = createModel("bank_accounts", BankAccountSchema, {
+export const BankAccountModel = createModel("BankAccount", BankAccountSchema, {
   timestamps: true,
 });

@@ -29,6 +29,6 @@ const GeideaSchema: SchemaDef = {
   },
 };
 
-export const GeideaModel = createModel("geideas", GeideaSchema, {
+export const GeideaModel = createModel("Geidea", GeideaSchema, {
   timestamps: true,
 });

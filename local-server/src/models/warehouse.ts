@@ -33,6 +33,6 @@ const WarehouseSchema: SchemaDef = {
   },
 };
 
-export const WarehouseModel = createModel("warehouses", WarehouseSchema, {
+export const WarehouseModel = createModel("Warehouse", WarehouseSchema, {
   timestamps: true,
 });

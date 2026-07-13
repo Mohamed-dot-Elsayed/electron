@@ -28,6 +28,6 @@ const Product_WarehouseSchema: SchemaDef = {
   },
 };
 
-export const Product_WarehouseModel = createModel("product_warehouses", Product_WarehouseSchema, {
+export const Product_WarehouseModel = createModel("Product_Warehouse", Product_WarehouseSchema, {
   timestamps: true,
 });

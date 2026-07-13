@@ -28,6 +28,6 @@ const TaxesSchema: SchemaDef = {
   },
 };
 
-export const TaxesModel = createModel("taxes", TaxesSchema, {
+export const TaxesModel = createModel("Taxes", TaxesSchema, {
   timestamps: true,
 });

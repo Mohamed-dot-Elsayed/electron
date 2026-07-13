@@ -35,6 +35,6 @@ const CouponSchema: SchemaDef = {
   },
 };
 
-export const CouponModel = createModel("coupons", CouponSchema, {
+export const CouponModel = createModel("Coupon", CouponSchema, {
   timestamps: true,
 });

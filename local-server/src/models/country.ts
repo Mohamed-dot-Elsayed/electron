@@ -17,6 +17,6 @@ const CountrySchema: SchemaDef = {
   },
 };
 
-export const CountryModel = createModel("countries", CountrySchema, {
+export const CountryModel = createModel("Country", CountrySchema, {
   timestamps: true, // Note: original schema doesn't have timestamps, but adding for consistency
 });

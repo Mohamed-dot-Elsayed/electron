@@ -68,6 +68,6 @@ const PurchaseItemSchema: SchemaDef = {
   },
 };
 
-export const PurchaseItemModel = createModel("purchase_items", PurchaseItemSchema, {
+export const PurchaseItemModel = createModel("PurchaseItem", PurchaseItemSchema, {
   timestamps: true,
 });

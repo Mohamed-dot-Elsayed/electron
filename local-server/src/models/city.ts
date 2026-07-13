@@ -22,6 +22,6 @@ const CitySchema: SchemaDef = {
   },
 };
 
-export const CityModel = createModel("cities", CitySchema, {
+export const CityModel = createModel("City", CitySchema, {
   timestamps: true, // Note: original schema doesn't have timestamps
 });

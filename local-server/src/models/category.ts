@@ -28,6 +28,6 @@ const CategorySchema: SchemaDef = {
   },
 };
 
-export const CategoryModel = createModel("categories", CategorySchema, {
+export const CategoryModel = createModel("Category", CategorySchema, {
   timestamps: true,
 });

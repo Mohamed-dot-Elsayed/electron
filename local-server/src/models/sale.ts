@@ -164,7 +164,7 @@ const SaleSchema: SchemaDef = {
   },
 };
 
-export const SaleModel = createModel("sales", SaleSchema, {
+export const SaleModel = createModel("Sale", SaleSchema, {
   timestamps: true,
 });
 
@@ -233,6 +233,6 @@ const ProductSalesSchema: SchemaDef = {
   },
 };
 
-export const ProductSalesModel = createModel("product_sales", ProductSalesSchema, {
+export const ProductSalesModel = createModel("ProductSale", ProductSalesSchema, {
   timestamps: true,
 });

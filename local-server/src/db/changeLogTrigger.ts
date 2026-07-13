@@ -1,77 +1,69 @@
 import { Database } from "sql.js";
-
-const SYSTEM_TABLES = ["change_log", "app_meta"];
+import { getAllTableNames, getPrimaryKeyColumn, getColumnNames } from "./introspect";
 
 export function installChangeLogTriggers(db: Database) {
-  const tables = getAllTableNames(db);
-
+  const tables = getAllTableNames();
   for (const table of tables) {
-    // INSERT
-    db.run(`
-      CREATE TRIGGER IF NOT EXISTS trg_${table}_insert
-      AFTER INSERT ON ${table}
-      BEGIN
-        INSERT INTO change_log (id, table_name, record_id, op, payload, created_at)
-        VALUES (
-          lower(hex(randomblob(16))),
-          '${table}',
-          NEW._id,
-          'upsert',
-          (SELECT json_object(${jsonColumns(db, table)}) FROM ${table} WHERE _id = NEW._id),
-          datetime('now')
-        );
-      END;
-    `);
-
-    // UPDATE
-    db.run(`
-      CREATE TRIGGER IF NOT EXISTS trg_${table}_update
-      AFTER UPDATE ON ${table}
-      BEGIN
-        INSERT INTO change_log (id, table_name, record_id, op, payload, created_at)
-        VALUES (
-          lower(hex(randomblob(16))),
-          '${table}',
-          NEW._id,
-          'upsert',
-          (SELECT json_object(${jsonColumns(db, table)}) FROM ${table} WHERE _id = NEW._id),
-          datetime('now')
-        );
-      END;
-    `);
-
-    // DELETE
-    db.run(`
-      CREATE TRIGGER IF NOT EXISTS trg_${table}_delete
-      AFTER DELETE ON ${table}
-      BEGIN
-        INSERT INTO change_log (id, table_name, record_id, op, payload, created_at)
-        VALUES (
-          lower(hex(randomblob(16))),
-          '${table}',
-          OLD._id,
-          'delete',
-          NULL,
-          datetime('now')
-        );
-      END;
-    `);
+    installTriggersForTable(db, table);
   }
 }
 
-function getAllTableNames(db: Database): string[] {
-  const res = db.exec(`
-    SELECT name FROM sqlite_master
-    WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+export function installTriggersForTable(db: Database, table: string) {
+  const pk = getPrimaryKeyColumn(table);
+  const columns = getColumnNames(table);
+  const jsonCols = columns.map((c) => `'${c}', ${c}`).join(", ");
+
+  db.run(`
+    CREATE TRIGGER IF NOT EXISTS trg_${table}_insert
+    AFTER INSERT ON ${table}
+    BEGIN
+      INSERT INTO change_log (id, table_name, record_id, op, payload, created_at)
+      VALUES (
+        lower(hex(randomblob(16))),
+        '${table}',
+        NEW.${pk},
+        'upsert',
+        (SELECT json_object(${jsonCols}) FROM ${table} WHERE ${pk} = NEW.${pk}),
+        datetime('now')
+      );
+    END;
   `);
-  if (!res[0]) return [];
-  return res[0].values
-    .map((row) => row[0] as string)
-    .filter((name) => !SYSTEM_TABLES.includes(name));
+
+  db.run(`
+    CREATE TRIGGER IF NOT EXISTS trg_${table}_update
+    AFTER UPDATE ON ${table}
+    BEGIN
+      INSERT INTO change_log (id, table_name, record_id, op, payload, created_at)
+      VALUES (
+        lower(hex(randomblob(16))),
+        '${table}',
+        NEW.${pk},
+        'upsert',
+        (SELECT json_object(${jsonCols}) FROM ${table} WHERE ${pk} = NEW.${pk}),
+        datetime('now')
+      );
+    END;
+  `);
+
+  db.run(`
+    CREATE TRIGGER IF NOT EXISTS trg_${table}_delete
+    AFTER DELETE ON ${table}
+    BEGIN
+      INSERT INTO change_log (id, table_name, record_id, op, payload, created_at)
+      VALUES (
+        lower(hex(randomblob(16))),
+        '${table}',
+        OLD.${pk},
+        'delete',
+        NULL,
+        datetime('now')
+      );
+    END;
+  `);
 }
 
-function jsonColumns(db: Database, table: string): string {
-  const res = db.exec(`PRAGMA table_info(${table})`);
-  const columns = res[0].values.map((row) => row[1] as string); // column name
-  return columns.map((c) => `'${c}', ${c}`).join(", ");
+export function dropTriggersForTable(db: Database, table: string) {
+  db.run(`DROP TRIGGER IF EXISTS trg_${table}_insert`);
+  db.run(`DROP TRIGGER IF EXISTS trg_${table}_update`);
+  db.run(`DROP TRIGGER IF EXISTS trg_${table}_delete`);
 }

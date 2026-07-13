@@ -71,6 +71,6 @@ const PandelSchema: SchemaDef = {
   },
 };
 
-export const PandelModel = createModel("pandels", PandelSchema, {
+export const PandelModel = createModel("Pandel", PandelSchema, {
   timestamps: true,
 });

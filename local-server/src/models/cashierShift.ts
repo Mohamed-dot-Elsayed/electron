@@ -37,6 +37,6 @@ const CashierShiftSchema: SchemaDef = {
   },
 };
 
-export const CashierShift = createModel("cashier_shifts", CashierShiftSchema, {
+export const CashierShift = createModel("CashierShift", CashierShiftSchema, {
   timestamps: true,
 });

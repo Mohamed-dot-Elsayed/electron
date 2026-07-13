@@ -25,6 +25,6 @@ const NotificationSchema: SchemaDef = {
   },
 };
 
-export const NotificationModel = createModel("notifications", NotificationSchema, {
+export const NotificationModel = createModel("Notification", NotificationSchema, {
   timestamps: true,
 });

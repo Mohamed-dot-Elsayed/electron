@@ -37,6 +37,6 @@ const ExpenseSchema: SchemaDef = {
   },
 };
 
-export const ExpenseModel = createModel("expenses", ExpenseSchema, {
+export const ExpenseModel = createModel("Expense", ExpenseSchema, {
   timestamps: true,
 });

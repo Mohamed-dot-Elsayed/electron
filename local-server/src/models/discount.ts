@@ -23,6 +23,6 @@ const DiscountSchema: SchemaDef = {
   },
 };
 
-export const DiscountModel = createModel("discounts", DiscountSchema, {
+export const DiscountModel = createModel("Discount", DiscountSchema, {
   timestamps: true,
 });

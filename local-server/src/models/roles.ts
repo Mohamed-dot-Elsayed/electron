@@ -54,6 +54,6 @@ const RoleSchema: SchemaDef = {
 };
 
 // Create the model
-export const RoleModel = createModel("roles", RoleSchema, {
+export const RoleModel = createModel("Role", RoleSchema, {
   timestamps: true,
 });

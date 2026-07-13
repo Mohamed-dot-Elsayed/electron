@@ -96,6 +96,6 @@ const UserSchema: SchemaDef = {
 };
 
 // Create the model
-export const UserModel = createModel("users", UserSchema, {
+export const UserModel = createModel("User", UserSchema, {
   timestamps: true, // This will add createdAt and updatedAt
 });

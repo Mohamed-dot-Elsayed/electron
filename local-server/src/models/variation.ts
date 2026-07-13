@@ -29,10 +29,10 @@ const OptionSchema: SchemaDef = {
   },
 };
 
-export const VariationModel = createModel("variations", VariationSchema, {
+export const VariationModel = createModel("Variation", VariationSchema, {
   timestamps: true,
 });
 
-export const OptionModel = createModel("options", OptionSchema, {
+export const OptionModel = createModel("Option", OptionSchema, {
   timestamps: true,
 });

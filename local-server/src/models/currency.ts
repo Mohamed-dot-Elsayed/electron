@@ -20,6 +20,6 @@ const CurrencySchema: SchemaDef = {
   },
 };
 
-export const CurrencyModel = createModel("currencies", CurrencySchema, {
+export const CurrencyModel = createModel("Currency", CurrencySchema, {
   timestamps: true,
 });

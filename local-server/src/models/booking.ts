@@ -37,6 +37,6 @@ const BookingSchema: SchemaDef = {
   },
 };
 
-export const BookingModel = createModel("bookings", BookingSchema, {
+export const BookingModel = createModel("Booking", BookingSchema, {
   timestamps: true,
 });

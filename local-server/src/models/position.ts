@@ -9,6 +9,6 @@ const PositionSchema: SchemaDef = {
   },
 };
 
-export const PositionModel = createModel("positions", PositionSchema, {
+export const PositionModel = createModel("Position", PositionSchema, {
   timestamps: true,
 });

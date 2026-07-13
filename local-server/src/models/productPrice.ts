@@ -38,7 +38,7 @@ const ProductPriceSchema: SchemaDef = {
   },
 };
 
-export const ProductPriceModel = createModel("product_prices", ProductPriceSchema, {
+export const ProductPriceModel = createModel("ProductPrice", ProductPriceSchema, {
   timestamps: true,
 });
 
@@ -56,6 +56,6 @@ const ProductPriceOptionSchema: SchemaDef = {
   },
 };
 
-export const ProductPriceOptionModel = createModel("product_price_options", ProductPriceOptionSchema, {
+export const ProductPriceOptionModel = createModel("ProductPriceOption", ProductPriceOptionSchema, {
   timestamps: true,
 });

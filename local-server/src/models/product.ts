@@ -117,6 +117,6 @@ const ProductSchema: SchemaDef = {
   },
 };
 
-export const ProductModel = createModel("products", ProductSchema, {
+export const ProductModel = createModel("Product", ProductSchema, {
   timestamps: true,
 });

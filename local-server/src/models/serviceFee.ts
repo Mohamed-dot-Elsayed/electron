@@ -33,6 +33,6 @@ const ServiceFeeSchema: SchemaDef = {
   },
 };
 
-export const ServiceFeeModel = createModel("service_fees", ServiceFeeSchema, {
+export const ServiceFeeModel = createModel("ServiceFee", ServiceFeeSchema, {
   timestamps: true,
 });

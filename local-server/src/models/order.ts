@@ -135,6 +135,6 @@ const OrderSchema: SchemaDef = {
   },
 };
 
-export const OrderModel = createModel("orders", OrderSchema, {
+export const OrderModel = createModel("Orders", OrderSchema, {
   timestamps: true,
 });

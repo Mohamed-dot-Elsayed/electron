@@ -31,6 +31,6 @@ const PaymentMethodSchema: SchemaDef = {
   },
 };
 
-export const PaymentMethodModel = createModel("payment_methods", PaymentMethodSchema, {
+export const PaymentMethodModel = createModel("PaymentMethod", PaymentMethodSchema, {
   timestamps: true,
 });

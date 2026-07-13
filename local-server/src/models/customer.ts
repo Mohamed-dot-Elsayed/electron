@@ -101,6 +101,6 @@ const CustomerSchema: SchemaDef = {
   },
 };
 
-export const CustomerModel = createModel("customers", CustomerSchema, {
+export const CustomerModel = createModel("Customer", CustomerSchema, {
   timestamps: true,
 });

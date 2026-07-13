@@ -52,6 +52,6 @@ const CashierSchema: SchemaDef = {
   },
 };
 
-export const CashierModel = createModel("cashiers", CashierSchema, {
+export const CashierModel = createModel("Cashier", CashierSchema, {
   timestamps: true,
 });

@@ -18,6 +18,6 @@ const ExpenseCategorySchema: SchemaDef = {
   },
 };
 
-export const ExpenseCategoryModel = createModel("expense_categories", ExpenseCategorySchema, {
+export const ExpenseCategoryModel = createModel("ExpenseCategory", ExpenseCategorySchema, {
   timestamps: true,
 });

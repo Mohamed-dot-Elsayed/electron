@@ -33,6 +33,6 @@ const PaymobSchema: SchemaDef = {
   },
 };
 
-export const PaymobModel = createModel("paymobs", PaymobSchema, {
+export const PaymobModel = createModel("Paymob", PaymobSchema, {
   timestamps: true,
 });

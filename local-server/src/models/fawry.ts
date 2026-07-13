@@ -25,6 +25,6 @@ const FawrySchema: SchemaDef = {
   },
 };
 
-export const FawryModel = createModel("fawries", FawrySchema, {
+export const FawryModel = createModel("Fawry", FawrySchema, {
   timestamps: true,
 });

@@ -112,6 +112,6 @@ const ReturnSchema: SchemaDef = {
   },
 };
 
-export const ReturnModel = createModel("returns", ReturnSchema, {
+export const ReturnModel = createModel("Return", ReturnSchema, {
   timestamps: true,
 });

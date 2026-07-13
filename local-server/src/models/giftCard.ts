@@ -24,6 +24,6 @@ const GiftCardSchema: SchemaDef = {
   },
 };
 
-export const GiftCardModel = createModel("gift_cards", GiftCardSchema, {
+export const GiftCardModel = createModel("GiftCard", GiftCardSchema, {
   timestamps: true,
 });

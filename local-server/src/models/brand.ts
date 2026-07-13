@@ -15,6 +15,6 @@ const BrandSchema: SchemaDef = {
   },
 };
 
-export const BrandModel = createModel("brands", BrandSchema, {
+export const BrandModel = createModel("Brand", BrandSchema, {
   timestamps: true,
 });
