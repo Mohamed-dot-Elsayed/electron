@@ -33,6 +33,7 @@ export async function runBootstrapAll() {
   }
 
   markBootstrapComplete();
+  setLastSyncAt("_global",Date.now().toString())
   console.log("Bootstrap complete for all tables");
 }
 

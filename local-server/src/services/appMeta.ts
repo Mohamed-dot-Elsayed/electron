@@ -16,7 +16,20 @@ export function setMeta(key: string, value: string) {
 
 export const isBootstrapDone = () => getMeta("bootstrap_completed") === "true";
 export const markBootstrapComplete = () => setMeta("bootstrap_completed", "true");
-export const isTableBootstrapped = (t: string) => getMeta(`bootstrap_${t}_done`) === "true";
-export const markTableBootstrapped = (t: string) => setMeta(`bootstrap_${t}_done`, "true");
-export const getLastSyncAt = (t: string) => getMeta(`last_sync_at_${t}`);
-export const setLastSyncAt = (t: string, iso: string) => setMeta(`last_sync_at_${t}`, iso);
+
+// per-table bootstrap flags — key must include the table name or every table
+// shares the same "bootstrap_done" row
+export const isTableBootstrapped = (table: string) =>
+  getMeta(`bootstrap_done:${table}`) === "true";
+export const markTableBootstrapped = (table: string) =>
+  setMeta(`bootstrap_done:${table}`, "true");
+
+// sync cursor — call with a table name for per-table cursors, or a fixed key
+// like "_global" if the remote feed isn't scoped by table (current setup)
+export function getLastSyncAt(scope: string): string | null {
+  return getMeta(`last_sync_at:${scope}`);
+}
+
+export function setLastSyncAt(scope: string, isoTime: string) {
+  setMeta(`last_sync_at:${scope}`, isoTime);
+}

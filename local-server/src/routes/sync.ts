@@ -2,8 +2,8 @@ import { Router } from "express";
 import { testBootstrap, testPull, testPush } from "../controller/sync";
 
 const router = Router();
-router.post("/bootstrap/test", testBootstrap);
-router.post("/pull/test", testPull);
-router.post("/push/test", testPush);
+router.post("/bootstrap", testBootstrap);
+router.post("/pull", testPull);
+router.post("/push", testPush);
 
 export default router;
