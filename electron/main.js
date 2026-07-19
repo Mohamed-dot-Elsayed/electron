@@ -46,7 +46,9 @@ ipcMain.handle("get-client-env", () => clientConfig);
 // ============================================
 // LOCAL DB PATH
 // ============================================
-process.env.LOCAL_DB_PATH = path.join(app.getPath("userData"), "local.db");
+if (app.isPackaged) {
+  process.env.LOCAL_DB_PATH = path.join(app.getPath("userData"), "local.db");
+}
 
 const { startServer } = require("../local-server/dist/src/index");
 

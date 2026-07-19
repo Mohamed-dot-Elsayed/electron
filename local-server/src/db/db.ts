@@ -3,7 +3,8 @@ import fs from "fs";
 import path from "path";
 import { installChangeLogTriggers } from "./changeLogTrigger";
 
-const DB_PATH = path.join(__dirname, "../../data/app.sqlite");
+const DB_PATH =
+  process.env.LOCAL_DB_PATH ?? path.join(__dirname, "../../data/app.sqlite");
 
 let db: Database | null = null;
 const pendingTableSql: string[] = [];
