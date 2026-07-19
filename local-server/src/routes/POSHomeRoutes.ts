@@ -24,6 +24,8 @@ import {
   getServiceFees,
 } from "../controller/POSHomeController";
 import { authorizePermissions } from "../middlewares/haspremission";
+import { catchAsync } from "../utils/catchAsync";
+import { createCustomer } from "../controller/customerGroupController";
 
 const router = express.Router();
 
@@ -76,6 +78,13 @@ router.get(
   getPaymentMethods
 );
 router.get("/customers", authorizePermissions("POS", "View"), getCustomers);
+router.post(
+  "/customers",
+  authorizePermissions("POS", "Add"),
+  authorizePermissions("customer", "Add"),
+  catchAsync(createCustomer)
+);
+
 router.get(
   "/customer-groups",
   authorizePermissions("POS", "View"),

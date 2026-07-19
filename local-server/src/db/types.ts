@@ -43,4 +43,14 @@ export interface ModelOptions {
   timestamps?: boolean;
 }
 
-export type Where = Record<string, any>;
+export type WhereOperator<T = any> = {
+  $in?: T[];
+  $nin?: T[];
+  $ne?: T;
+  $gt?: T;
+  $gte?: T;
+  $lt?: T;
+  $lte?: T;
+};
+
+export type Where = Record<string, any | WhereOperator>;

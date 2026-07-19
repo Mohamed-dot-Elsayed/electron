@@ -35,10 +35,10 @@ export const getAllCategorys = async (req: Request, res: Response) => {
   }
 
   const warehouseProducts = Product_WarehouseModel.find({
-  warehouseId: warehouseId,
-})
+    warehouseId: warehouseId,
+  })
   .filter(item => item.quantity > 0)
-  .map(({ productId }) => ({ productId }));
+    .map(({ productId }) => ({ productId }));
 
   const productIds = warehouseProducts.map((wp: any) => wp.productId);
 

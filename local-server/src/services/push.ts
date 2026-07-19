@@ -1,5 +1,8 @@
 import axios from "axios";
 import { getDB, saveDB } from "../db/db";
+import { deserializeRow } from "../db/createModel";
+import { getModelSchema } from "../db/model-registry";
+import { table } from "console";
 
 const REMOTE_BASE = process.env.REMOTE_API_URL;
 const BATCH_SIZE = 100;
@@ -27,22 +30,46 @@ export async function pushAllChanges() {
     return obj;
   });
 
+  // After building `changes` from change_log, do this:
+  const deserializedChanges = changes.map((change) => {
+    try {
+      const schema = getModelSchema(change.table_name);
+      if (!schema) return change; // unmanaged table, leave as is
+
+      // The payload is already a JSON string. Parse it to get the row object.
+      const rawRow = JSON.parse(change.payload);
+      // Deserialize fields (e.g., arrays, dates, booleans) back to native types.
+      const nativeRow = deserializeRow(schema, rawRow);
+      // Re-stringify with correct types.
+      return { ...change, payload: JSON.stringify(nativeRow) };
+    } catch (err) {
+      console.error(`Failed to deserialize change ${change.id}`, err);
+      return change; // leave unsynced to retry after fixing
+    }
+  });
+
   console.log(`Pushing ${changes.length} changes...`);
 
-  const { data } = await axios.post(`${REMOTE_BASE}/api/sync/push`, { changes });
+  // Push the deserialized changes
+  const { data } = await axios.post(`${REMOTE_BASE}/api/sync/push`, {
+    changes: deserializedChanges,
+  });
 
-  if (data.applied?.length) {
-    const placeholders = data.applied.map(() => "?").join(", ");
+
+  console.log(data.data.applied);
+
+  if (data.data.applied?.length) {
+    const placeholders = data.data.applied.map(() => "?").join(", ");
     db.run(
       `UPDATE change_log SET synced_at = datetime('now') WHERE id IN (${placeholders})`,
-      data.applied
+      data.data.applied
     );
     saveDB();
-    console.log(`Marked ${data.applied.length} changes as synced`);
+    console.log(`Marked ${data.data.applied.length} changes as synced`);
   }
 
-  if (data.failed?.length) {
-    console.error(`${data.failed.length} changes failed to push:`, data.failed);
+  if (data.data.failed?.length) {
+    console.error(`${data.data.failed.length} changes failed to push:`, data.data.failed);
     // left unsynced on purpose -> retried next push cycle
   }
 
@@ -51,5 +78,5 @@ export async function pushAllChanges() {
     return pushAllChanges();
   }
 
-  return { pushed: data.applied?.length ?? 0 };
+  return { pushed: data.data.applied?.length ?? 0 };
 }

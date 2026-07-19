@@ -1,8 +1,16 @@
 import axios from "axios";
 import { getDB, saveDB } from "../db/db";
-import { getAllTableNames, getPrimaryKeyColumn, getColumnNames } from "../db/introspect";
-import { dropTriggersForTable, installTriggersForTable } from "../db/changeLogTrigger";
+import {
+  getAllTableNames,
+  getPrimaryKeyColumn,
+  getColumnNames,
+} from "../db/introspect";
+import {
+  dropTriggersForTable,
+  installTriggersForTable,
+} from "../db/changeLogTrigger";
 import { getLastSyncAt, setLastSyncAt } from "./appMeta";
+import { sanitizeBindValues } from "../db/createModel";
 
 const REMOTE_BASE = process.env.REMOTE_API_URL;
 
@@ -17,13 +25,15 @@ export async function pullAllTables() {
   return results;
 }
 
-async function pullTable(table: string): Promise<number> {  
+async function pullTable(table: string): Promise<number> {
   const db = getDB();
   const since = getLastSyncAt(table) ?? "1970-01-01T00:00:00.000Z";
 
   const { data } = await axios.get(`${REMOTE_BASE}/api/sync/pull/${table}`, {
     params: { since },
   });
+  console.log("Get Data From "+table);
+  
   if (!data.data.changes || data.data.changes.length === 0) {
     // still advance cursor to server's clock, so we don't keep asking for "everything since epoch"
     setLastSyncAt(table, data.data.serverTime);
@@ -38,7 +48,7 @@ async function pullTable(table: string): Promise<number> {
 
     db.run("BEGIN TRANSACTION");
     try {
-      for (const change of data.changes) {
+      for (const change of data.data.changes) {
         if (change.op === "delete") {
           db.run(`DELETE FROM ${table} WHERE ${pk} = ?`, [change.record_id]);
         } else {
@@ -54,28 +64,46 @@ async function pullTable(table: string): Promise<number> {
     saveDB();
     setLastSyncAt(table, data.data.serverTime); // only advance after successful commit
     console.log(`Pulled ${data.data.changes.length} changes for ${table}`);
-    return data.changes.length;
+    return data.data.changes.length;
   } finally {
     installTriggersForTable(db, table); // always restore
   }
 }
 
-function applyUpsert(db: any, table: string, row: Record<string, any>, localColumns: string[], pk: string) {
-  const existing = db.exec(`SELECT updated_at FROM ${table} WHERE ${pk} = ?`, [row[pk]]);
-  const localUpdatedAt = existing[0]?.values?.[0]?.[0] as string | undefined;
+function applyUpsert(
+  db: any,
+  table: string,
+  row: Record<string, any>,
+  localColumns: string[],
+  pk: string
+) {
+  const stmt = db.prepare(`SELECT updatedAt FROM ${table} WHERE ${pk} = ?`);
+  stmt.bind(sanitizeBindValues([row[pk]]));
+  let localUpdatedAt: string | undefined = undefined;
+  if (stmt.step()) {
+    localUpdatedAt = stmt.getAsObject().updatedAt;
+  }
+  stmt.free();
 
-  if (localUpdatedAt && row.updated_at && new Date(localUpdatedAt) > new Date(row.updated_at)) {
+  if (
+    localUpdatedAt &&
+    row.updated_at &&
+    new Date(localUpdatedAt) > new Date(row.updated_at)
+  ) {
     console.log(`Skipping ${table}/${row[pk]} — local version is newer (LWW)`);
     return;
   }
 
   const columns = Object.keys(row).filter((c) => localColumns.includes(c));
   const placeholders = columns.map(() => "?").join(", ");
-  const updates = columns.filter((c) => c !== pk).map((c) => `${c} = excluded.${c}`).join(", ");
+  const updates = columns
+    .filter((c) => c !== pk)
+    .map((c) => `${c} = excluded.${c}`)
+    .join(", ");
 
   db.run(
     `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders})
      ON CONFLICT(${pk}) DO UPDATE SET ${updates}`,
-    columns.map((c) => row[c])
+    sanitizeBindValues(columns.map((c) => row[c]))
   );
 }

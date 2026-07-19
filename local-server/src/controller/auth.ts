@@ -19,7 +19,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     throw new BadRequest("Email and password are required");
   }
 
-  const user = await UserModel.findOne({ email });
+  const user = UserModel.findOne({ email });
 
   if (!user) {
     throw new NotFound("User not found");
@@ -54,7 +54,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       roleName = "Warehouse Admin";
     }
   } else if (user.role_id) {
-    const roleData = await RoleModel.findById(user.role_id).lean();
+    const roleData = RoleModel.findById(user.role_id);
 
     if (!roleData) {
       throw new UnauthorizedError("User role not found. Please contact admin.");

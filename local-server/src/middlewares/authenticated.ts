@@ -38,8 +38,8 @@ export async function authenticated(
     } else if (decoded.role_id) {
       // Admin - جيب من Role + User
       const [roleData, userData] = await Promise.all([
-        RoleModel.findById(decoded.role_id).lean(),
-        UserModel.findById(decoded.id).select("permissions").lean(),
+        RoleModel.findById(decoded.role_id),
+        UserModel.findById(decoded.id),
       ]);
 
       const rolePermissions = (roleData?.permissions || []).map((p: any) => ({

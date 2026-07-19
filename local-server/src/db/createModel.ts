@@ -7,6 +7,7 @@ import {
   ModelOptions,
   Where,
 } from "./types";
+import { registerModelSchema } from "./model-registry";
 
 const sqlType = {
   string: "TEXT",
@@ -192,7 +193,7 @@ function serializeRow(schema: SchemaDef, row: any) {
   return result;
 }
 
-function deserializeRow(schema: SchemaDef, row: any) {
+export function deserializeRow(schema: SchemaDef, row: any) {
   const result: any = {};
 
   for (const [key, value] of Object.entries(row)) {
@@ -238,16 +239,103 @@ function addNestedIds(def: FieldDef, value: any): any {
 }
 
 function buildWhere(where: Where) {
-  const keys = Object.keys(where).filter((k) => where[k] !== undefined);
+  const clauses: string[] = [];
+  const values: any[] = [];
 
-  if (!keys.length) {
+  for (const [key, raw] of Object.entries(where)) {
+    if (raw === undefined) continue;
+
+    // Operator object: { $in: [...] }, { $ne: x }, etc.
+    if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) {
+      const opEntries = Object.entries(raw);
+
+      for (const [op, val] of opEntries) {
+        switch (op) {
+          case "$in": {
+            const arr = val as any[];
+            if (!arr.length) {
+              // empty $in should match nothing
+              clauses.push("1 = 0");
+            } else {
+              clauses.push(`${key} IN (${arr.map(() => "?").join(",")})`);
+              values.push(...arr);
+            }
+            break;
+          }
+          case "$nin": {
+            const arr = val as any[];
+            if (arr.length) {
+              clauses.push(`${key} NOT IN (${arr.map(() => "?").join(",")})`);
+              values.push(...arr);
+            }
+            break;
+          }
+          case "$ne":
+            clauses.push(`${key} != ?`);
+            values.push(val);
+            break;
+          case "$gt":
+            clauses.push(`${key} > ?`);
+            values.push(val);
+            break;
+          case "$gte":
+            clauses.push(`${key} >= ?`);
+            values.push(val);
+            break;
+          case "$lt":
+            clauses.push(`${key} < ?`);
+            values.push(val);
+            break;
+          case "$lte":
+            clauses.push(`${key} <= ?`);
+            values.push(val);
+            break;
+          default:
+            throw new Error(`Unsupported operator "${op}" on field "${key}"`);
+        }
+      }
+      continue;
+    }
+
+    // Plain equality
+    clauses.push(`${key} = ?`);
+    values.push(raw);
+  }
+
+  if (!clauses.length) {
     return { clause: "", values: [] };
   }
 
   return {
-    clause: "WHERE " + keys.map((k) => `${k} = ?`).join(" AND "),
-    values: keys.map((k) => where[k]),
+    clause: "WHERE " + clauses.join(" AND "),
+    values,
   };
+}
+
+/**
+ * Converts an array of values to types that can be safely bound to a SQLite statement.
+ * - undefined -> null
+ * - null, string, number, boolean are passed through
+ * - anything else throws an error (unless you need Buffer/Uint8Array support)
+ */
+type SqlBindable = number | string | null | Uint8Array;
+
+export function sanitizeBindValues(values: unknown[]): (number | string | null | Uint8Array)[] {
+  return values.map((v) => {
+    if (v === undefined) return null;
+    if (v === null) return null;
+    if (typeof v === 'boolean') return v ? 1 : 0;
+    if (typeof v === 'number' || typeof v === 'string') return v;
+    if (v instanceof Uint8Array) return v;
+
+    // ✅ New: object/array → JSON string (mirrors the ORM’s serializeField)
+    if (typeof v === 'object') {
+      return JSON.stringify(v);
+    }
+
+    // Anything else (function, symbol, etc.) should not be bound
+    throw new TypeError(`Cannot bind value of type ${typeof v}: ${JSON.stringify(v)}`);
+  });
 }
 
 export function createModel(
@@ -286,14 +374,14 @@ export function createModel(
   registerTable(
     `CREATE TABLE IF NOT EXISTS ${tableName} (${columns.join(", ")});`
   );
-
+  registerModelSchema(tableName, schema);
   function rowsFrom(where: Where = {}) {
     const db = getDB();
     const { clause, values } = buildWhere(where);
     const stmt = db.prepare(`SELECT * FROM ${tableName} ${clause}`);
 
     // Filter out undefined values
-    const safeValues = values.map((v) => (v === undefined ? null : v));
+    const safeValues = sanitizeBindValues(values)
 
     try {
       stmt.bind(safeValues);
