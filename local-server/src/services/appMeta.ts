@@ -1,4 +1,5 @@
 import { getDB, saveDB } from "../db/db";
+import { randomUUID } from "crypto";
 
 export function getMeta(key: string): string | null {
   const res = getDB().exec("SELECT value FROM app_meta WHERE key = ?", [key]);
@@ -32,4 +33,14 @@ export function getLastSyncAt(scope: string): string | null {
 
 export function setLastSyncAt(scope: string, isoTime: string) {
   setMeta(`last_sync_at:${scope}`, isoTime);
+}
+
+export function getOrCreateClientId(): string {
+  let id = getMeta("client_id");
+  if (!id) {
+    id = randomUUID();
+    setMeta("client_id", id);
+    console.log(`Generated new client id: ${id}`);
+  }
+  return id;
 }

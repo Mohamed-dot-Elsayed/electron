@@ -15,11 +15,14 @@ import {
   setLastSyncAt,
   isBootstrapDone,
   markBootstrapComplete,
+  getOrCreateClientId
 } from "./appMeta";
 
 const REMOTE_BASE = process.env.REMOTE_API_URL;
 
 export async function runBootstrapAll() {
+  const clientId = getOrCreateClientId();
+  console.log(`Bootstrapping with client id: ${clientId}`);
   if (isBootstrapDone()) {
     console.log("Bootstrap already completed, skipping entirely");
     return;
@@ -33,7 +36,7 @@ export async function runBootstrapAll() {
   }
 
   markBootstrapComplete();
-  setLastSyncAt("_global",Date.now().toString())
+  setLastSyncAt("_global",new Date().toISOString())
   console.log("Bootstrap complete for all tables");
 }
 

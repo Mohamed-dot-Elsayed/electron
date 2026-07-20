@@ -9,11 +9,11 @@ import {
   dropTriggersForTable,
   installTriggersForTable,
 } from "../db/changeLogTrigger";
-import { getLastSyncAt, setLastSyncAt } from "./appMeta";
+import { getLastSyncAt, setLastSyncAt, getOrCreateClientId } from "./appMeta";
 import { sanitizeBindValues } from "../db/createModel";
 
 const REMOTE_BASE = process.env.REMOTE_API_URL;
-const SYNC_CURSOR_KEY = "_global"; // remote doesn't filter by table, so one cursor for all
+const SYNC_CURSOR_KEY = "_global";
 
 type RemoteChange = {
   table_name: string;
@@ -22,17 +22,54 @@ type RemoteChange = {
   data?: Record<string, any>;
 };
 
+/**
+ * Normalize a sync cursor to an ISO‑8601 string.
+ * Accepts a numeric Unix timestamp (ms) or an already valid date string.
+ */
+function normalizeCursor(raw: string): string {
+  // If it's all digits, treat as milliseconds since epoch
+  if (/^\d+$/.test(raw)) {
+    const ms = parseInt(raw, 10);
+    return new Date(ms).toISOString();
+  }
+  // Otherwise assume it's already an ISO string (or fallback)
+  // You could add more validation here if needed.
+  return raw;
+}
+
 export async function pullAllTables(): Promise<Record<string, number>> {
   const db = getDB();
   const knownTables = new Set(getAllTableNames());
-  const since = getLastSyncAt(SYNC_CURSOR_KEY) ?? "1970-01-01T00:00:00.000Z";
+  const clientId = getOrCreateClientId();
 
-  const { data } = await axios.get(`${REMOTE_BASE}/api/sync/pull`, {
-    params: { since },
-  });
+  // Get the cursor, fallback to epoch start, then normalize it
+  const rawSince = getLastSyncAt(SYNC_CURSOR_KEY) ?? "1970-01-01T00:00:00.000Z";
+  const since = normalizeCursor(rawSince);
 
-  const changes: RemoteChange[] = data.data.changes ?? [];
-  const serverTime: string = data.data.serverTime;
+  // If we had to convert from numeric, permanently fix the stored value
+  if (rawSince !== since) {
+    setLastSyncAt(SYNC_CURSOR_KEY, since);
+  }
+
+  let responseData; // will hold the parsed response body
+  try {
+    const response = await axios.get(`${REMOTE_BASE}/api/sync/pull`, {
+      params: { since, clientId },
+    });
+    responseData = response.data; // { success: true, data: { changes, serverTime } }
+  } catch (error: any) {
+    // Log the server's error message for debugging
+    if (error.response) {
+      console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+      console.error('Server error:', error.response.data.error);
+    }
+    throw error; // rethrow to be handled by the caller
+  }
+
+  // The server responds with { success: true, data: { changes: [...], serverTime: "..." } }
+  const payload = responseData.data;
+  const changes: RemoteChange[] = payload.changes ?? [];
+  const serverTime: string = payload.serverTime;
   const results: Record<string, number> = {};
 
   if (changes.length === 0) {
@@ -41,7 +78,7 @@ export async function pullAllTables(): Promise<Record<string, number>> {
     return results;
   }
 
-  // group remote changes by table so we only touch triggers/columns once per table
+  // Group remote changes by table to reduce trigger work
   const byTable = new Map<string, RemoteChange[]>();
   for (const change of changes) {
     if (!knownTables.has(change.table_name)) {
@@ -55,7 +92,7 @@ export async function pullAllTables(): Promise<Record<string, number>> {
   let allSucceeded = true;
 
   for (const [table, tableChanges] of byTable) {
-    dropTriggersForTable(db, table); // remote-origin writes shouldn't re-enter change_log
+    dropTriggersForTable(db, table);
     try {
       const pk = getPrimaryKeyColumn(table);
       const localColumns = getColumnNames(table);
@@ -79,16 +116,12 @@ export async function pullAllTables(): Promise<Record<string, number>> {
         console.error(`Failed applying changes for ${table}:`, err);
       }
     } finally {
-      installTriggersForTable(db, table); // always restore
+      installTriggersForTable(db, table);
     }
   }
 
   saveDB();
 
-  // only advance the cursor if every table applied cleanly; upserts/deletes are
-  // idempotent, so retrying the whole batch (including already-applied tables)
-  // next pull is safe and simpler than tracking a per-table watermark against
-  // a single global change feed.
   if (allSucceeded) {
     setLastSyncAt(SYNC_CURSOR_KEY, serverTime);
   } else {

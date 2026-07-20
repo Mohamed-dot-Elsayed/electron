@@ -2,6 +2,7 @@ import axios from "axios";
 import { getDB, saveDB } from "../db/db";
 import { deserializeRow } from "../db/createModel";
 import { getModelSchema } from "../db/model-registry";
+import { getOrCreateClientId } from "./appMeta";
 import { table } from "console";
 
 const REMOTE_BASE = process.env.REMOTE_API_URL;
@@ -9,6 +10,7 @@ const BATCH_SIZE = 100;
 
 export async function pushAllChanges() {
   const db = getDB();
+  const clientId = getOrCreateClientId();
 
   const res = db.exec(`
     SELECT id, table_name, record_id, op, payload, created_at
@@ -53,6 +55,7 @@ export async function pushAllChanges() {
   // Push the deserialized changes
   const { data } = await axios.post(`${REMOTE_BASE}/api/sync/push`, {
     changes: deserializedChanges,
+    clientId,
   });
 
 
