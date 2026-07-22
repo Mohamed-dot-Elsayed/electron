@@ -17,6 +17,9 @@ import {
   markBootstrapComplete,
   getOrCreateClientId
 } from "./appMeta";
+import { enqueuePendingImages } from "../db/imageCache";
+import { extractImageUrls } from "./imageExtract";
+import { triggerImageDownload } from "./imageDownloader";
 
 const REMOTE_BASE = process.env.REMOTE_API_URL;
 
@@ -37,6 +40,7 @@ export async function runBootstrapAll() {
 
   markBootstrapComplete();
   setLastSyncAt("_global",new Date().toISOString())
+  triggerImageDownload();
   console.log("Bootstrap complete for all tables");
 }
 
@@ -72,6 +76,7 @@ async function bootstrapTable(table: string) {
     try {
       for (const row of data.data.rows) {
         insertRow(db, table, row, localColumns, pk);
+        enqueuePendingImages(extractImageUrls(table, row));
       }
       db.run("COMMIT");
     } catch (err) {

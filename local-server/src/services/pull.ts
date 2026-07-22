@@ -11,6 +11,9 @@ import {
 } from "../db/changeLogTrigger";
 import { getLastSyncAt, setLastSyncAt, getOrCreateClientId } from "./appMeta";
 import { sanitizeBindValues } from "../db/createModel";
+import { enqueuePendingImages } from "../db/imageCache";
+import { extractImageUrls } from "./imageExtract";
+import { triggerImageDownload } from "./imageDownloader";
 
 const REMOTE_BASE = process.env.REMOTE_API_URL;
 const SYNC_CURSOR_KEY = "_global";
@@ -104,6 +107,7 @@ export async function pullAllTables(): Promise<Record<string, number>> {
             db.run(`DELETE FROM ${table} WHERE ${pk} = ?`, [change.record_id]);
           } else {
             applyUpsert(db, table, change.data!, localColumns, pk);
+            enqueuePendingImages(extractImageUrls(table, change.data!));
           }
         }
         db.run("COMMIT");
@@ -121,7 +125,7 @@ export async function pullAllTables(): Promise<Record<string, number>> {
   }
 
   saveDB();
-
+  triggerImageDownload();
   if (allSucceeded) {
     setLastSyncAt(SYNC_CURSOR_KEY, serverTime);
   } else {

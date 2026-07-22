@@ -1,6 +1,6 @@
 import { getDB } from "./db";
 
-const SYSTEM_TABLES = ["change_log", "app_meta"];
+const SYSTEM_TABLES = ["change_log", "app_meta","image_cache"];
 
 export function getAllTableNames(): string[] {
   const db = getDB();

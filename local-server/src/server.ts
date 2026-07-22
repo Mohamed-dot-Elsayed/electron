@@ -14,6 +14,7 @@ import { NotFound } from "./Errors";
 import { startCron } from "./utils/expiry_lowstock";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import { uploadsRouter } from "./routes/uploadsRoute";
 
 export function createServer() {
   const app = express();
@@ -28,6 +29,7 @@ export function createServer() {
 
   // 🚀 Routes
   app.use("/api", ApiRoute);
+  app.use(uploadsRouter);
 
   app.use((req, res, next) => {
     throw new NotFound("Route not found");
