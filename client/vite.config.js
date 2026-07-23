@@ -1,19 +1,22 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import dotenv from 'dotenv';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+import path from "path";
+import { fileURLToPath } from "url";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export default defineConfig({
-  plugins: [react()],
-  base: './',
-  server: {
-    port: 5173, 
-    proxy: {
-      '/api': {
-        target: process.env.LOCAL_API_URL,
-        changeOrigin: true,
-      },
+  plugins: [
+    react(),
+    tailwindcss(),
+  ],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "src"),
     },
   },
-});
+  base: '/point-of-sale',
+  envPrefix: 'VITE_'
+})

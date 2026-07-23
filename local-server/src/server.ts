@@ -8,6 +8,7 @@ dotenv.config({
 import http from "http";
 import { Server } from "socket.io";
 import express from "express";
+import "express-async-errors";
 import ApiRoute from "./routes/index";
 import { errorHandler } from "./middlewares/errorHandler";
 import { NotFound } from "./Errors";

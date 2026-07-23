@@ -26,8 +26,6 @@ import { CategoryModel } from "../models/category";
 const getStoreInfo = async (userId: string) => {
   // 1. جيب اسم البراند من الـ superadmin (صاحب البزنس)
   const superAdmin = await UserModel.findOne({ role: "superadmin" })
-    .select("company_name phone address warehouse_id")
-    .lean();
 
   if (superAdmin?.company_name) {
     return {
@@ -40,8 +38,6 @@ const getStoreInfo = async (userId: string) => {
   // Fallback: لو السوبر أدمن مفيش عنده company_name، جيب من الـ Warehouse بتاعه
   if (superAdmin?.warehouse_id) {
     const warehouse = await WarehouseModel.findById(superAdmin.warehouse_id)
-      .select("name phone address")
-      .lean();
     if (warehouse) {
       return {
         name: warehouse.name,
@@ -53,8 +49,6 @@ const getStoreInfo = async (userId: string) => {
 
   // Fallback أخير: لو مفيش superadmin أصلاً، جرب اليوزر الحالي
   const user = await UserModel.findById(userId)
-    .select("company_name phone address warehouse_id")
-    .lean();
 
   if (user?.company_name) {
     return {
@@ -66,8 +60,6 @@ const getStoreInfo = async (userId: string) => {
 
   if (user?.warehouse_id) {
     const warehouse = await WarehouseModel.findById(user.warehouse_id)
-      .select("name phone address")
-      .lean();
     if (warehouse) {
       return {
         name: warehouse.name,
@@ -98,7 +90,7 @@ export const createSale = async (req: Request, res: Response) => {
   const openShift = await CashierShift.findOne({
     cashierman_id: cashierId,
     status: "open",
-  }).sort({ start_time: -1 });
+  });
 
   if (!openShift) {
     throw new BadRequest(
@@ -156,11 +148,10 @@ export const createSale = async (req: Request, res: Response) => {
         discount = 0,
         discount_type = "fixed",
       } = p;
-
+      let qunt = Number(quantity);
       let finalPrice = 0;
       let originalPrice = 0;
       let isWholesale = false;
-
       if (product_price_id) {
         const priceDoc = await ProductPriceModel.findById(product_price_id);
         if (!priceDoc) {
@@ -180,7 +171,7 @@ export const createSale = async (req: Request, res: Response) => {
               wholesalePrice &&
               wholesalePrice > 0 &&
               minQty > 0 &&
-              quantity >= minQty
+              qunt >= minQty
             ) {
               const discountRatio = wholesalePrice / (product.price || 1);
               finalPrice =
@@ -205,7 +196,7 @@ export const createSale = async (req: Request, res: Response) => {
           wholesalePrice &&
           wholesalePrice > 0 &&
           minQtyForWholesale > 0 &&
-          quantity >= minQtyForWholesale
+          qunt >= minQtyForWholesale
         ) {
           finalPrice = wholesalePrice;
           isWholesale = true;
@@ -228,12 +219,12 @@ export const createSale = async (req: Request, res: Response) => {
         finalPrice = Math.max(0, finalPrice - appliedDiscount);
       }
 
-      const finalSubtotal = finalPrice * quantity;
+      const finalSubtotal = finalPrice * qunt;
 
       processedProducts.push({
         product_id: p.product_id,
         product_price_id: p.product_price_id,
-        quantity: p.quantity,
+        quantity: qunt,
         price: finalPrice,
         subtotal: finalSubtotal,
         original_price: originalPrice,
@@ -266,8 +257,8 @@ export const createSale = async (req: Request, res: Response) => {
         discount = 0,
         discount_type = "fixed",
       } = b;
-
-      const bundleDoc = await PandelModel.findById(bundle_id).lean();
+      let quant = Number(quantity)
+      const bundleDoc = await PandelModel.findById(bundle_id);
       if (!bundleDoc) {
         throw new NotFound("Bundle not found");
       }
@@ -320,9 +311,9 @@ export const createSale = async (req: Request, res: Response) => {
           });
 
           if (!variationWarehouseStock) {
-            const product = await ProductModel.findById(productId)
-              .select("name")
-              .lean();
+            const product = await ProductModel.findById(productId).select(
+              "name"
+            );
             throw new BadRequest(
               `Bundle "${bundleDoc.name}" - variation for "${
                 (product as any)?.name || productId
@@ -331,9 +322,9 @@ export const createSale = async (req: Request, res: Response) => {
           }
 
           if ((variationWarehouseStock.quantity ?? 0) < quantity * productQty) {
-            const product = await ProductModel.findById(productId)
-              .select("name")
-              .lean();
+            const product = await ProductModel.findById(productId).select(
+              "name"
+            );
             throw new BadRequest(
               `Not enough stock for "${
                 (product as any)?.name || "product"
@@ -350,9 +341,9 @@ export const createSale = async (req: Request, res: Response) => {
           });
 
           if (!warehouseStock) {
-            const product = await ProductModel.findById(productId)
-              .select("name")
-              .lean();
+            const product = await ProductModel.findById(productId).select(
+              "name"
+            );
             throw new BadRequest(
               `Bundle "${
                 bundleDoc.name
@@ -363,9 +354,9 @@ export const createSale = async (req: Request, res: Response) => {
           }
 
           if ((warehouseStock.quantity ?? 0) < quantity * productQty) {
-            const product = await ProductModel.findById(productId)
-              .select("name")
-              .lean();
+            const product = await ProductModel.findById(productId).select(
+              "name"
+            );
             throw new BadRequest(
               `Not enough stock for "${
                 (product as any)?.name || "product"
@@ -534,11 +525,11 @@ export const createSale = async (req: Request, res: Response) => {
     for (const line of paymentLines) {
       const bankAccount = await BankAccountModel.findOne({
         _id: line.account_id,
-        warehouseId: warehouseId,
+        warehouseId: { $contains: warehouseId },
         status: true,
         in_POS: true,
       });
-
+      
       if (!bankAccount) {
         throw new BadRequest(
           "One of the financial accounts is not valid or not allowed in POS"
@@ -690,7 +681,6 @@ export const createSale = async (req: Request, res: Response) => {
       original_price: p.original_price,
       discount: p.discount,
       discount_type: p.discount_type,
-      is_wholesale: p.is_wholesale,
       options_id: p.options_id,
       isGift: !!p.isGift,
       isBundle: false,
@@ -907,17 +897,117 @@ export const createSale = async (req: Request, res: Response) => {
   // ═══════════════════════════════════════════════════════════
   // FETCH FULL SALE DATA
   // ═══════════════════════════════════════════════════════════
-  const fullSale = await SaleModel.findById(sale._id)
-    .populate("customer_id", "name email phone_number")
-    .populate("Due_customer_id", "name email phone_number")
-    .populate("warehouse_id", "name location")
-    .populate("order_tax", "name amount type")
-    .populate("order_discount", "name amount type")
-    .populate("gift_card_id", "code amount")
-    .populate("cashier_id", "name email")
-    .populate("shift_id", "start_time status")
-    .populate("account_id", "name type balance")
-    .lean();
+  // ✅ manual populate
+  const saleRaw = SaleModel.findById(sale._id);
+  if (!saleRaw) {
+    throw new NotFound("Sale not found after creation");
+  }
+
+  const customerPop = saleRaw.customer_id
+    ? CustomerModel.findById(saleRaw.customer_id)
+    : null;
+
+  const dueCustomerPop = saleRaw.Due_customer_id
+    ? CustomerModel.findById(saleRaw.Due_customer_id)
+    : null;
+
+  const warehousePop = saleRaw.warehouse_id
+    ? WarehouseModel.findById(saleRaw.warehouse_id)
+    : null;
+
+  const taxPop = saleRaw.order_tax
+    ? TaxesModel.findById(saleRaw.order_tax)
+    : null;
+
+  const discountPop = saleRaw.order_discount
+    ? DiscountModel.findById(saleRaw.order_discount)
+    : null;
+
+  const giftCardPop = saleRaw.gift_card_id
+    ? GiftCardModel.findById(saleRaw.gift_card_id)
+    : null;
+
+  // ⚠️ swap in whatever model actually represents "cashier_id" users (Cashierman? User?)
+  const cashierPop = saleRaw.cashier_id
+    ? UserModel.findById(saleRaw.cashier_id)
+    : null;
+
+  const shiftPop = saleRaw.shift_id
+    ? CashierShift.findById(saleRaw.shift_id)
+    : null;
+
+  // account_id is an array of ids on this model
+  const accountsPop = Array.isArray(saleRaw.account_id)
+    ? saleRaw.account_id
+        .map((id: string) => BankAccountModel.findById(id))
+        .filter(Boolean)
+    : [];
+
+  const fullSale = {
+    ...saleRaw,
+    customer_id: customerPop
+      ? {
+          _id: customerPop._id,
+          name: customerPop.name,
+          email: customerPop.email,
+          phone_number: customerPop.phone_number,
+        }
+      : null,
+    Due_customer_id: dueCustomerPop
+      ? {
+          _id: dueCustomerPop._id,
+          name: dueCustomerPop.name,
+          email: dueCustomerPop.email,
+          phone_number: dueCustomerPop.phone_number,
+        }
+      : null,
+    warehouse_id: warehousePop
+      ? {
+          _id: warehousePop._id,
+          name: warehousePop.name,
+          location: warehousePop.location,
+        }
+      : null,
+    order_tax: taxPop
+      ? {
+          _id: taxPop._id,
+          name: taxPop.name,
+          amount: taxPop.amount,
+          type: taxPop.type,
+        }
+      : null,
+    order_discount: discountPop
+      ? {
+          _id: discountPop._id,
+          name: discountPop.name,
+          amount: discountPop.amount,
+          type: discountPop.type,
+        }
+      : null,
+    gift_card_id: giftCardPop
+      ? {
+          _id: giftCardPop._id,
+          code: giftCardPop.code,
+          amount: giftCardPop.amount,
+        }
+      : null,
+    cashier_id: cashierPop
+      ? { _id: cashierPop._id, name: cashierPop.name, email: cashierPop.email }
+      : null,
+    shift_id: shiftPop
+      ? {
+          _id: shiftPop._id,
+          start_time: shiftPop.start_time,
+          status: shiftPop.status,
+        }
+      : null,
+    account_id: accountsPop.map((a: any) => ({
+      _id: a._id,
+      name: a.name,
+      type: a.type,
+      balance: a.balance,
+    })),
+  };
 
   const items = ProductSalesModel.find({
     sale_id: sale._id,
@@ -1205,140 +1295,137 @@ export const getsalePending = async (req: Request, res: Response) => {
     throw new BadRequest("Warehouse is not assigned to this user");
   }
 
-  // ✅ هات الشيفت المفتوح الحالي
-  const openShift = await CashierShift.findOne({
+  // ✅ هات الشيفت المفتوح الحالي (findOne is sync in this ORM, no await needed)
+  const openShift = CashierShift.findOne({
     cashierman_id: cashierId,
     status: "open",
-  }).sort({ start_time: -1 });
+  });
 
   if (!openShift) {
     return SuccessResponse(res, { sales: [] });
   }
 
-  // ✅ هات الـ pending sales بتاعة الشيفت ده بس
-  const sales = SaleModel.find({
+  const rawSales = SaleModel.find({
     order_pending: 1,
     shift_id: openShift._id,
     cashier_id: cashierId,
     warehouse_id: warehouseId,
-  })
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    )
-    .map((sale) => {
-      const customer = CustomerModel.findById(sale.customer_id);
+  });
 
-      const warehouse = WarehouseModel.findById(sale.warehouse_id);
-
-      const tax = TaxesModel.findById(sale.order_tax);
-
-      const discount = DiscountModel.findById(sale.order_discount);
-
-      const giftCard = GiftCardModel.findById(sale.gift_card_id);
-
-      return {
-        ...sale,
-
-        customer_id: customer
-          ? {
-              _id: customer._id,
-              name: customer.name,
-              email: customer.email,
-              phone_number: customer.phone_number,
-            }
-          : null,
-
-        warehouse_id: warehouse
-          ? {
-              _id: warehouse._id,
-              name: warehouse.name,
-              location: warehouse.location,
-            }
-          : null,
-
-        order_tax: tax
-          ? {
-              _id: tax._id,
-              name: tax.name,
-              rate: tax.rate,
-            }
-          : null,
-
-        order_discount: discount
-          ? {
-              _id: discount._id,
-              name: discount.name,
-              rate: discount.rate,
-            }
-          : null,
-
-        gift_card_id: giftCard
-          ? {
-              _id: giftCard._id,
-              code: giftCard.code,
-              amount: giftCard.amount,
-            }
-          : null,
-      };
-    });
-
-  if (!sales.length) {
+  if (!rawSales.length) {
     return SuccessResponse(res, { sales: [] });
   }
 
+  // Array.prototype.sort works fine since find() returns a real array
+  rawSales.sort(
+    (a: any, b: any) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  const sales = rawSales.map((sale: any) => {
+    const customer = CustomerModel.findById(sale.customer_id);
+    const warehouse = WarehouseModel.findById(sale.warehouse_id);
+    const tax = TaxesModel.findById(sale.order_tax);
+    const discount = DiscountModel.findById(sale.order_discount);
+    const giftCard = GiftCardModel.findById(sale.gift_card_id);
+
+    return {
+      ...sale,
+
+      customer_id: customer
+        ? {
+            _id: customer._id,
+            name: customer.name,
+            email: customer.email,
+            phone_number: customer.phone_number,
+          }
+        : null,
+
+      warehouse_id: warehouse
+        ? {
+            _id: warehouse._id,
+            name: warehouse.name,
+            location: warehouse.location,
+          }
+        : null,
+
+      order_tax: tax
+        ? {
+            _id: tax._id,
+            name: tax.name,
+            rate: tax.rate,
+          }
+        : null,
+
+      order_discount: discount
+        ? {
+            _id: discount._id,
+            name: discount.name,
+            rate: discount.rate,
+          }
+        : null,
+
+      gift_card_id: giftCard
+        ? {
+            _id: giftCard._id,
+            code: giftCard.code,
+            amount: giftCard.amount,
+          }
+        : null,
+    };
+  });
+
   const saleIds = sales.map((s: any) => s._id);
 
-  const items = ProductSalesModel.find({})
-    .filter((item) => saleIds.includes(item.sale_id))
-    .map((item) => {
-      const product = ProductModel.findById(item.product_id);
+  // ✅ push the filter into SQL instead of find({}) + JS filter
+  const items = ProductSalesModel.find({
+    sale_id: { $in: saleIds },
+  }).map((item: any) => {
+    const product = ProductModel.findById(item.product_id);
+    const productPrice = ProductPriceModel.findById(item.product_price_id);
+    const bundle = PandelModel.findById(item.bundle_id);
 
-      const productPrice = ProductPriceModel.findById(item.product_price_id);
+    return {
+      ...item,
 
-      const bundle = PandelModel.findById(item.bundle_id);
+      product_id: product
+        ? {
+            _id: product._id,
+            name: product.name,
+            ar_name: product.ar_name,
+            image: product.image,
+            price: product.price,
+          }
+        : null,
 
-      return {
-        ...item,
+      product_price_id: productPrice
+        ? {
+            _id: productPrice._id,
+            price: productPrice.price,
+            code: productPrice.code,
+          }
+        : null,
 
-        product_id: product
-          ? {
-              _id: product._id,
-              name: product.name,
-              ar_name: product.ar_name,
-              image: product.image,
-              price: product.price,
-            }
-          : null,
-
-        product_price_id: productPrice
-          ? {
-              _id: productPrice._id,
-              price: productPrice.price,
-              code: productPrice.code,
-            }
-          : null,
-
-        bundle_id: bundle
-          ? {
-              _id: bundle._id,
-              name: bundle.name,
-              price: bundle.price,
-            }
-          : null,
-      };
-    });
+      bundle_id: bundle
+        ? {
+            _id: bundle._id,
+            name: bundle.name,
+            price: bundle.price,
+          }
+        : null,
+    };
+  });
 
   const itemsBySaleId: Record<string, any[]> = {};
   for (const item of items) {
-    const key = item.sale_id.toString();
+    const key = item.sale_id;
     if (!itemsBySaleId[key]) itemsBySaleId[key] = [];
     itemsBySaleId[key].push(item);
   }
 
   const salesWithItems = sales.map((s: any) => ({
     ...s,
-    items: itemsBySaleId[s._id.toString()] || [],
+    items: itemsBySaleId[s._id] || [],
   }));
 
   return SuccessResponse(res, { sales: salesWithItems });
@@ -1353,7 +1440,7 @@ export const getShiftCompletedSales = async (req: Request, res: Response) => {
   const userId = jwtUser.id;
 
   // 1) هات اليوزر (مع الباسورد عشان نقدر نشيك الحقيقي)
-  const user = await UserModel.findById(userId).select("+password_hash +role");
+  const user = await UserModel.findById(userId);
   if (!user) throw new NotFound("User not found");
 
   const fakePassword = process.env.SHIFT_REPORT_PASSWORD;
@@ -1376,7 +1463,7 @@ export const getShiftCompletedSales = async (req: Request, res: Response) => {
   const shift = await CashierShift.findOne({
     cashierman_id: user._id,
     status: "open",
-  }).sort({ start_time: -1 });
+  })
 
   if (!shift) throw new NotFound("No open cashier shift found");
 
@@ -1899,7 +1986,7 @@ export const payDue = async (req: Request, res: Response) => {
   for (const line of paymentLines) {
     const bankAccount = await BankAccountModel.findOne({
       _id: line.account_id,
-      warehouseId: warehouseId,
+      warehouseId: { $contains: warehouseId },
       status: true,
       in_POS: true,
     });
@@ -1946,12 +2033,10 @@ export const payDue = async (req: Request, res: Response) => {
 
     await PaymentModel.create({
       sale_id: sale._id,
-      customer_id: customer_id,
       financials: paymentLines.map((p) => ({
         account_id: p.account_id,
         amount: (p.amount / paymentAmount) * payForThisSale,
       })),
-      amount: payForThisSale,
     });
 
     paidSales.push({

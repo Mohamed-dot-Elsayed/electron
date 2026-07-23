@@ -18,6 +18,11 @@ const sqlType = {
   array: "TEXT",
 } as const;
 
+type FindOptions = {
+  sort?: Record<string, 1 | -1>;
+  limit?: number;
+};
+
 function applyDefaults(schema: SchemaDef, data: any): any {
   const result = { ...data };
 
@@ -290,6 +295,14 @@ function buildWhere(where: Where) {
             clauses.push(`${key} <= ?`);
             values.push(val);
             break;
+          case "$contains": {
+            // val is the single item we're checking for membership in a JSON array column
+            clauses.push(`EXISTS (
+              SELECT 1 FROM json_each(${key}) WHERE json_each.value = ?
+            )`);
+            values.push(val);
+            break;
+          }
           default:
             throw new Error(`Unsupported operator "${op}" on field "${key}"`);
         }
@@ -312,6 +325,22 @@ function buildWhere(where: Where) {
   };
 }
 
+function normalizeSparseFields(schema: SchemaDef, data: any) {
+  const result = { ...data };
+
+  for (const [key, def] of Object.entries(schema)) {
+    if (
+      def.type === "string" &&
+      (def as PrimitiveField).sparse &&
+      result[key] === ""
+    ) {
+      result[key] = null;
+    }
+  }
+
+  return result;
+}
+
 /**
  * Converts an array of values to types that can be safely bound to a SQLite statement.
  * - undefined -> null
@@ -320,21 +349,25 @@ function buildWhere(where: Where) {
  */
 type SqlBindable = number | string | null | Uint8Array;
 
-export function sanitizeBindValues(values: unknown[]): (number | string | null | Uint8Array)[] {
+export function sanitizeBindValues(
+  values: unknown[]
+): (number | string | null | Uint8Array)[] {
   return values.map((v) => {
     if (v === undefined) return null;
     if (v === null) return null;
-    if (typeof v === 'boolean') return v ? 1 : 0;
-    if (typeof v === 'number' || typeof v === 'string') return v;
+    if (typeof v === "boolean") return v ? 1 : 0;
+    if (typeof v === "number" || typeof v === "string") return v;
     if (v instanceof Uint8Array) return v;
 
     // ✅ New: object/array → JSON string (mirrors the ORM’s serializeField)
-    if (typeof v === 'object') {
+    if (typeof v === "object") {
       return JSON.stringify(v);
     }
 
     // Anything else (function, symbol, etc.) should not be bound
-    throw new TypeError(`Cannot bind value of type ${typeof v}: ${JSON.stringify(v)}`);
+    throw new TypeError(
+      `Cannot bind value of type ${typeof v}: ${JSON.stringify(v)}`
+    );
   });
 }
 
@@ -375,13 +408,25 @@ export function createModel(
     `CREATE TABLE IF NOT EXISTS ${tableName} (${columns.join(", ")});`
   );
   registerModelSchema(tableName, schema);
-  function rowsFrom(where: Where = {}) {
+  function rowsFrom(where: Where = {}, options: FindOptions = {}) {
     const db = getDB();
     const { clause, values } = buildWhere(where);
-    const stmt = db.prepare(`SELECT * FROM ${tableName} ${clause}`);
+    let sql = `SELECT * FROM ${tableName} ${clause}`;
+
+    if (options.sort) {
+      const orderClauses = Object.entries(options.sort).map(
+        ([field, dir]) => `${field} ${dir === -1 ? "DESC" : "ASC"}`
+      );
+      sql += ` ORDER BY ${orderClauses.join(", ")}`;
+    }
+
+    if (options.limit) {
+      sql += ` LIMIT ${options.limit}`;
+    }
+    const stmt = db.prepare(sql);
 
     // Filter out undefined values
-    const safeValues = sanitizeBindValues(values)
+    const safeValues = sanitizeBindValues(values);
 
     try {
       stmt.bind(safeValues);
@@ -400,12 +445,12 @@ export function createModel(
   }
 
   return {
-    find(where: Where = {}) {
-      return rowsFrom(where);
+    find(where: Where = {}, options: FindOptions = {}) {
+      return rowsFrom(where, options);
     },
 
-    findOne(where: Where = {}) {
-      return rowsFrom(where)[0] ?? null;
+    findOne(where: Where = {}, options: FindOptions = {}) {
+      return rowsFrom(where, { ...options, limit: 1 })[0] ?? null;
     },
 
     findById(id: string) {
@@ -428,9 +473,9 @@ export function createModel(
           cleanData[key] = value;
         }
       }
-
       // Apply defaults
       let row = applyDefaults(schema, cleanData);
+      row = normalizeSparseFields(schema, row);
 
       for (const [key, def] of Object.entries(schema)) {
         if (row[key] !== undefined) {
@@ -455,7 +500,7 @@ export function createModel(
         row.createdAt = now;
         row.updatedAt = now;
       }
-
+      
       // Convert object/array/date/bool
       const serialized = serializeRow(schema, row);
 
@@ -484,10 +529,10 @@ export function createModel(
           cleanData[key] = value;
         }
       }
+      const normalizedData = normalizeSparseFields(schema, cleanData);
+      validateSchema(schema, normalizedData, true);
 
-      validateSchema(schema, cleanData, true);
-
-      const patch = { ...cleanData };
+      const patch = { ...normalizedData };
 
       if (timestamps) {
         patch.updatedAt = new Date().toISOString();

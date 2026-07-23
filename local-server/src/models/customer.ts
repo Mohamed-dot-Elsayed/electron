@@ -27,12 +27,14 @@ const CustomerSchema: SchemaDef = {
   email: {
     type: "string",
     unique: true,
+    sparse: true,
     // Note: sparse, trim, lowercase not supported - handle in application logic
   },
   phone_number: {
     type: "string",
     required: true,
     unique: true,
+    sparse:true,
     // Note: trim, minlength, maxlength not supported - handle in application logic
   },
   address: {

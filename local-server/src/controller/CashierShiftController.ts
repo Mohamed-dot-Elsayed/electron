@@ -71,11 +71,7 @@ export const startcashierShift = async (req: Request, res: Response) => {
     status: "open",
   });
 
-  // ✅ بعد ما الشيفت اتفتح فعلًا
-  await CashierModel.updateOne(
-    { _id: cashier_id },
-    { $set: { cashier_active: true } }
-  );
+  CashierModel.updateById(cashier_id,{ cashier_active: true})
 
   SuccessResponse(res, {
     message: "Cashier shift started successfully",
@@ -297,15 +293,21 @@ export const endShiftWithReport = async (req: Request, res: Response) => {
 };
 
 export const endshiftcashier = async (req: Request, res: Response) => {
+  const { id } = req.params;
   const jwtUser = req.user as any;
   if (!jwtUser) throw new UnauthorizedError("Unauthorized");
 
   const cashierman_id = jwtUser.id;
 
+  console.log("id :",id);
+  console.log(cashierman_id);
   const shift = await CashierShift.findOne({
     cashierman_id,
+    cashier_id:id,
     status: "open",
-  }).sort({ start_time: -1 });
+  });
+  
+  
 
   if (!shift) {
     throw new NotFound("Cashier shift not found");
@@ -314,18 +316,13 @@ export const endshiftcashier = async (req: Request, res: Response) => {
   if (shift.end_time) {
     throw new BadRequest("Shift already ended");
   }
-
+  console.log("like ",shift._id);
+  
   // ✅ اقفل الشيفت
-  shift.end_time = new Date();
-  shift.status = "closed";
-  await shift.save();
-
+  CashierShift.updateById(shift._id,{end_time : new Date(), status:"closed"})
   // ✅ رجّع الكاشير متاح (بدون شروط تقفل التحديث)
   if (shift.cashier_id) {
-    await CashierModel.updateOne(
-      { _id: shift.cashier_id },
-      { $set: { cashier_active: false } }
-    );
+    CashierModel.updateById(shift.cashier_id,{cashier_active: false})
   }
 
   SuccessResponse(res, {

@@ -15,6 +15,7 @@ export interface BaseField {
   unique?: boolean;
   default?: any;
   enum?: PrimitiveValue[];
+  sparse?: boolean;
   ref?: string;
 }
 

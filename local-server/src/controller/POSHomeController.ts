@@ -864,7 +864,7 @@ export const getCurrency = async (req: Request, res: Response) => {
 export const getCountries = async (req: Request, res: Response) => {
   const countries = CountryModel.find({}).map((country) => {
     const cities = CityModel.find({
-      country_id: country._id,
+      country: country._id,
     }).map((city) => ({
       _id: city._id,
       name: city.name,
