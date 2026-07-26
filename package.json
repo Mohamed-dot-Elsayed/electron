@@ -5,7 +5,7 @@
   "scripts": {
     "install:all": "npm install &&  cd client && npm install",
     "build:local-server": "tsc -p local-server",
-    "build:client": "cd client && npm run build",
+    "build:client": "cd client && npm run build -- --mode electron",
     "build": "npm run build:local-server && npm run build:client",
     "start": "npm run build && electron .",
     "dist": "npm run build && electron-builder",

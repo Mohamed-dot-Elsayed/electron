@@ -7,7 +7,7 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     tailwindcss(),
@@ -17,6 +17,6 @@ export default defineConfig({
       "@": path.resolve(__dirname, "src"),
     },
   },
-  base: '/point-of-sale',
+  base: mode === 'electron' ? './' : '/point-of-sale',
   envPrefix: 'VITE_'
-})
+}))
