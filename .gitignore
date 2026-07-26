@@ -5,3 +5,4 @@ release/
 *.env
 electron-builder.env
 electron/embedded-token.json
+.env.*
