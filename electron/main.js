@@ -215,17 +215,6 @@ function createWindow() {
   );
 }
 
-function loadEmbeddedToken() {
-  try {
-    const data = JSON.parse(
-      fs.readFileSync(path.join(__dirname, "embedded-token.json"), "utf-8")
-    );
-    return data.token || null;
-  } catch (e) {
-    return null;
-  }
-}
-
 function notify(title, body) {
   if (Notification.isSupported()) {
     new Notification({ title, body }).show();
@@ -249,16 +238,6 @@ function setupAutoUpdates() {
   if (!app.isPackaged) {
     log("Skipping update check - app is not packaged.");
     return;
-  }
-
-  const token = loadEmbeddedToken();
-  if (token) {
-    process.env.GH_TOKEN = token;
-    log("Loaded embedded token for private-repo update checks.");
-  } else {
-    log(
-      "WARNING: no embedded token found - update checks against the private repo will fail with 404."
-    );
   }
 
   autoUpdater.on("checking-for-update", () => log("Checking for update..."));

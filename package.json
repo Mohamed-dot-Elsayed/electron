@@ -1,12 +1,12 @@
 {
-  "name": "electron-sync-demo",
+  "name": "Systego-Desktop",
   "version": "1.0.35",
   "main": "electron/main.js",
   "scripts": {
     "install:all": "npm install &&  cd client && npm install",
     "build:local-server": "tsc -p local-server",
     "build:client": "cd client && npm run build",
-    "build": "node scripts/generate-token-file.js && npm run build:local-server",
+    "build": "npm run build:local-server && npm run build:client",
     "start": "npm run build && electron .",
     "dist": "npm run build && electron-builder",
     "dist:publish": "npm run build && electron-builder --publish always",
@@ -78,7 +78,7 @@
       "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "SyncDemo",
+      "shortcutName": "SysteGo",
       "warningsAsErrors": false
     },
     "directories": {
@@ -102,7 +102,7 @@
       "owner": "Mohamed-dot-Elsayed",
       "repo": "electron",
       "releaseType": "release",
-      "private": true
+      "private": false
     }
   }
 }
