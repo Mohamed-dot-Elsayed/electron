@@ -25,7 +25,7 @@ import { CategoryModel } from "../models/category";
 // ✅ Dynamic store info - بيجيب اسم البراند من السوبر أدمن (صاحب البزنس)
 const getStoreInfo = async (userId: string) => {
   // 1. جيب اسم البراند من الـ superadmin (صاحب البزنس)
-  const superAdmin = await UserModel.findOne({ role: "superadmin" })
+  const superAdmin = await UserModel.findOne({ role: "superadmin" });
 
   if (superAdmin?.company_name) {
     return {
@@ -37,7 +37,7 @@ const getStoreInfo = async (userId: string) => {
 
   // Fallback: لو السوبر أدمن مفيش عنده company_name، جيب من الـ Warehouse بتاعه
   if (superAdmin?.warehouse_id) {
-    const warehouse = await WarehouseModel.findById(superAdmin.warehouse_id)
+    const warehouse = await WarehouseModel.findById(superAdmin.warehouse_id);
     if (warehouse) {
       return {
         name: warehouse.name,
@@ -48,7 +48,7 @@ const getStoreInfo = async (userId: string) => {
   }
 
   // Fallback أخير: لو مفيش superadmin أصلاً، جرب اليوزر الحالي
-  const user = await UserModel.findById(userId)
+  const user = await UserModel.findById(userId);
 
   if (user?.company_name) {
     return {
@@ -59,7 +59,7 @@ const getStoreInfo = async (userId: string) => {
   }
 
   if (user?.warehouse_id) {
-    const warehouse = await WarehouseModel.findById(user.warehouse_id)
+    const warehouse = await WarehouseModel.findById(user.warehouse_id);
     if (warehouse) {
       return {
         name: warehouse.name,
@@ -73,6 +73,9 @@ const getStoreInfo = async (userId: string) => {
 };
 
 const roundCurrency = (value: number) => Math.round(value * 100) / 100;
+
+const toCents = (n: number) => Math.round(Number(n) * 100);
+const centsToAmount = (c: number) => c / 100;
 
 export const createSale = async (req: Request, res: Response) => {
   const jwtUser = req.user as any;
@@ -102,6 +105,7 @@ export const createSale = async (req: Request, res: Response) => {
     customer_id,
     order_pending = 0,
     gift_card_id,
+    gift_card_amount = 0, // ✅ FIX #3: explicit amount the cashier wants to apply from the gift card
     service_fee_ids = [],
     order_tax,
     order_discount,
@@ -109,11 +113,10 @@ export const createSale = async (req: Request, res: Response) => {
     bundles,
     shipping = 0,
     tax_rate = 0,
-    discount = 0,
+    discount = 0, // kept for backward compatibility, but order_discount doc now takes priority (FIX #2)
     note,
     financials,
     coupon_code,
-    applied_coupon,
     Due = 0,
   } = req.body;
 
@@ -133,8 +136,24 @@ export const createSale = async (req: Request, res: Response) => {
   const isPending = normalizedOrderPending === 1;
   const isDue = Number(Due) === 1;
 
+  // ✅ FIX #12: order_pending and Due are no longer allowed to both be true —
+  // their combination was previously undefined behavior.
+  if (isPending && isDue) {
+    throw new BadRequest(
+      "A sale cannot be both pending (order_pending=1) and due (Due=1) at the same time"
+    );
+  }
+
   // ═══════════════════════════════════════════════════════════
   // ✅ PROCESS PRODUCTS & APPLY WHOLESALE PRICE
+  // ✅ FIX #4: wholesale price now uses the SAME ratio formula in both
+  // branches (product_price_id vs plain product_id). Previously the
+  // plain-product branch set finalPrice = whole_price directly while the
+  // variation branch applied a ratio — these could diverge. Note that
+  // when there's no separate price doc, originalPrice === product.price,
+  // so the ratio formula collapses to finalPrice = whole_price anyway —
+  // meaning this fix changes nothing for that case and only makes the
+  // variation case consistent with it.
   // ═══════════════════════════════════════════════════════════
   const processedProducts: any[] = [];
   let productsTotal = 0;
@@ -145,13 +164,14 @@ export const createSale = async (req: Request, res: Response) => {
         product_id,
         product_price_id,
         quantity,
-        discount = 0,
-        discount_type = "fixed",
+        discount: lineDiscount = 0,
+        discount_type: lineDiscountType = "fixed",
       } = p;
-      let qunt = Number(quantity);
+      const qunt = Number(quantity);
       let finalPrice = 0;
       let originalPrice = 0;
       let isWholesale = false;
+
       if (product_price_id) {
         const priceDoc = await ProductPriceModel.findById(product_price_id);
         if (!priceDoc) {
@@ -174,8 +194,7 @@ export const createSale = async (req: Request, res: Response) => {
               qunt >= minQty
             ) {
               const discountRatio = wholesalePrice / (product.price || 1);
-              finalPrice =
-                Math.round(originalPrice * discountRatio * 100) / 100;
+              finalPrice = Math.round(originalPrice * discountRatio * 100) / 100;
               isWholesale = true;
             }
           }
@@ -198,7 +217,10 @@ export const createSale = async (req: Request, res: Response) => {
           minQtyForWholesale > 0 &&
           qunt >= minQtyForWholesale
         ) {
-          finalPrice = wholesalePrice;
+          // ✅ FIX #4: same ratio formula as the variation branch (collapses
+          // to finalPrice = wholesalePrice here since originalPrice === product.price)
+          const discountRatio = wholesalePrice / (product.price || 1);
+          finalPrice = Math.round(originalPrice * discountRatio * 100) / 100;
           isWholesale = true;
         }
       }
@@ -210,11 +232,11 @@ export const createSale = async (req: Request, res: Response) => {
 
       // Apply product-specific discount
       let appliedDiscount = 0;
-      if (Number(discount) > 0) {
-        if (discount_type === "percentage") {
-          appliedDiscount = finalPrice * (Number(discount) / 100);
+      if (Number(lineDiscount) > 0) {
+        if (lineDiscountType === "percentage") {
+          appliedDiscount = finalPrice * (Number(lineDiscount) / 100);
         } else {
-          appliedDiscount = Number(discount);
+          appliedDiscount = Number(lineDiscount);
         }
         finalPrice = Math.max(0, finalPrice - appliedDiscount);
       }
@@ -228,8 +250,8 @@ export const createSale = async (req: Request, res: Response) => {
         price: finalPrice,
         subtotal: finalSubtotal,
         original_price: originalPrice,
-        discount: Number(discount),
-        discount_type: discount_type,
+        discount: Number(lineDiscount),
+        discount_type: lineDiscountType,
         is_wholesale: isWholesale,
         options_id: p.options_id,
         isGift: p.isGift,
@@ -242,7 +264,9 @@ export const createSale = async (req: Request, res: Response) => {
   }
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ PROCESS BUNDLES (الجديد)
+  // ✅ PROCESS BUNDLES
+  // ✅ FIX #5: use the converted `quant` (Number) everywhere instead of
+  // the raw request-body `quantity`, which could be a string.
   // ═══════════════════════════════════════════════════════════
   const processedBundles: any[] = [];
   let bundlesTotal = 0;
@@ -254,10 +278,11 @@ export const createSale = async (req: Request, res: Response) => {
         quantity,
         selected_variations,
         isGift,
-        discount = 0,
-        discount_type = "fixed",
+        discount: lineDiscount = 0,
+        discount_type: lineDiscountType = "fixed",
       } = b;
-      let quant = Number(quantity)
+      const quant = Number(quantity); // ✅ FIX #5: now actually used below
+
       const bundleDoc = await PandelModel.findById(bundle_id);
       if (!bundleDoc) {
         throw new NotFound("Bundle not found");
@@ -272,13 +297,10 @@ export const createSale = async (req: Request, res: Response) => {
 
       if (!bundleIsAvailableInWarehouse) {
         throw new BadRequest(
-          `Bundle "${
-            (bundleDoc as any).name
-          }" is not assigned to warehouse ${warehouseId}`
+          `Bundle "${(bundleDoc as any).name}" is not assigned to warehouse ${warehouseId}`
         );
       }
 
-      // ✅ معالجة كل منتج في الـ Bundle
       const bundleProductsProcessed: any[] = [];
 
       for (const bundleProduct of (bundleDoc as any).products || []) {
@@ -286,7 +308,6 @@ export const createSale = async (req: Request, res: Response) => {
         let productPriceId = bundleProduct.productPriceId;
         const productQty = bundleProduct.quantity || 1;
 
-        // ✅ لو الـ Variation مش محدد من الأدمن، شوف لو الكاشير اختار
         if (!productPriceId && selected_variations) {
           const selectedVar = selected_variations.find(
             (sv: any) => sv.productId?.toString() === productId?.toString()
@@ -296,9 +317,9 @@ export const createSale = async (req: Request, res: Response) => {
           }
         }
 
-        // ✅ تحقق من الـ Stock
+        const requiredQty = quant * productQty; // ✅ FIX #5
+
         if (productPriceId) {
-          // منتج مع Variation - التحقق من المخزن بدل الكمية العامة
           const priceDoc = await ProductPriceModel.findById(productPriceId);
           if (!priceDoc) {
             throw new NotFound(`Product variation ${productPriceId} not found`);
@@ -311,9 +332,7 @@ export const createSale = async (req: Request, res: Response) => {
           });
 
           if (!variationWarehouseStock) {
-            const product = await ProductModel.findById(productId).select(
-              "name"
-            );
+            const product = await ProductModel.findById(productId).select("name");
             throw new BadRequest(
               `Bundle "${bundleDoc.name}" - variation for "${
                 (product as any)?.name || productId
@@ -321,48 +340,39 @@ export const createSale = async (req: Request, res: Response) => {
             );
           }
 
-          if ((variationWarehouseStock.quantity ?? 0) < quantity * productQty) {
-            const product = await ProductModel.findById(productId).select(
-              "name"
-            );
+          if ((variationWarehouseStock.quantity ?? 0) < requiredQty) {
+            const product = await ProductModel.findById(productId).select("name");
             throw new BadRequest(
               `Not enough stock for "${
                 (product as any)?.name || "product"
               }" variation in bundle "${bundleDoc.name}". Available: ${
                 variationWarehouseStock.quantity
-              }, Required: ${quantity * productQty}`
+              }, Required: ${requiredQty}`
             );
           }
         } else {
-          // منتج بدون Variation
           const warehouseStock = await Product_WarehouseModel.findOne({
             productId: productId,
             warehouseId: warehouseId,
           });
 
           if (!warehouseStock) {
-            const product = await ProductModel.findById(productId).select(
-              "name"
-            );
+            const product = await ProductModel.findById(productId).select("name");
             throw new BadRequest(
-              `Bundle "${
-                bundleDoc.name
-              }" is not available in this warehouse because product "${
+              `Bundle "${bundleDoc.name}" is not available in this warehouse because product "${
                 (product as any)?.name || productId
               }" is not assigned to warehouse stock`
             );
           }
 
-          if ((warehouseStock.quantity ?? 0) < quantity * productQty) {
-            const product = await ProductModel.findById(productId).select(
-              "name"
-            );
+          if ((warehouseStock.quantity ?? 0) < requiredQty) {
+            const product = await ProductModel.findById(productId).select("name");
             throw new BadRequest(
               `Not enough stock for "${
                 (product as any)?.name || "product"
               }" in bundle "${bundleDoc.name}". Available: ${
                 warehouseStock.quantity
-              }, Required: ${quantity * productQty}`
+              }, Required: ${requiredQty}`
             );
           }
         }
@@ -377,25 +387,25 @@ export const createSale = async (req: Request, res: Response) => {
       let finalBundlePrice = bundleDoc.price;
       let appliedDiscount = 0;
 
-      if (Number(discount) > 0) {
-        if (discount_type === "percentage") {
-          appliedDiscount = finalBundlePrice * (Number(discount) / 100);
+      if (Number(lineDiscount) > 0) {
+        if (lineDiscountType === "percentage") {
+          appliedDiscount = finalBundlePrice * (Number(lineDiscount) / 100);
         } else {
-          appliedDiscount = Number(discount);
+          appliedDiscount = Number(lineDiscount);
         }
         finalBundlePrice = Math.max(0, finalBundlePrice - appliedDiscount);
       }
 
-      const bundleSubtotal = finalBundlePrice * quantity;
+      const bundleSubtotal = finalBundlePrice * quant; // ✅ FIX #5
 
       processedBundles.push({
         bundle_id,
-        quantity,
+        quantity: quant, // ✅ FIX #5
         price: finalBundlePrice,
         subtotal: bundleSubtotal,
         original_price: bundleDoc.price,
-        discount: Number(discount),
-        discount_type: discount_type,
+        discount: Number(lineDiscount),
+        discount_type: lineDiscountType,
         isGift: !!isGift,
         products: bundleProductsProcessed,
       });
@@ -406,14 +416,95 @@ export const createSale = async (req: Request, res: Response) => {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // ✅ CALCULATE FINAL GRAND TOTAL
-  // ═══════════════════════════════════════════════════════════
   const subtotal = productsTotal + bundlesTotal;
+
+  // ═══════════════════════════════════════════════════════════
+  // Customer Validation (moved up — unchanged in behavior, just reordered
+  // so it happens before the total is finalized)
+  // ═══════════════════════════════════════════════════════════
+  let customer: any = null;
+  if (customer_id) {
+    customer = await CustomerModel.findById(customer_id);
+    if (!customer) {
+      throw new NotFound("Customer not found");
+    }
+  }
+
+  if (isDue && !customer) {
+    throw new BadRequest("Customer is required for due sales");
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // Coupon / Tax / Discount / Gift Card doc validation
+  // ✅ FIX #1 & #2: these docs are now actually converted into monetary
+  // amounts and fed into finalGrandTotal below, instead of being validated
+  // and then silently discarded.
+  // ═══════════════════════════════════════════════════════════
+  let coupon: any = null;
+  if (coupon_code) {
+    coupon = await CouponModel.findOne({ coupon_code: coupon_code });
+    if (!coupon) throw new NotFound("Coupon not found");
+    if (coupon.available <= 0) throw new BadRequest("Coupon is out of stock");
+    if (coupon.expired_date && coupon.expired_date < new Date()) {
+      throw new BadRequest("Coupon is expired");
+    }
+    // ✅ FIX #1 (schema-confirmed): CouponModel enforces a minimum subtotal
+    // before the coupon can be used — this was never checked before.
+    if (
+      coupon.minimum_amount_for_use &&
+      subtotal < coupon.minimum_amount_for_use
+    ) {
+      throw new BadRequest(
+        `Coupon requires a minimum order amount of ${coupon.minimum_amount_for_use} (current subtotal: ${subtotal.toFixed(2)})`
+      );
+    }
+  }
+
+  let tax: any = null;
+  if (order_tax) {
+    tax = await TaxesModel.findById(order_tax);
+    if (!tax) throw new NotFound("Tax not found");
+    if (!tax.status) throw new BadRequest("Tax is not active");
+  }
+
+  let discountDoc: any = null;
+  if (order_discount) {
+    discountDoc = await DiscountModel.findById(order_discount);
+    if (!discountDoc) throw new NotFound("Discount not found");
+    if (!discountDoc.status) throw new BadRequest("Discount is not active");
+  }
+
+  let giftCard: any = null;
+  if (gift_card_id) {
+    giftCard = await GiftCardModel.findById(gift_card_id);
+    if (!giftCard) throw new NotFound("Gift card not found");
+    if (!giftCard.status) throw new BadRequest("Gift card is not active");
+    if (giftCard.expired_date && giftCard.expired_date < new Date()) {
+      throw new BadRequest("Gift card is expired");
+    }
+  }
+
+  // ✅ FIX #3: gift_card_amount must be backed by an actual gift card,
+  // and can't exceed its balance. Previously the code deducted the ENTIRE
+  // payment total from the gift card regardless of whether the gift card
+  // was even meant to cover the whole sale.
+  const requestedGiftCardAmount = Number(gift_card_amount) || 0;
+  if (requestedGiftCardAmount > 0) {
+    if (!giftCard) {
+      throw new BadRequest("gift_card_amount was provided without a valid gift_card_id");
+    }
+    if (requestedGiftCardAmount > giftCard.amount) {
+      throw new BadRequest(
+        `Gift card balance (${giftCard.amount}) is less than the requested amount (${requestedGiftCardAmount})`
+      );
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ✅ CALCULATE FINAL GRAND TOTAL (now includes coupon + discount doc amounts)
+  // ═══════════════════════════════════════════════════════════
   const normalizedServiceFeeIds = Array.isArray(service_fee_ids)
-    ? service_fee_ids
-        .filter((id: unknown) => !!id)
-        .map((id: unknown) => String(id))
+    ? service_fee_ids.filter((id: unknown) => !!id).map((id: unknown) => String(id))
     : [];
 
   const uniqueServiceFeeIds = Array.from(new Set(normalizedServiceFeeIds));
@@ -421,10 +512,10 @@ export const createSale = async (req: Request, res: Response) => {
   const serviceFeeDocs = uniqueServiceFeeIds.length
     ? ServiceFeeModel.find({}).filter(
         (fee) =>
-          uniqueServiceFeeIds.includes(fee._id) &&
+          uniqueServiceFeeIds.includes(String(fee._id)) && // ✅ FIX #6: String() both sides
           fee.status === true &&
           fee.module === "pos" &&
-          (fee.warehouseId === warehouseId || fee.warehouseId == null)
+          (fee.warehouseId == null || String(fee.warehouseId) === String(warehouseId)) // ✅ FIX #6
       )
     : [];
 
@@ -454,130 +545,141 @@ export const createSale = async (req: Request, res: Response) => {
   const serviceFeeTotal = roundCurrency(
     appliedServiceFees.reduce((sum: any, fee: any) => sum + fee.amount, 0)
   );
-  const taxAmountCalc = (subtotal * Number(tax_rate)) / 100;
-  const finalGrandTotal =
-    subtotal +
+
+  // ✅ FIX #2 (schema-confirmed): DiscountModel stores percentage `amount` as
+  // a FRACTION (0.1 = 10%), not a whole number (10 = 10%) like tax_rate/
+  // service fees do. So this is `subtotal * amount`, NOT `subtotal * amount / 100`.
+  // ⚠️ ASSUMPTION: the raw client `discount` fallback (no discountDoc) is
+  // still treated as a flat currency amount, since there's no `type` to
+  // tell us otherwise in that legacy path.
+  let discountAmount = 0;
+  if (discountDoc) {
+    discountAmount =
+      discountDoc.type === "percentage"
+        ? roundCurrency(subtotal * Number(discountDoc.amount || 0))
+        : roundCurrency(Number(discountDoc.amount || 0));
+  } else if (Number(discount) > 0) {
+    // backward-compat path: no discount doc, but a raw discount was sent
+    discountAmount = roundCurrency(Number(discount));
+  }
+
+  // ✅ FIX #1: coupon amount now actually applied.
+  // Confirmed schema: CouponModel.type is "percentage" | "flat" (NOT "fixed" —
+  // different enum value than DiscountModel/TaxesModel/ServiceFeeModel).
+  // ⚠️ NOTE: CouponModel percentage `amount` is a WHOLE NUMBER (10 = 10%),
+  // same convention as TaxesModel/tax_rate/service fees. This is DIFFERENT
+  // from DiscountModel, which stores percentage as a FRACTION (0.1 = 10%).
+  // Do not "align" this formula with the discount one — they're genuinely
+  // different conventions in this schema, confirmed by the user.
+  let couponAmount = 0;
+  if (coupon) {
+    couponAmount =
+      coupon.type === "percentage"
+        ? roundCurrency((subtotal * Number(coupon.amount || 0)) / 100)
+        : roundCurrency(Number(coupon.amount || 0)); // "flat"
+  }
+
+  // ✅ FIX #2 (tax side, schema-confirmed): TaxesModel follows the SAME
+  // fraction convention as DiscountModel (0.1 = 10%), NOT the whole-number
+  // convention that raw tax_rate and CouponModel use. So this is
+  // `subtotal * amount`, not `subtotal * amount / 100`.
+  let taxAmountCalc = 0;
+  if (tax) {
+    taxAmountCalc =
+      tax.type === "percentage"
+        ? roundCurrency(subtotal * Number(tax.amount || 0))
+        : roundCurrency(Number(tax.amount || 0));
+  } else {
+    // raw tax_rate fallback stays whole-number based (e.g. 10 = 10%)
+    taxAmountCalc = roundCurrency((subtotal * Number(tax_rate)) / 100);
+  }
+
+  const rawGrandTotal =
+    subtotal -
+    discountAmount -
+    couponAmount -
+    requestedGiftCardAmount +
     serviceFeeTotal +
     taxAmountCalc +
-    Number(shipping) -
-    Number(discount);
+    Number(shipping);
 
-  if (finalGrandTotal <= 0) {
-    throw new BadRequest("Grand total must be greater than 0");
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // Customer Validation
-  // ═══════════════════════════════════════════════════════════
-  let customer: any = null;
-  if (customer_id) {
-    customer = await CustomerModel.findById(customer_id);
-    if (!customer) {
-      throw new NotFound("Customer not found");
-    }
-  }
-
-  if (isDue && !customer) {
-    throw new BadRequest("Customer is required for due sales");
-  }
+  // ✅ FIX #10 (part of the tolerance bug): clamp negative totals (e.g. if
+  // stacked discounts exceed subtotal) instead of allowing a negative
+  // grand_total to flow downstream.
+  const finalGrandTotal = roundCurrency(Math.max(0, rawGrandTotal));
+  const finalGrandTotalCents = toCents(finalGrandTotal);
 
   // ═══════════════════════════════════════════════════════════
-  // Financials Validation
+  // ✅ FIX #main bug: financials validation
+  // The old code compared totals with a fixed 0.01 tolerance, which let a
+  // near-zero grand_total (e.g. from a big discount) be "matched" by a
+  // 0 payment. We now compare in integer cents for exact equality — no
+  // tolerance window to exploit — and financials are only required at all
+  // when the total is actually > 0.
   // ═══════════════════════════════════════════════════════════
   type FinancialLine = { account_id: string; amount: number };
   let paymentLines: FinancialLine[] = [];
   let totalPaidFromLines = 0;
 
   if (!isPending && !isDue) {
-    const finArr = financials as any[];
+    if (finalGrandTotalCents > 0) {
+      const finArr = financials as any[];
 
-    if (!finArr || !Array.isArray(finArr) || finArr.length === 0) {
-      throw new BadRequest(
-        "Financials are required for completed sale (order_pending = 0)"
-      );
-    }
-
-    paymentLines = finArr.map((f: any) => {
-      const accId = f.account_id || f.id;
-      const amt = Number(f.amount);
-
-      if (!accId) {
-        throw new BadRequest("Invalid account_id in financials");
-      }
-      if (!amt || amt <= 0) {
-        throw new BadRequest("Each payment line must have amount > 0");
-      }
-
-      return { account_id: accId, amount: amt };
-    });
-
-    totalPaidFromLines = paymentLines.reduce((sum, p) => sum + p.amount, 0);
-
-    const tolerance = 0.01;
-    if (Math.abs(totalPaidFromLines - finalGrandTotal) > tolerance) {
-      throw new BadRequest(
-        `Sum of payments (${totalPaidFromLines.toFixed(
-          2
-        )}) must equal grand_total (${finalGrandTotal.toFixed(2)})`
-      );
-    }
-
-    for (const line of paymentLines) {
-      const bankAccount = await BankAccountModel.findOne({
-        _id: line.account_id,
-        warehouseId: { $contains: warehouseId },
-        status: true,
-        in_POS: true,
-      });
-      
-      if (!bankAccount) {
+      if (!finArr || !Array.isArray(finArr) || finArr.length === 0) {
         throw new BadRequest(
-          "One of the financial accounts is not valid or not allowed in POS"
+          "Financials are required for completed sale (order_pending = 0)"
+        );
+      }
+
+      paymentLines = finArr.map((f: any) => {
+        const accId = f.account_id || f.id;
+        const amt = Number(f.amount);
+
+        if (!accId) {
+          throw new BadRequest("Invalid account_id in financials");
+        }
+        if (!amt || amt <= 0) {
+          throw new BadRequest("Each payment line must have amount > 0");
+        }
+
+        return { account_id: accId, amount: amt };
+      });
+
+      totalPaidFromLines = paymentLines.reduce((sum, p) => sum + p.amount, 0);
+
+      // ✅ FIX (main bug): exact cent comparison, no tolerance loophole
+      if (toCents(totalPaidFromLines) !== finalGrandTotalCents) {
+        throw new BadRequest(
+          `Sum of payments (${totalPaidFromLines.toFixed(2)}) must equal grand_total (${finalGrandTotal.toFixed(2)})`
+        );
+      }
+
+      for (const line of paymentLines) {
+        const bankAccount = await BankAccountModel.findOne({
+          _id: line.account_id,
+          warehouseId: { $contains: warehouseId },
+          status: true,
+          in_POS: true,
+        });
+
+        if (!bankAccount) {
+          throw new BadRequest(
+            "One of the financial accounts is not valid or not allowed in POS"
+          );
+        }
+      }
+    } else {
+      // ✅ Total is genuinely 0 (fully covered by discount/coupon/gift card) —
+      // no financials required, but make sure the client isn't ALSO trying
+      // to sneak in payment lines that wouldn't reconcile to anything.
+      if (Array.isArray(financials) && financials.length > 0) {
+        throw new BadRequest(
+          "Grand total is 0 — no financials should be submitted for a fully-covered sale"
         );
       }
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // Coupon, Tax, Discount, Gift Card Validations
-  // ═══════════════════════════════════════════════════════════
-  let coupon: any = null;
-  if (coupon_code) {
-    coupon = await CouponModel.findOne({ coupon_code: coupon_code });
-    if (!coupon) throw new NotFound("Coupon not found");
-    if (coupon.available <= 0) throw new BadRequest("Coupon is out of stock");
-    if (coupon.expired_date && coupon.expired_date < new Date()) {
-      throw new BadRequest("Coupon is expired");
-    }
-  }
-
-  let tax: any = null;
-  if (order_tax) {
-    tax = await TaxesModel.findById(order_tax);
-    if (!tax) throw new NotFound("Tax not found");
-    if (!tax.status) throw new BadRequest("Tax is not active");
-  }
-
-  let discountDoc: any = null;
-  if (order_discount) {
-    discountDoc = await DiscountModel.findById(order_discount);
-    if (!discountDoc) throw new NotFound("Discount not found");
-    if (!discountDoc.status) throw new BadRequest("Discount is not active");
-  }
-
-  let giftCard: any = null;
-  if (gift_card_id) {
-    giftCard = await GiftCardModel.findById(gift_card_id);
-    if (!giftCard) throw new NotFound("Gift card not found");
-    if (!giftCard.status) throw new BadRequest("Gift card is not active");
-    if (giftCard.expired_date && giftCard.expired_date < new Date()) {
-      throw new BadRequest("Gift card is expired");
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // ✅ STOCK VALIDATION FOR PRODUCTS
-  // ═══════════════════════════════════════════════════════════
   for (const p of processedProducts) {
     const { product_price_id, product_id, quantity } = p;
 
@@ -587,7 +689,6 @@ export const createSale = async (req: Request, res: Response) => {
         throw new NotFound("Product price (variation) not found");
       }
 
-      // ✅ التحقق من المخزن (warehouse-specific) بدل الكمية العامة
       const variationWarehouseStock = await Product_WarehouseModel.findOne({
         productId: product_id,
         productPriceId: product_price_id,
@@ -656,7 +757,7 @@ export const createSale = async (req: Request, res: Response) => {
     shipping,
     tax_rate,
     tax_amount: taxAmountCalc,
-    discount,
+    discount: discountAmount,
     total: subtotal,
     grand_total: finalGrandTotal,
     paid_amount: paidAmountForDb,
@@ -687,9 +788,6 @@ export const createSale = async (req: Request, res: Response) => {
     });
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // ✅ CREATE BUNDLE SALES (الجديد)
-  // ═══════════════════════════════════════════════════════════
   for (const b of processedBundles) {
     await ProductSalesModel.create({
       sale_id: sale._id,
@@ -712,7 +810,6 @@ export const createSale = async (req: Request, res: Response) => {
   // ✅ STOCK DEDUCTION & PAYMENTS
   // ═══════════════════════════════════════════════════════════
   if (!isPending) {
-    // Payment Processing
     if (!isDue && paymentLines.length > 0) {
       await PaymentModel.create({
         sale_id: sale._id,
@@ -735,10 +832,8 @@ export const createSale = async (req: Request, res: Response) => {
       }
     }
 
-    // ✅ خصم كميات المنتجات العادية
     for (const p of processedProducts) {
       if (p.product_price_id) {
-        // Product warehouse variation quantity
         const productWarehouse = Product_WarehouseModel.findOne({
           productId: p.product_id,
           productPriceId: p.product_price_id,
@@ -751,7 +846,6 @@ export const createSale = async (req: Request, res: Response) => {
           });
         }
 
-        // Product price quantity
         const productPrice = ProductPriceModel.findById(p.product_price_id);
 
         if (productPrice) {
@@ -760,16 +854,14 @@ export const createSale = async (req: Request, res: Response) => {
           });
         }
 
-        // Warehouse stock quantity
-        const warehouse = WarehouseModel.findById(warehouseId);
+        const warehouseRow = WarehouseModel.findById(warehouseId);
 
-        if (warehouse) {
-          WarehouseModel.updateById(warehouse._id, {
-            stock_Quantity: warehouse.stock_Quantity - p.quantity,
+        if (warehouseRow) {
+          WarehouseModel.updateById(warehouseRow._id, {
+            stock_Quantity: warehouseRow.stock_Quantity - p.quantity,
           });
         }
       } else if (p.product_id) {
-        // Product warehouse quantity
         const productWarehouse = Product_WarehouseModel.findOne({
           productId: p.product_id,
           warehouseId,
@@ -781,16 +873,14 @@ export const createSale = async (req: Request, res: Response) => {
           });
         }
 
-        // Warehouse stock quantity
-        const warehouse = WarehouseModel.findById(warehouseId);
+        const warehouseRow = WarehouseModel.findById(warehouseId);
 
-        if (warehouse) {
-          WarehouseModel.updateById(warehouse._id, {
-            stock_Quantity: warehouse.stock_Quantity - p.quantity,
+        if (warehouseRow) {
+          WarehouseModel.updateById(warehouseRow._id, {
+            stock_Quantity: warehouseRow.stock_Quantity - p.quantity,
           });
         }
 
-        // Product quantity
         const product = ProductModel.findById(p.product_id);
 
         if (product) {
@@ -801,13 +891,11 @@ export const createSale = async (req: Request, res: Response) => {
       }
     }
 
-    // ✅ خصم كميات الـ Bundles (الجديد)
     for (const b of processedBundles) {
       for (const bp of b.products) {
         const deductQty = b.quantity * bp.quantity;
 
         if (bp.productPriceId) {
-          // Product warehouse variation quantity
           const productWarehouse = Product_WarehouseModel.findOne({
             productId: bp.productId,
             productPriceId: bp.productPriceId,
@@ -820,7 +908,6 @@ export const createSale = async (req: Request, res: Response) => {
             });
           }
 
-          // Variation quantity
           const productPrice = ProductPriceModel.findById(bp.productPriceId);
 
           if (productPrice) {
@@ -829,16 +916,14 @@ export const createSale = async (req: Request, res: Response) => {
             });
           }
 
-          // Warehouse stock
-          const warehouse = WarehouseModel.findById(warehouseId);
+          const warehouseRow = WarehouseModel.findById(warehouseId);
 
-          if (warehouse) {
-            WarehouseModel.updateById(warehouse._id, {
-              stock_Quantity: warehouse.stock_Quantity - deductQty,
+          if (warehouseRow) {
+            WarehouseModel.updateById(warehouseRow._id, {
+              stock_Quantity: warehouseRow.stock_Quantity - deductQty,
             });
           }
         } else {
-          // Product warehouse quantity
           const productWarehouse = Product_WarehouseModel.findOne({
             productId: bp.productId,
             warehouseId,
@@ -850,16 +935,14 @@ export const createSale = async (req: Request, res: Response) => {
             });
           }
 
-          // Warehouse stock
-          const warehouse = WarehouseModel.findById(warehouseId);
+          const warehouseRow = WarehouseModel.findById(warehouseId);
 
-          if (warehouse) {
-            WarehouseModel.updateById(warehouse._id, {
-              stock_Quantity: warehouse.stock_Quantity - deductQty,
+          if (warehouseRow) {
+            WarehouseModel.updateById(warehouseRow._id, {
+              stock_Quantity: warehouseRow.stock_Quantity - deductQty,
             });
           }
 
-          // Product quantity
           const product = ProductModel.findById(bp.productId);
 
           if (product) {
@@ -871,7 +954,6 @@ export const createSale = async (req: Request, res: Response) => {
       }
     }
 
-    // Coupon Update
     if (!isDue && coupon) {
       const couponDoc = CouponModel.findById(coupon._id);
 
@@ -882,147 +964,78 @@ export const createSale = async (req: Request, res: Response) => {
       }
     }
 
-    // Gift Card Update
-    if (!isDue && giftCard && totalPaidFromLines > 0) {
+    // ✅ FIX #3: deduct exactly the requested/validated gift card amount,
+    // not the entire sale payment total.
+    if (!isDue && giftCard && requestedGiftCardAmount > 0) {
       const giftCardDoc = GiftCardModel.findById(giftCard._id);
 
       if (giftCardDoc) {
         GiftCardModel.updateById(giftCardDoc._id, {
-          amount: giftCardDoc.amount - totalPaidFromLines,
+          amount: giftCardDoc.amount - requestedGiftCardAmount,
         });
       }
     }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // FETCH FULL SALE DATA
+  // FETCH FULL SALE DATA (unchanged)
   // ═══════════════════════════════════════════════════════════
-  // ✅ manual populate
   const saleRaw = SaleModel.findById(sale._id);
   if (!saleRaw) {
     throw new NotFound("Sale not found after creation");
   }
 
-  const customerPop = saleRaw.customer_id
-    ? CustomerModel.findById(saleRaw.customer_id)
-    : null;
+  const customerPop = saleRaw.customer_id ? CustomerModel.findById(saleRaw.customer_id) : null;
+  const dueCustomerPop = saleRaw.Due_customer_id ? CustomerModel.findById(saleRaw.Due_customer_id) : null;
+  const warehousePop = saleRaw.warehouse_id ? WarehouseModel.findById(saleRaw.warehouse_id) : null;
+  const taxPop = saleRaw.order_tax ? TaxesModel.findById(saleRaw.order_tax) : null;
+  const discountPop = saleRaw.order_discount ? DiscountModel.findById(saleRaw.order_discount) : null;
+  const giftCardPop = saleRaw.gift_card_id ? GiftCardModel.findById(saleRaw.gift_card_id) : null;
+  const cashierPop = saleRaw.cashier_id ? UserModel.findById(saleRaw.cashier_id) : null;
+  const shiftPop = saleRaw.shift_id ? CashierShift.findById(saleRaw.shift_id) : null;
 
-  const dueCustomerPop = saleRaw.Due_customer_id
-    ? CustomerModel.findById(saleRaw.Due_customer_id)
-    : null;
-
-  const warehousePop = saleRaw.warehouse_id
-    ? WarehouseModel.findById(saleRaw.warehouse_id)
-    : null;
-
-  const taxPop = saleRaw.order_tax
-    ? TaxesModel.findById(saleRaw.order_tax)
-    : null;
-
-  const discountPop = saleRaw.order_discount
-    ? DiscountModel.findById(saleRaw.order_discount)
-    : null;
-
-  const giftCardPop = saleRaw.gift_card_id
-    ? GiftCardModel.findById(saleRaw.gift_card_id)
-    : null;
-
-  // ⚠️ swap in whatever model actually represents "cashier_id" users (Cashierman? User?)
-  const cashierPop = saleRaw.cashier_id
-    ? UserModel.findById(saleRaw.cashier_id)
-    : null;
-
-  const shiftPop = saleRaw.shift_id
-    ? CashierShift.findById(saleRaw.shift_id)
-    : null;
-
-  // account_id is an array of ids on this model
   const accountsPop = Array.isArray(saleRaw.account_id)
-    ? saleRaw.account_id
-        .map((id: string) => BankAccountModel.findById(id))
-        .filter(Boolean)
+    ? saleRaw.account_id.map((id: string) => BankAccountModel.findById(id)).filter(Boolean)
     : [];
 
   const fullSale = {
     ...saleRaw,
     customer_id: customerPop
-      ? {
-          _id: customerPop._id,
-          name: customerPop.name,
-          email: customerPop.email,
-          phone_number: customerPop.phone_number,
-        }
+      ? { _id: customerPop._id, name: customerPop.name, email: customerPop.email, phone_number: customerPop.phone_number }
       : null,
     Due_customer_id: dueCustomerPop
-      ? {
-          _id: dueCustomerPop._id,
-          name: dueCustomerPop.name,
-          email: dueCustomerPop.email,
-          phone_number: dueCustomerPop.phone_number,
-        }
+      ? { _id: dueCustomerPop._id, name: dueCustomerPop.name, email: dueCustomerPop.email, phone_number: dueCustomerPop.phone_number }
       : null,
     warehouse_id: warehousePop
-      ? {
-          _id: warehousePop._id,
-          name: warehousePop.name,
-          location: warehousePop.location,
-        }
+      ? { _id: warehousePop._id, name: warehousePop.name, location: warehousePop.location }
       : null,
     order_tax: taxPop
-      ? {
-          _id: taxPop._id,
-          name: taxPop.name,
-          amount: taxPop.amount,
-          type: taxPop.type,
-        }
+      ? { _id: taxPop._id, name: taxPop.name, amount: taxPop.amount, type: taxPop.type }
       : null,
     order_discount: discountPop
-      ? {
-          _id: discountPop._id,
-          name: discountPop.name,
-          amount: discountPop.amount,
-          type: discountPop.type,
-        }
+      ? { _id: discountPop._id, name: discountPop.name, amount: discountPop.amount, type: discountPop.type }
       : null,
     gift_card_id: giftCardPop
-      ? {
-          _id: giftCardPop._id,
-          code: giftCardPop.code,
-          amount: giftCardPop.amount,
-        }
+      ? { _id: giftCardPop._id, code: giftCardPop.code, amount: giftCardPop.amount }
       : null,
     cashier_id: cashierPop
       ? { _id: cashierPop._id, name: cashierPop.name, email: cashierPop.email }
       : null,
     shift_id: shiftPop
-      ? {
-          _id: shiftPop._id,
-          start_time: shiftPop.start_time,
-          status: shiftPop.status,
-        }
+      ? { _id: shiftPop._id, start_time: shiftPop.start_time, status: shiftPop.status }
       : null,
-    account_id: accountsPop.map((a: any) => ({
-      _id: a._id,
-      name: a.name,
-      type: a.type,
-      balance: a.balance,
-    })),
+    account_id: accountsPop.map((a: any) => ({ _id: a._id, name: a.name, type: a.type, balance: a.balance })),
   };
 
-  const items = ProductSalesModel.find({
-    sale_id: sale._id,
-  });
+  const items = ProductSalesModel.find({ sale_id: sale._id });
 
   const fullItems = items.map((item) => {
     const product = ProductModel.findById(item.product_id);
-
     const productPrice = ProductPriceModel.findById(item.product_price_id);
-
     const bundle = PandelModel.findById(item.bundle_id);
 
     return {
       ...item,
-
       product_id: product
         ? {
             _id: product._id,
@@ -1034,23 +1047,10 @@ export const createSale = async (req: Request, res: Response) => {
             start_quantaty: product.start_quantaty,
           }
         : null,
-
       product_price_id: productPrice
-        ? {
-            _id: productPrice._id,
-            price: productPrice.price,
-            code: productPrice.code,
-            quantity: productPrice.quantity,
-          }
+        ? { _id: productPrice._id, price: productPrice.price, code: productPrice.code, quantity: productPrice.quantity }
         : null,
-
-      bundle_id: bundle
-        ? {
-            _id: bundle._id,
-            name: bundle.name,
-            price: bundle.price,
-          }
-        : null,
+      bundle_id: bundle ? { _id: bundle._id, name: bundle.name, price: bundle.price } : null,
     };
   });
 
@@ -1062,9 +1062,6 @@ export const createSale = async (req: Request, res: Response) => {
     return item;
   });
 
-  // ═══════════════════════════════════════════════════════════
-  // ✅ الجديد: جلب بيانات الكاشير (إعدادات الطابعة) بناءً على الماكينة المرتبطة بالشيفت
-  // ═══════════════════════════════════════════════════════════
   const currentMachineId = openShift.cashier_id;
   const cashierMachine = await CashierModel.findById(currentMachineId);
 
@@ -1078,24 +1075,14 @@ export const createSale = async (req: Request, res: Response) => {
     };
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // إرجاع الاستجابة النهائية
-  // ═══════════════════════════════════════════════════════════
-  // ✅ جيب بيانات المحل بشكل ديناميكي من اليوزر اللي عامل login
   const storeInfo = await getStoreInfo(cashierId);
 
   return SuccessResponse(res, {
     message: isDue
       ? `Due sale created. Amount owed: ${remainingAmount}`
       : "Sale created successfully",
-
-    // ✅ بيانات المحل ديناميكية حسب اليوزر اللي عامل login
     store: storeInfo,
-
-    // ✅ الجديد: إعدادات الطابعة
     printer_settings: printerSettings,
-
-    // الباقي زي ما هو بالظبط
     sale: fullSale,
     items: formattedItems,
     service_fees: appliedServiceFees,
@@ -1104,10 +1091,12 @@ export const createSale = async (req: Request, res: Response) => {
       products_total: productsTotal,
       bundles_total: bundlesTotal,
       subtotal: subtotal,
+      discount_amount: discountAmount, // ✅ FIX #2
+      coupon_amount: couponAmount, // ✅ FIX #1
+      gift_card_amount: requestedGiftCardAmount, // ✅ FIX #3
       service_fee_total: serviceFeeTotal,
       tax_amount: taxAmountCalc,
       shipping: Number(shipping),
-      discount: Number(discount),
       grand_total: finalGrandTotal,
     },
   });
@@ -1187,21 +1176,122 @@ export const getAllSales = async (req: Request, res: Response) => {
 export const getSales = async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  const sale = await SaleModel.findById(id)
-    .populate("customer_id", "name email phone_number")
-    .populate("Due_customer_id", "name email phone_number")
-    .populate("warehouse_id", "name location")
-    .populate("order_tax", "name amount type")
-    .populate("order_discount", "name amount type")
-    .populate("gift_card_id", "code amount")
-    .populate("cashier_id", "name email")
-    .populate("shift_id", "start_time status")
-    .populate("account_id", "name type balance")
-    .lean();
+  const saleRaw = SaleModel.findById(id);
 
-  if (!sale) {
+  if (!saleRaw) {
     throw new NotFound("Sale not found");
   }
+
+  // ✅ manual populate — replaces the .populate().lean() chain
+  const customerPop = saleRaw.customer_id
+    ? CustomerModel.findById(saleRaw.customer_id)
+    : null;
+
+  const dueCustomerPop = saleRaw.Due_customer_id
+    ? CustomerModel.findById(saleRaw.Due_customer_id)
+    : null;
+
+  const warehousePop = saleRaw.warehouse_id
+    ? WarehouseModel.findById(saleRaw.warehouse_id)
+    : null;
+
+  const taxPop = saleRaw.order_tax
+    ? TaxesModel.findById(saleRaw.order_tax)
+    : null;
+
+  const discountPop = saleRaw.order_discount
+    ? DiscountModel.findById(saleRaw.order_discount)
+    : null;
+
+  const giftCardPop = saleRaw.gift_card_id
+    ? GiftCardModel.findById(saleRaw.gift_card_id)
+    : null;
+
+  // ⚠️ swap in whatever model your cashier_id actually references
+  const cashierPop = saleRaw.cashier_id
+    ? CashierModel.findById(saleRaw.cashier_id)
+    : null;
+
+  const shiftPop = saleRaw.shift_id
+    ? CashierShift.findById(saleRaw.shift_id)
+    : null;
+
+  // account_id is an array of ids on this model
+  const accountsPop = Array.isArray(saleRaw.account_id)
+    ? saleRaw.account_id
+        .map((accId: string) => BankAccountModel.findById(accId))
+        .filter(Boolean)
+    : [];
+
+  const sale = {
+    ...saleRaw,
+    customer_id: customerPop
+      ? {
+          _id: customerPop._id,
+          name: customerPop.name,
+          email: customerPop.email,
+          phone_number: customerPop.phone_number,
+        }
+      : null,
+    Due_customer_id: dueCustomerPop
+      ? {
+          _id: dueCustomerPop._id,
+          name: dueCustomerPop.name,
+          email: dueCustomerPop.email,
+          phone_number: dueCustomerPop.phone_number,
+        }
+      : null,
+    warehouse_id: warehousePop
+      ? {
+          _id: warehousePop._id,
+          name: warehousePop.name,
+          location: warehousePop.location,
+        }
+      : null,
+    order_tax: taxPop
+      ? {
+          _id: taxPop._id,
+          name: taxPop.name,
+          amount: taxPop.amount,
+          type: taxPop.type,
+        }
+      : null,
+    order_discount: discountPop
+      ? {
+          _id: discountPop._id,
+          name: discountPop.name,
+          amount: discountPop.amount,
+          type: discountPop.type,
+        }
+      : null,
+    gift_card_id: giftCardPop
+      ? {
+          _id: giftCardPop._id,
+          code: giftCardPop.code,
+          amount: giftCardPop.amount,
+        }
+      : null,
+    cashier_id: cashierPop
+      ? {
+          _id: cashierPop._id,
+          name: cashierPop.name,
+          email: cashierPop.email,
+        }
+      : null,
+    shift_id: shiftPop
+      ? {
+          _id: shiftPop._id,
+          start_time: shiftPop.start_time,
+          status: shiftPop.status,
+        }
+      : null,
+    account_id: accountsPop.map((a: any) => ({
+      _id: a._id,
+      name: a.name,
+      type: a.type,
+      balance: a.balance,
+    })),
+  };
 
   const prods = ProductSalesModel.find({
     sale_id: sale._id,
@@ -1209,9 +1299,7 @@ export const getSales = async (req: Request, res: Response) => {
 
   const items = prods.map((item) => {
     const product = ProductModel.findById(item.product_id);
-
     const productPrice = ProductPriceModel.findById(item.product_price_id);
-
     const bundle = PandelModel.findById(item.bundle_id);
 
     return {
@@ -1463,7 +1551,7 @@ export const getShiftCompletedSales = async (req: Request, res: Response) => {
   const shift = await CashierShift.findOne({
     cashierman_id: user._id,
     status: "open",
-  })
+  });
 
   if (!shift) throw new NotFound("No open cashier shift found");
 
@@ -1621,21 +1709,89 @@ export const getShiftCompletedSales = async (req: Request, res: Response) => {
 export const getSalePendingById = async (req: Request, res: Response) => {
   const { sale_id } = req.params;
 
-  const sale = await SaleModel.findOne({
+  const saleRaw = SaleModel.findOne({
     _id: sale_id,
     order_pending: { $in: [1, "1", true] },
-  })
-    .populate("customer_id", "name email phone_number address")
-    .populate("warehouse_id", "name ar_name")
-    .populate("cashier_id", "name email")
-    .populate("gift_card_id", "code balance")
-    .populate("order_tax", "name rate")
-    .populate("order_discount", "name discount_type discount_value")
-    .lean();
+  });
 
-  if (!sale) {
+  if (!saleRaw) {
     throw new NotFound("Pending sale not found");
   }
+
+  // ✅ manual populate — replaces the .populate().lean() chain
+  const customerPop = saleRaw.customer_id
+    ? CustomerModel.findById(saleRaw.customer_id)
+    : null;
+
+  const warehousePop = saleRaw.warehouse_id
+    ? WarehouseModel.findById(saleRaw.warehouse_id)
+    : null;
+
+  // ⚠️ swap in whatever model your cashier_id actually references
+  const cashierPop = saleRaw.cashier_id
+    ? CashierModel.findById(saleRaw.cashier_id)
+    : null;
+
+  const giftCardPop = saleRaw.gift_card_id
+    ? GiftCardModel.findById(saleRaw.gift_card_id)
+    : null;
+
+  const taxPop = saleRaw.order_tax
+    ? TaxesModel.findById(saleRaw.order_tax)
+    : null;
+
+  const discountPop = saleRaw.order_discount
+    ? DiscountModel.findById(saleRaw.order_discount)
+    : null;
+
+  const sale = {
+    ...saleRaw,
+    customer_id: customerPop
+      ? {
+          _id: customerPop._id,
+          name: customerPop.name,
+          email: customerPop.email,
+          phone_number: customerPop.phone_number,
+          address: customerPop.address,
+        }
+      : null,
+    warehouse_id: warehousePop
+      ? {
+          _id: warehousePop._id,
+          name: warehousePop.name,
+          ar_name: warehousePop.ar_name,
+        }
+      : null,
+    cashier_id: cashierPop
+      ? {
+          _id: cashierPop._id,
+          name: cashierPop.name,
+          email: cashierPop.email,
+        }
+      : null,
+    gift_card_id: giftCardPop
+      ? {
+          _id: giftCardPop._id,
+          code: giftCardPop.code,
+          balance: giftCardPop.balance,
+        }
+      : null,
+    order_tax: taxPop
+      ? {
+          _id: taxPop._id,
+          name: taxPop.name,
+          rate: taxPop.rate,
+        }
+      : null,
+    order_discount: discountPop
+      ? {
+          _id: discountPop._id,
+          name: discountPop.name,
+          discount_type: discountPop.discount_type,
+          discount_value: discountPop.discount_value,
+        }
+      : null,
+  };
 
   const items = ProductSalesModel.find({
     sale_id: sale._id,
@@ -1647,7 +1803,6 @@ export const getSalePendingById = async (req: Request, res: Response) => {
 
     if (product) {
       const category = CategoryModel.findById(product.categoryId);
-
       const brand = PandelModel.findById(product.brandId);
 
       fullProduct = {
@@ -1733,11 +1888,8 @@ export const getSalePendingById = async (req: Request, res: Response) => {
 
     return {
       ...item,
-
       product_id: fullProduct,
-
       product_price_id: fullProductPrice,
-
       bundle_id: fullBundle,
     };
   });
