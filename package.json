@@ -68,6 +68,7 @@
       "electron/**/*",
       "local-server/dist/**/*",
       "client/dist/**/*",
+      "node_modules/**/*",
       "package.json"
     ],
     "nsis": {
