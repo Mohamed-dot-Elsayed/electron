@@ -13,6 +13,7 @@ import ReturnRouter from "./ReturnSaleRoutes"
 import TaxesRouter from './Taxes'
 import syncRouter from "./sync";
 import CashierShiftRouter from './CashierShiftRoutes'
+import ProfileRouter from './profile'
 
 export const route = Router();
 route.use("/", tenantInfoRouter);
@@ -28,5 +29,6 @@ route.use("/discount", DiscountRouter)
 route.use("/return-sale", ReturnRouter)
 route.use("/taxes", TaxesRouter)
 route.use("/cashier-shift",CashierShiftRouter)
+route.use("/profile", ProfileRouter)
 
 export default route;

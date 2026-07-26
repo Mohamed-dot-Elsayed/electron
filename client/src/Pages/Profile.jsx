@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { useGet } from "@/Hooks/useGet";
-import { usePost } from "@/Hooks/usePost";
 import { toast } from "react-toastify";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -11,10 +10,11 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { FaEdit } from "react-icons/fa";
 import Loading from "@/components/Loading";
 import { useTranslation } from "react-i18next";
+import { usePut } from "@/Hooks/usePut";
 
 const Profile = () => {
-  const { data, loading, refetch } = useGet("cashier/profile");
-  const { postData, loading: updating } = usePost();
+  const { data, loading, refetch } = useGet("api/profile");
+  const { putData, loading: updating } = usePut();
   const [open, setOpen] = useState(false);
      const { t ,i18n } = useTranslation();
       const isArabic = i18n.language === "ar";
@@ -75,7 +75,7 @@ const Profile = () => {
     if (form.image) formData.append("image", form.image);
 
     try {
-      await postData("cashier/profile/update", formData, true);
+      await putData("api/profile", formData, true);
       toast.success(t("Profileupdatedsuccessfully"));
       refetch();
       setOpen(false); // ✅ يقفل المودال بعد الحفظ
