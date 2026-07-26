@@ -53,7 +53,7 @@
   },
   "build": {
     "appId": "com.demo.syncapp",
-    "productName": "SyncDemo",
+    "productName": "SysteGo",
     "extraResources": [
       {
         "from": "local-server/.env",
