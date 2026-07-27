@@ -17,7 +17,7 @@ export const getAllOnlineOrders = async (req: Request, res: Response) => {
 
   if (
     status &&
-    ["pending", "approved", "rejected"].includes(status as string)
+    ["pending","rejected","confirmed","processing","out_for_delivery","delivered","returned","failed_to_deliver","canceled","scheduled","refund"].includes(status as string)
   ) {
     filter.status = status;
   }
@@ -107,16 +107,17 @@ export const getOnlineOrderById = async (req: Request, res: Response) => {
  */
 export const updateOnlineOrderStatus = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { status } = req.body;
+  const { status, statusDescription } = req.body;
 
-  if (!status || !["pending", "approved", "rejected"].includes(status)) {
+  if (!status || !["pending","rejected","confirmed","processing","out_for_delivery","delivered","returned","failed_to_deliver","canceled","scheduled","refund"].includes(status)) {
     throw new NotFound(
-      "Invalid status. Must be: pending, approved, or rejected"
+      "Invalid status."
     );
   }
 
   const order = OrderModel.updateById(id, {
     status,
+    statusDescription,
   });
 
   if (!order) {
