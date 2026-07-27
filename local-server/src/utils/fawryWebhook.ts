@@ -64,10 +64,10 @@ export const fawryWebhook = async (req: Request, res: Response) => {
         const statusLower = String(orderStatus).toLowerCase();
         
         if (statusLower === "paid" || statusLower === "new") {
-            if (order.paymentStatus === "paid" && order.status === "approved") {
+            if (order.paymentStatus === "paid" && order.status === "confirmed") {
                 return res.status(200).send("Already processed");
             }
-            order.status = "approved";
+            order.status = "processing";
             order.paymentStatus = "paid";
             await order.save();
             return res.status(200).send("OK");

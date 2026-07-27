@@ -94,12 +94,12 @@ export const geideaWebhook = async (req: Request, res: Response) => {
         const isPaid = paidStatuses.has(statusLower) || paidStatuses.has(detailedStatus);
 
         if (isPaid) {
-            if (order.paymentStatus === "paid" && order.status === "approved") {
+            if (order.paymentStatus === "paid" && order.status === "confirmed") {
                 await order.save();
                 return res.status(200).send("Already processed");
             }
 
-            order.status = "approved";
+            order.status = "confirmed";
             order.paymentStatus = "paid";
             await order.save();
             return res.status(200).send("OK");

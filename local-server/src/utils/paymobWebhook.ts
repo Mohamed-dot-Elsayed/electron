@@ -193,7 +193,7 @@ export const paymobWebhook = async (req: Request, res: Response) => {
     }
 
     order.paymentStatus = isSuccess ? "paid" : "failed";
-    order.status = isSuccess ? "approved" : "rejected";
+    order.status = isSuccess ? "confirmed" : "rejected";
     order.paymobTransactionId = data?.id
       ? String(data.id)
       : queryTransactionId || order.paymobTransactionId;
