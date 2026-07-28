@@ -21,6 +21,7 @@ const Product_WarehouseSchema: SchemaDef = {
     type: "number",
     required: true,
     default: 0,
+    incremental:true,
   },
   low_stock: {
     type: "number",

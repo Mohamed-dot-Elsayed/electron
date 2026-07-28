@@ -21,6 +21,7 @@ const CategorySchema: SchemaDef = {
   product_quantity: {
     type: "number",
     default: 0,
+    incremental:true,
   },
   Is_Online: {
     type: "boolean",

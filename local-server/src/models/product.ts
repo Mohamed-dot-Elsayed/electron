@@ -56,6 +56,7 @@ const ProductSchema: SchemaDef = {
   },
   quantity: {
     type: "number",
+    incremental:true,
   },
   description: {
     type: "string",

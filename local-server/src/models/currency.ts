@@ -13,6 +13,7 @@ const CurrencySchema: SchemaDef = {
   },
   amount: {
     type: "number",
+    incremental:true,
   },
   isdefault: {
     type: "boolean",

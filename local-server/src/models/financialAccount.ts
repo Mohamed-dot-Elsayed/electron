@@ -20,6 +20,7 @@ const BankAccountSchema: SchemaDef = {
   balance: {
     type: "number",
     default: 0,
+    incremental:true,
   },
   description: {
     type: "string",

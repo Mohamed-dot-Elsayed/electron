@@ -17,6 +17,7 @@ export interface BaseField {
   enum?: PrimitiveValue[];
   sparse?: boolean;
   ref?: string;
+  incremental?: boolean;
 }
 
 export interface PrimitiveField extends BaseField {

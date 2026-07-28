@@ -111,7 +111,7 @@ const OrderSchema: SchemaDef = {
   },
   paymobCallbackPayload: {
     type: "object",
-    schema: {}, // Empty schema for Mixed type - allows any object structure
+    schema: {}, 
     default: {},
   },
   geideaSessionId: {
@@ -122,7 +122,7 @@ const OrderSchema: SchemaDef = {
   },
   geideaCallbackPayload: {
     type: "object",
-    schema: {}, // Empty schema for Mixed type - allows any object structure
+    schema: {}, 
     default: {},
   },
   proofImage: {

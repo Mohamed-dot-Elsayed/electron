@@ -27,6 +27,7 @@ const ProductPriceSchema: SchemaDef = {
   quantity: {
     type: "number",
     default: 0,
+    incremental:true,
   },
   strat_quantaty: {
     type: "number",

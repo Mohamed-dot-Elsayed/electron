@@ -16,6 +16,7 @@ const CouponSchema: SchemaDef = {
   amount: {
     type: "number",
     required: true,
+    incremental:true,
   },
   minimum_amount_for_use: {
     type: "number",
@@ -24,10 +25,12 @@ const CouponSchema: SchemaDef = {
   quantity: {
     type: "number",
     required: true,
+    incremental:true,
   },
   available: {
     type: "number",
     required: true,
+    incremental:true,
   },
   expired_date: {
     type: "date",

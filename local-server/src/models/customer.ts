@@ -55,6 +55,7 @@ const CustomerSchema: SchemaDef = {
   total_points_earned: {
     type: "number",
     default: 0,
+    incremental:true,
     // Note: min not supported - validate in application logic
   },
   is_Due: {
@@ -64,6 +65,7 @@ const CustomerSchema: SchemaDef = {
   amount_Due: {
     type: "number",
     default: 0,
+    incremental:true,
   },
   password: {
     type: "string",

@@ -22,10 +22,12 @@ const WarehouseSchema: SchemaDef = {
   number_of_products: {
     type: "number",
     default: 0,
+    incremental:true,
   },
   stock_Quantity: {
     type: "number",
     default: 0,
+    incremental:true,
   },
   Is_Online: {
     type: "boolean",
