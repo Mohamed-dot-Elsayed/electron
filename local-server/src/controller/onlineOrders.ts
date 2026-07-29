@@ -88,12 +88,48 @@ export const getAllOnlineOrders = async (req: Request, res: Response) => {
 export const getOnlineOrderById = async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  const order = await OrderModel.findById(id)
-    .populate("user", "name email phone")
-    .populate("paymentMethod", "name ar_name type")
-    .populate("cartItems.product", "name image price");
+  const orderRaw = OrderModel.findById(id);
+  if (!orderRaw) throw new NotFound("Order not found");
 
-  if (!order) throw new NotFound("Order not found");
+  const userPop = orderRaw.user ? UserModel.findById(orderRaw.user) : null;
+
+  const paymentMethodPop = orderRaw.paymentMethod
+    ? PaymentMethodModel.findById(orderRaw.paymentMethod)
+    : null;
+
+  const populatedCartItems = (orderRaw.cartItems || []).map((item: any) => {
+    const productPop = item.product
+      ? ProductModel.findById(item.product)
+      : null;
+
+    return {
+      ...item,
+      product: productPop
+        ? {
+            _id: productPop._id,
+            name: productPop.name,
+            image: productPop.image,
+            price: productPop.price,
+          }
+        : null,
+    };
+  });
+
+  const order = {
+    ...orderRaw,
+    user: userPop
+      ? { _id: userPop._id, name: userPop.name, email: userPop.email, phone: userPop.phone }
+      : null,
+    paymentMethod: paymentMethodPop
+      ? {
+          _id: paymentMethodPop._id,
+          name: paymentMethodPop.name,
+          ar_name: paymentMethodPop.ar_name,
+          type: paymentMethodPop.type,
+        }
+      : null,
+    cartItems: populatedCartItems,
+  };
 
   SuccessResponse(res, {
     message: "Order retrieved successfully",

@@ -38,7 +38,7 @@ export const fawryWebhook = async (req: Request, res: Response) => {
         const fawryConfig = await FawryModel.findOne({
             payment_method_id: order.paymentMethod,
             isActive: true,
-        }).lean();
+        });
 
         if (!fawryConfig) {
             return res.status(500).send("Fawry configuration not found");

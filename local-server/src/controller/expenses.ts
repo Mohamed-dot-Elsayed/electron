@@ -6,6 +6,7 @@ import { SuccessResponse } from "../utils/response";
 import { BankAccountModel } from "../models/financialAccount";
 import { CashierShift } from "../models/cashierShift";
 import { ExpenseCategoryModel } from "../models/expensecategory";
+import { CategoryModel } from "../models/category";
 
 export const createExpense = async (req: Request, res: Response) => {
   const userId = req.user?.id;
@@ -258,10 +259,26 @@ export const getExpenseById = async (req: Request, res: Response) => {
   const { id } = req.params;
   if (!id) throw new BadRequest("Expense ID is required");
 
-  const expense = await ExpenseModel.findOne({ _id: id, cashier_id: userId })
-    .populate("Category_id", "name ar_name")
-    .populate("financial_accountId", "name ar_name");
-  if (!expense) throw new NotFound("Expense not found");
+  const expenseRaw = ExpenseModel.findOne({ _id: id, cashier_id: userId });
+  if (!expenseRaw) throw new NotFound("Expense not found");
+
+  const categoryPop = expenseRaw.Category_id
+    ? CategoryModel.findById(expenseRaw.Category_id)
+    : null;
+
+  const financialAccountPop = expenseRaw.financial_accountId
+    ? BankAccountModel.findById(expenseRaw.financial_accountId)
+    : null;
+
+  const expense = {
+    ...expenseRaw,
+    Category_id: categoryPop
+      ? { _id: categoryPop._id, name: categoryPop.name, ar_name: categoryPop.ar_name }
+      : null,
+    financial_accountId: financialAccountPop
+      ? { _id: financialAccountPop._id, name: financialAccountPop.name, ar_name: financialAccountPop.ar_name }
+      : null,
+  };
 
   SuccessResponse(res, { message: "Expense retrieved successfully", expense });
 };

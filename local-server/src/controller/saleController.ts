@@ -332,7 +332,7 @@ export const createSale = async (req: Request, res: Response) => {
           });
 
           if (!variationWarehouseStock) {
-            const product = await ProductModel.findById(productId).select("name");
+            const product = await ProductModel.findById(productId);
             throw new BadRequest(
               `Bundle "${bundleDoc.name}" - variation for "${
                 (product as any)?.name || productId
@@ -341,7 +341,7 @@ export const createSale = async (req: Request, res: Response) => {
           }
 
           if ((variationWarehouseStock.quantity ?? 0) < requiredQty) {
-            const product = await ProductModel.findById(productId).select("name");
+            const product = await ProductModel.findById(productId);
             throw new BadRequest(
               `Not enough stock for "${
                 (product as any)?.name || "product"
@@ -357,7 +357,7 @@ export const createSale = async (req: Request, res: Response) => {
           });
 
           if (!warehouseStock) {
-            const product = await ProductModel.findById(productId).select("name");
+            const product = await ProductModel.findById(productId);
             throw new BadRequest(
               `Bundle "${bundleDoc.name}" is not available in this warehouse because product "${
                 (product as any)?.name || productId
@@ -366,7 +366,7 @@ export const createSale = async (req: Request, res: Response) => {
           }
 
           if ((warehouseStock.quantity ?? 0) < requiredQty) {
-            const product = await ProductModel.findById(productId).select("name");
+            const product = await ProductModel.findById(productId);
             throw new BadRequest(
               `Not enough stock for "${
                 (product as any)?.name || "product"
@@ -1182,7 +1182,6 @@ export const getSales = async (req: Request, res: Response) => {
     throw new NotFound("Sale not found");
   }
 
-  // ✅ manual populate — replaces the .populate().lean() chain
   const customerPop = saleRaw.customer_id
     ? CustomerModel.findById(saleRaw.customer_id)
     : null;
@@ -1718,7 +1717,6 @@ export const getSalePendingById = async (req: Request, res: Response) => {
     throw new NotFound("Pending sale not found");
   }
 
-  // ✅ manual populate — replaces the .populate().lean() chain
   const customerPop = saleRaw.customer_id
     ? CustomerModel.findById(saleRaw.customer_id)
     : null;

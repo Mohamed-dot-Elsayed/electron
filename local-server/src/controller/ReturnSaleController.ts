@@ -14,6 +14,10 @@ import { BankAccountModel } from "../models/financialAccount";
 import { BrandModel } from "../models/brand";
 import { UserModel } from "../models/user";
 import { CustomerModel } from "../models/customer";
+import { WarehouseModel } from "../models/warehouse";
+import { GiftCardModel } from "../models/giftCard";
+import { TaxesModel } from "../models/taxes";
+import { DiscountModel } from "../models/discount";
 // ═══════════════════════════════════════════════════════════
 // GET SALE FOR RETURN
 // ═══════════════════════════════════════════════════════════
@@ -24,11 +28,7 @@ export const getSaleForReturn = async (req: Request, res: Response) => {
     throw new BadRequest("Sale reference is required");
   }
 
-  let sale;
-
-  if (!sale) {
-    sale = await SaleModel.findOne({ reference: reference });
-  }
+  const sale = SaleModel.findOne({ reference: reference });
 
   if (!sale) {
     throw new NotFound("Sale not found");
@@ -38,31 +38,120 @@ export const getSaleForReturn = async (req: Request, res: Response) => {
     throw new BadRequest("Cannot return items from a pending sale");
   }
 
-  const fullSale = await SaleModel.findById(sale._id)
-    .populate("customer_id", "name email phone_number address")
-    .populate("warehouse_id", "name ar_name")
-    .populate("cashier_id", "name ar_name email") // ✅ الـ User اللي عمل البيع
-    .populate({
-      // ✅ الشيفت مع بيانات الكاشير والكاشير مان
-      path: "shift_id",
-      select: " cashierman_id cashier_id",
-      populate: [
-        {
-          path: "cashierman_id",
-          select: "username ",
-          model: "User",
-        },
-        {
-          path: "cashier_id",
-          select: "name ar_name code location",
-          model: "Cashier",
-        },
-      ],
-    })
-    .populate("gift_card_id", "code balance")
-    .populate("order_tax", "name rate")
-    .populate("order_discount", "name discount_type discount_value")
-    .lean();
+  const saleRaw = SaleModel.findById(sale._id);
+
+  if (!saleRaw) {
+    throw new NotFound("Sale not found");
+  }
+
+  // ✅ manual populate — top level
+  const customerPop = saleRaw.customer_id
+    ? CustomerModel.findById(saleRaw.customer_id)
+    : null;
+
+  const warehousePop = saleRaw.warehouse_id
+    ? WarehouseModel.findById(saleRaw.warehouse_id)
+    : null;
+
+  // ⚠️ swap in whatever model your cashier_id actually references
+  const cashierPop = saleRaw.cashier_id
+    ? UserModel.findById(saleRaw.cashier_id)
+    : null;
+
+  const giftCardPop = saleRaw.gift_card_id
+    ? GiftCardModel.findById(saleRaw.gift_card_id)
+    : null;
+
+  const taxPop = saleRaw.order_tax
+    ? TaxesModel.findById(saleRaw.order_tax)
+    : null;
+
+  const discountPop = saleRaw.order_discount
+    ? DiscountModel.findById(saleRaw.order_discount)
+    : null;
+
+  // ✅ manual populate — nested (shift_id -> cashierman_id / cashier_id)
+  const shiftRaw = saleRaw.shift_id
+    ? CashierShift.findById(saleRaw.shift_id)
+    : null;
+
+  let shiftPop: any = null;
+  if (shiftRaw) {
+    const cashiermanPop = shiftRaw.cashierman_id
+      ? UserModel.findById(shiftRaw.cashierman_id)
+      : null;
+
+    const shiftCashierPop = shiftRaw.cashier_id
+      ? CashierShift.findById(shiftRaw.cashier_id)
+      : null;
+
+    shiftPop = {
+      _id: shiftRaw._id,
+      start_time: shiftRaw.start_time,
+      end_time: shiftRaw.end_time,
+      status: shiftRaw.status,
+      total_sale_amount: shiftRaw.total_sale_amount,
+      cashierman_id: cashiermanPop
+        ? { _id: cashiermanPop._id, username: cashiermanPop.username }
+        : null,
+      cashier_id: shiftCashierPop
+        ? {
+            _id: shiftCashierPop._id,
+            name: shiftCashierPop.name,
+            ar_name: shiftCashierPop.ar_name,
+            code: shiftCashierPop.code,
+            location: shiftCashierPop.location,
+          }
+        : null,
+    };
+  }
+
+  const fullSale = {
+    ...saleRaw,
+    customer_id: customerPop
+      ? {
+          _id: customerPop._id,
+          name: customerPop.name,
+          email: customerPop.email,
+          phone_number: customerPop.phone_number,
+          address: customerPop.address,
+        }
+      : null,
+    warehouse_id: warehousePop
+      ? {
+          _id: warehousePop._id,
+          name: warehousePop.name,
+          ar_name: warehousePop.ar_name,
+        }
+      : null,
+    cashier_id: cashierPop
+      ? {
+          _id: cashierPop._id,
+          name: cashierPop.name,
+          ar_name: cashierPop.ar_name,
+          email: cashierPop.email,
+        }
+      : null,
+    shift_id: shiftPop,
+    gift_card_id: giftCardPop
+      ? {
+          _id: giftCardPop._id,
+          code: giftCardPop.code,
+          balance: giftCardPop.balance,
+        }
+      : null,
+    order_tax: taxPop
+      ? { _id: taxPop._id, name: taxPop.name, rate: taxPop.rate }
+      : null,
+    order_discount: discountPop
+      ? {
+          _id: discountPop._id,
+          name: discountPop.name,
+          discount_type: discountPop.discount_type,
+          discount_value: discountPop.discount_value,
+        }
+      : null,
+  };
 
   const saleItems = ProductSalesModel.find({
     sale_id: sale._id,
@@ -74,7 +163,6 @@ export const getSaleForReturn = async (req: Request, res: Response) => {
 
     if (product) {
       const category = CategoryModel.findById(product.categoryId);
-
       const brand = BrandModel.findById(product.brandId);
 
       productData = {
@@ -143,11 +231,8 @@ export const getSaleForReturn = async (req: Request, res: Response) => {
 
     return {
       ...item,
-
       product_id: productData,
-
       product_price_id: productPriceData,
-
       bundle_id: bundleData,
     };
   });
@@ -311,10 +396,10 @@ export const createReturn = async (req: Request, res: Response) => {
     throw new BadRequest("Warehouse is not assigned to this user");
   }
 
-  const openShift = await CashierShift.findOne({
-    cashierman_id: cashierId,
-    status: "open",
-  }).sort({ start_time: -1 });
+  const openShift = CashierShift.findOne(
+    { cashierman_id: cashierId, status: "open" },
+    { sort: { start_time: -1 } }
+  );
 
   if (!openShift) {
     throw new BadRequest(
@@ -322,14 +407,7 @@ export const createReturn = async (req: Request, res: Response) => {
     );
   }
 
-  const {
-    sale_id,
-    items,
-    reason, // 👈 reason للـ Return ككل
-    note,
-    // refund_account_id,
-    image,
-  } = req.body;
+  const { sale_id, items, reason, note, image } = req.body;
 
   if (!sale_id) {
     throw new BadRequest("sale_id is required");
@@ -339,7 +417,7 @@ export const createReturn = async (req: Request, res: Response) => {
     throw new BadRequest("At least one item is required for return");
   }
 
-  const sale = await SaleModel.findById(sale_id);
+  const sale = SaleModel.findById(sale_id);
   if (!sale) {
     throw new NotFound("Sale not found");
   }
@@ -348,7 +426,7 @@ export const createReturn = async (req: Request, res: Response) => {
     throw new BadRequest("Cannot return items from a pending sale");
   }
 
-  if (sale.warehouse_id.toString() !== warehouseId) {
+  if (sale.warehouse_id !== warehouseId) {
     throw new BadRequest("This sale belongs to a different warehouse");
   }
 
@@ -364,10 +442,10 @@ export const createReturn = async (req: Request, res: Response) => {
   for (const ret of previousReturns) {
     for (const item of ret.items) {
       const key = item.product_price_id
-        ? item.product_price_id.toString()
+        ? item.product_price_id
         : item.product_id
-        ? item.product_id.toString()
-        : item.bundle_id?.toString() || "";
+        ? item.product_id
+        : item.bundle_id || "";
 
       returnedQuantities[key] =
         (returnedQuantities[key] || 0) + item.returned_quantity;
@@ -387,13 +465,8 @@ export const createReturn = async (req: Request, res: Response) => {
   let totalReturnAmount = 0;
 
   for (const item of items) {
-    const {
-      product_sale_id,
-      product_id,
-      product_price_id,
-      bundle_id,
-      quantity,
-    } = item;
+    const { product_sale_id, product_id, product_price_id, bundle_id, quantity } =
+      item;
 
     if (!quantity || Number(quantity) <= 0) {
       throw new BadRequest("Return quantity must be greater than 0");
@@ -404,22 +477,17 @@ export const createReturn = async (req: Request, res: Response) => {
     let saleItem: any = null;
 
     if (product_sale_id) {
-      saleItem = saleItems.find(
-        (si: any) => si._id.toString() === product_sale_id
-      );
+      saleItem = saleItems.find((si: any) => si._id === product_sale_id);
     } else if (product_price_id) {
       saleItem = saleItems.find(
-        (si: any) => si.product_price_id?.toString() === product_price_id
+        (si: any) => si.product_price_id === product_price_id
       );
     } else if (product_id) {
       saleItem = saleItems.find(
-        (si: any) =>
-          si.product_id?.toString() === product_id && !si.product_price_id
+        (si: any) => si.product_id === product_id && !si.product_price_id
       );
     } else if (bundle_id) {
-      saleItem = saleItems.find(
-        (si: any) => si.bundle_id?.toString() === bundle_id
-      );
+      saleItem = saleItems.find((si: any) => si.bundle_id === bundle_id);
     }
 
     if (!saleItem) {
@@ -427,10 +495,10 @@ export const createReturn = async (req: Request, res: Response) => {
     }
 
     const key = saleItem.product_price_id
-      ? saleItem.product_price_id.toString()
+      ? saleItem.product_price_id
       : saleItem.product_id
-      ? saleItem.product_id.toString()
-      : saleItem.bundle_id?.toString() || "";
+      ? saleItem.product_id
+      : saleItem.bundle_id || "";
 
     const alreadyReturned = returnedQuantities[key] || 0;
     const availableToReturn = saleItem.quantity - alreadyReturned;
@@ -455,28 +523,6 @@ export const createReturn = async (req: Request, res: Response) => {
     });
   }
 
-  // if (refund_account_id) {
-  //   if (!mongoose.Types.ObjectId.isValid(refund_account_id)) {
-  //     throw new BadRequest("Invalid refund_account_id");
-  //   }
-
-  //   const bankAccount = await BankAccountModel.findOne({
-  //     _id: refund_account_id,
-  //     warehouseId: warehouseId,
-  //     status: true,
-  //   });
-
-  //   if (!bankAccount) {
-  //     throw new BadRequest("Refund account is not valid");
-  //   }
-
-  //   if (bankAccount.balance < totalReturnAmount) {
-  //     throw new BadRequest(
-  //       `Insufficient balance in refund account. Available: ${bankAccount.balance}, Required: ${totalReturnAmount}`
-  //     );
-  //   }
-  // }
-
   let image_url = "";
   if (image) {
     image_url = await saveBase64Image(
@@ -487,7 +533,7 @@ export const createReturn = async (req: Request, res: Response) => {
     );
   }
 
-  const returnDoc = await ReturnModel.create({
+  const returnDoc = ReturnModel.create({
     sale_id: sale._id,
     sale_reference: sale.reference,
     customer_id: sale.customer_id,
@@ -496,8 +542,7 @@ export const createReturn = async (req: Request, res: Response) => {
     shift_id: openShift._id,
     items: returnItems,
     total_amount: totalReturnAmount,
-    // refund_account_id: refund_account_id,
-    reason: reason || "", // 👈 reason للـ Return ككل
+    reason: reason || "",
     note: note || "",
     image: image_url,
   });
@@ -536,32 +581,112 @@ export const createReturn = async (req: Request, res: Response) => {
     }
   }
 
-  // if (refund_account_id) {
-  //   await BankAccountModel.findByIdAndUpdate(refund_account_id, {
-  //     $inc: { balance: -totalReturnAmount },
-  //   });
-  // }
+  // ✅ manual populate — top level
+  const returnRaw = ReturnModel.findById(returnDoc._id);
 
-  const fullReturn = await ReturnModel.findById(returnDoc._id)
-    .populate("sale_id", "reference grand_total date")
-    .populate("customer_id", "name email phone_number")
-    .populate("warehouse_id", "name")
-    .populate("cashier_id", "name email")
-    .populate("shift_id", "start_time status")
-    .populate("refund_account_id", "name type balance")
-    .populate({
-      path: "items.product_id",
-      select: "name ar_name image",
-    })
-    .populate({
-      path: "items.product_price_id",
-      select: "price code",
-    })
-    .populate({
-      path: "items.bundle_id",
-      select: "name price",
-    })
-    .lean();
+  if (!returnRaw) {
+    throw new NotFound("Return not found after creation");
+  }
+
+  const salePop = returnRaw.sale_id
+    ? SaleModel.findById(returnRaw.sale_id)
+    : null;
+
+  const customerPop = returnRaw.customer_id
+    ? CustomerModel.findById(returnRaw.customer_id)
+    : null;
+
+  const warehousePop = returnRaw.warehouse_id
+    ? WarehouseModel.findById(returnRaw.warehouse_id)
+    : null;
+
+  // ⚠️ swap in whatever model your cashier_id actually references
+  const cashierPop = returnRaw.cashier_id
+    ? UserModel.findById(returnRaw.cashier_id)
+    : null;
+
+  const shiftPop = returnRaw.shift_id
+    ? CashierShift.findById(returnRaw.shift_id)
+    : null;
+
+  const refundAccountPop = returnRaw.refund_account_id
+    ? BankAccountModel.findById(returnRaw.refund_account_id)
+    : null;
+
+  // ✅ manual populate — nested, inside the `items` array
+  const populatedItems = (returnRaw.items || []).map((item: any) => {
+    const productPop = item.product_id
+      ? ProductModel.findById(item.product_id)
+      : null;
+
+    const productPricePop = item.product_price_id
+      ? ProductPriceModel.findById(item.product_price_id)
+      : null;
+
+    const bundlePop = item.bundle_id
+      ? PandelModel.findById(item.bundle_id)
+      : null;
+
+    return {
+      ...item,
+      product_id: productPop
+        ? {
+            _id: productPop._id,
+            name: productPop.name,
+            ar_name: productPop.ar_name,
+            image: productPop.image,
+          }
+        : null,
+      product_price_id: productPricePop
+        ? {
+            _id: productPricePop._id,
+            price: productPricePop.price,
+            code: productPricePop.code,
+          }
+        : null,
+      bundle_id: bundlePop
+        ? { _id: bundlePop._id, name: bundlePop.name, price: bundlePop.price }
+        : null,
+    };
+  });
+
+  const fullReturn = {
+    ...returnRaw,
+    sale_id: salePop
+      ? {
+          _id: salePop._id,
+          reference: salePop.reference,
+          grand_total: salePop.grand_total,
+          date: salePop.date,
+        }
+      : null,
+    customer_id: customerPop
+      ? {
+          _id: customerPop._id,
+          name: customerPop.name,
+          email: customerPop.email,
+          phone_number: customerPop.phone_number,
+        }
+      : null,
+    warehouse_id: warehousePop
+      ? { _id: warehousePop._id, name: warehousePop.name }
+      : null,
+    cashier_id: cashierPop
+      ? { _id: cashierPop._id, name: cashierPop.name, email: cashierPop.email }
+      : null,
+    shift_id: shiftPop
+      ? { _id: shiftPop._id, start_time: shiftPop.start_time, status: shiftPop.status }
+      : null,
+    refund_account_id: refundAccountPop
+      ? {
+          _id: refundAccountPop._id,
+          name: refundAccountPop.name,
+          type: refundAccountPop.type,
+          balance: refundAccountPop.balance,
+        }
+      : null,
+    items: populatedItems,
+  };
 
   return SuccessResponse(res, {
     message: "Return created successfully",
@@ -678,36 +803,119 @@ export const getReturnById = async (req: Request, res: Response) => {
     Array.isArray(return_id) ? return_id[0] : return_id
   ) as string;
 
-  let returnDoc;
-
-  if (!returnDoc) {
-    returnDoc = await ReturnModel.findOne({ reference: returnIdStr });
-  }
+  const returnDoc = ReturnModel.findOne({ reference: returnIdStr });
 
   if (!returnDoc) {
     throw new NotFound("Return not found");
   }
 
-  const fullReturn = await ReturnModel.findById(returnDoc._id)
-    .populate("sale_id", "reference grand_total date paid_amount")
-    .populate("customer_id", "name email phone_number")
-    .populate("warehouse_id", "name location")
-    .populate("cashier_id", "name email")
-    .populate("shift_id", "start_time status")
-    .populate("refund_account_id", "name type")
-    .populate({
-      path: "items.product_id",
-      select: "name ar_name image price",
-    })
-    .populate({
-      path: "items.product_price_id",
-      select: "price code",
-    })
-    .populate({
-      path: "items.bundle_id",
-      select: "name price",
-    })
-    .lean();
+  const returnRaw = ReturnModel.findById(returnDoc._id);
+
+  if (!returnRaw) {
+    throw new NotFound("Return not found");
+  }
+
+  // ✅ manual populate — top level
+  const salePop = returnRaw.sale_id
+    ? SaleModel.findById(returnRaw.sale_id)
+    : null;
+
+  const customerPop = returnRaw.customer_id
+    ? CustomerModel.findById(returnRaw.customer_id)
+    : null;
+
+  const warehousePop = returnRaw.warehouse_id
+    ? WarehouseModel.findById(returnRaw.warehouse_id)
+    : null;
+
+  // ⚠️ swap in whatever model your cashier_id actually references
+  const cashierPop = returnRaw.cashier_id
+    ? UserModel.findById(returnRaw.cashier_id)
+    : null;
+
+  const shiftPop = returnRaw.shift_id
+    ? CashierShift.findById(returnRaw.shift_id)
+    : null;
+
+  const refundAccountPop = returnRaw.refund_account_id
+    ? BankAccountModel.findById(returnRaw.refund_account_id)
+    : null;
+
+  // ✅ manual populate — nested, inside the `items` array
+  const populatedItems = (returnRaw.items || []).map((item: any) => {
+    const productPop = item.product_id
+      ? ProductModel.findById(item.product_id)
+      : null;
+
+    const productPricePop = item.product_price_id
+      ? ProductPriceModel.findById(item.product_price_id)
+      : null;
+
+    const bundlePop = item.bundle_id
+      ? PandelModel.findById(item.bundle_id)
+      : null;
+
+    return {
+      ...item,
+      product_id: productPop
+        ? {
+            _id: productPop._id,
+            name: productPop.name,
+            ar_name: productPop.ar_name,
+            image: productPop.image,
+            price: productPop.price,
+          }
+        : null,
+      product_price_id: productPricePop
+        ? {
+            _id: productPricePop._id,
+            price: productPricePop.price,
+            code: productPricePop.code,
+          }
+        : null,
+      bundle_id: bundlePop
+        ? { _id: bundlePop._id, name: bundlePop.name, price: bundlePop.price }
+        : null,
+    };
+  });
+
+  const fullReturn = {
+    ...returnRaw,
+    sale_id: salePop
+      ? {
+          _id: salePop._id,
+          reference: salePop.reference,
+          grand_total: salePop.grand_total,
+          date: salePop.date,
+          paid_amount: salePop.paid_amount,
+        }
+      : null,
+    customer_id: customerPop
+      ? {
+          _id: customerPop._id,
+          name: customerPop.name,
+          email: customerPop.email,
+          phone_number: customerPop.phone_number,
+        }
+      : null,
+    warehouse_id: warehousePop
+      ? {
+          _id: warehousePop._id,
+          name: warehousePop.name,
+          location: warehousePop.location,
+        }
+      : null,
+    cashier_id: cashierPop
+      ? { _id: cashierPop._id, name: cashierPop.name, email: cashierPop.email }
+      : null,
+    shift_id: shiftPop
+      ? { _id: shiftPop._id, start_time: shiftPop.start_time, status: shiftPop.status }
+      : null,
+    refund_account_id: refundAccountPop
+      ? { _id: refundAccountPop._id, name: refundAccountPop.name, type: refundAccountPop.type }
+      : null,
+    items: populatedItems,
+  };
 
   return SuccessResponse(res, {
     message: "Return fetched successfully",

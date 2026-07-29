@@ -34,13 +34,22 @@ export const getGiftCard = async (
   res: Response
 ): Promise<void> => {
   const { id } = req.params;
-  const giftCard = await GiftCardModel.findById(id).populate(
-    "customer_id",
-    "name email"
-  );
-  if (!giftCard) {
+
+  const giftCardRaw = GiftCardModel.findById(id);
+  if (!giftCardRaw) {
     throw new NotFound("Gift card not found");
   }
+
+  const customerPop = giftCardRaw.customer_id
+    ? CustomerModel.findById(giftCardRaw.customer_id)
+    : null;
+
+  const giftCard = {
+    ...giftCardRaw,
+    customer_id: customerPop
+      ? { _id: customerPop._id, name: customerPop.name, email: customerPop.email }
+      : null,
+  };
 
   SuccessResponse(res, { giftCard });
 };

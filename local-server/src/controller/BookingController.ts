@@ -177,10 +177,10 @@ export const payRemaining = async (req: Request, res: Response) => {
   }
 
   // Check Open Shift
-  const openShift = await CashierShift.findOne({
-    cashierman_id: cashierId,
-    status: "open",
-  }).sort({ start_time: -1 });
+  const openShift = CashierShift.findOne(
+    { cashierman_id: cashierId, status: "open" },
+    { sort: { start_time: -1 } }
+  );
 
   if (!openShift) {
     throw new BadRequest(
@@ -188,14 +188,10 @@ export const payRemaining = async (req: Request, res: Response) => {
     );
   }
 
-  const booking = await BookingModel.findOne({
+  const booking = BookingModel.findOne({
     _id: id,
     WarehouseId: warehouseId,
-  })
-    .populate("CustmerId")
-    .populate("WarehouseId")
-    .populate("ProductId")
-    .populate("option_id");
+  });
 
   if (!booking)
     throw new NotFound("Booking not found or not assigned to your warehouse");
@@ -204,14 +200,12 @@ export const payRemaining = async (req: Request, res: Response) => {
     throw new BadRequest("Booking is already paid and converted to sale");
   }
 
-  const option = await ProductPriceOptionModel.findById(
+  const option = ProductPriceOptionModel.findById(
     (booking as any).option_id
   );
   if (!option) throw new BadRequest("Product option not found");
 
-  const productPrice = await ProductPriceModel.findById(
-    option.product_price_id
-  );
+  const productPrice = ProductPriceModel.findById(option.product_price_id);
   if (!productPrice) throw new BadRequest("Product price not found");
 
   const quantity = 1;
@@ -241,7 +235,7 @@ export const payRemaining = async (req: Request, res: Response) => {
     date: new Date(),
   };
 
-  const sale = await SaleModel.create(saleData);
+  const sale = SaleModel.create(saleData);
 
   const productSaleData = {
     sale_id: sale._id,
@@ -253,10 +247,10 @@ export const payRemaining = async (req: Request, res: Response) => {
     isBundle: false,
   };
 
-  await ProductSalesModel.create(productSaleData);
+  ProductSalesModel.create(productSaleData);
 
-  booking.status = "pay";
-  await booking.save();
+  // ✅ replaces booking.status = "pay"; await booking.save();
+  BookingModel.updateById(booking._id, { status: "pay" });
 
   SuccessResponse(res, {
     message:

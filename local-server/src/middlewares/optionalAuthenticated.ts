@@ -45,8 +45,8 @@ export async function optionalAuthenticated(
       }));
     } else if (decoded.role_id) {
       const [roleData, userData] = await Promise.all([
-        RoleModel.findById(decoded.role_id).lean(),
-        UserModel.findById(decoded.id).select("permissions").lean(),
+        RoleModel.findById(decoded.role_id),
+        UserModel.findById(decoded.id),
       ]);
 
       const rolePermissions = (roleData?.permissions || []).map((p: any) => ({

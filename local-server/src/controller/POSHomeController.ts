@@ -497,8 +497,6 @@ export const getActiveBundles = async (req: Request, res: Response) => {
         (bundle.products || []).map(async (p: any) => {
           // جلب المنتج
           const product = await ProductModel.findById(p.productId)
-            .select("name ar_name image price")
-            .lean();
 
           if (!product) return null;
 

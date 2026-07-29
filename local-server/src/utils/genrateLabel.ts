@@ -4,6 +4,7 @@ import { ProductModel } from "../models/product";
 import { ProductPriceModel } from "../models/productPrice";
 import { NotFound } from "../Errors/NotFound";
 import { PaperConfig, LabelConfig, LabelData } from "../types/generateLabel";
+import { BrandModel } from "../models/brand";
 
 // PDFKit's mixin methods (fillColor, heightOfString, fillAndStroke, etc.)
 // aren't fully reflected in @types/pdfkit's class type, so we widen the
@@ -696,9 +697,15 @@ export const generateLabelsPDF = async (
   const labelsData: LabelData[] = [];
 
   for (const item of products) {
-    const product = await ProductModel.findById(item.productId).populate(
-      "brandId"
-    );
+    const productRaw = ProductModel.findById(item.productId);
+
+    const brandPop = productRaw?.brandId
+      ? BrandModel.findById(productRaw.brandId)
+      : null;
+
+    const product = productRaw
+      ? { ...productRaw, brandId: brandPop || null }
+      : null;
     if (!product) throw new NotFound(`Product not found: ${item.productId}`);
 
     let price = (product as any).price;

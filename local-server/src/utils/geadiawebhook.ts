@@ -38,9 +38,7 @@ export const geideaWebhook = async (req: Request, res: Response) => {
         const geideaConfig = await GeideaModel.findOne({
             payment_method_id: order.paymentMethod,
             isActive: true,
-        })
-            .select("webhookSecret")
-            .lean();
+        });
 
         const geideaSecretKey = normalize(
             geideaConfig?.webhookSecret || process.env.GEIDEA_HMAC_KEY || process.env.GEIDEA_SECRET_KEY
