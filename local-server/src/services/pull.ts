@@ -18,11 +18,26 @@ import { triggerImageDownload } from "./imageDownloader";
 const REMOTE_BASE = process.env.REMOTE_API_URL;
 const SYNC_CURSOR_KEY = "_global";
 
+type FieldOp =
+  | { op: "set"; value: any }
+  | { op: "inc"; value: number }
+  | {
+      op: "arrayPatch";
+      updated: { _id: any; deltas: Record<string, number>; set: Record<string, any> }[];
+      added: any[];
+      removed: any[];
+    };
+
+type UpdatePayload = {
+  fields: Record<string, FieldOp>;
+  updatedAt?: string;
+};
+
 type RemoteChange = {
   table_name: string;
   op: "insert" | "update" | "delete";
   record_id: string;
-  data?: Record<string, any>;
+  data?: Record<string, any> | UpdatePayload;
 };
 
 /**
@@ -105,9 +120,28 @@ export async function pullAllTables(): Promise<Record<string, number>> {
         for (const change of tableChanges) {
           if (change.op === "delete") {
             db.run(`DELETE FROM ${table} WHERE ${pk} = ?`, [change.record_id]);
-          } else {
-            applyUpsert(db, table, change.data!, localColumns, pk);
-            enqueuePendingImages(extractImageUrls(table, change.data!));
+            continue;
+          }
+
+          if (change.op === "insert") {
+            const row = (change.data ?? {}) as Record<string, any>;
+            applyUpsert(db, table, row, localColumns, pk);
+            enqueuePendingImages(extractImageUrls(table, row));
+            continue;
+          }
+
+          // change.op === "update"
+          const updatePayload = (change.data ?? { fields: {} }) as UpdatePayload;
+          const changedValues = applyFieldOps(
+            db,
+            table,
+            change.record_id,
+            updatePayload,
+            localColumns,
+            pk
+          );
+          if (changedValues) {
+            enqueuePendingImages(extractImageUrls(table, changedValues));
           }
         }
         db.run("COMMIT");
@@ -135,6 +169,20 @@ export async function pullAllTables(): Promise<Record<string, number>> {
   return results;
 }
 
+function getLocalUpdatedAt(db: any, table: string, pk: string, recordId: string): string | undefined {
+  const stmt = db.prepare(`SELECT updatedAt FROM ${table} WHERE ${pk} = ?`);
+  stmt.bind(sanitizeBindValues([recordId]));
+  let updatedAt: string | undefined = undefined;
+  if (stmt.step()) {
+    updatedAt = stmt.getAsObject().updatedAt;
+  }
+  stmt.free();
+  return updatedAt;
+}
+
+/**
+ * Insert path only (remote sends a full flat row on insert, no diffing needed).
+ */
 function applyUpsert(
   db: any,
   table: string,
@@ -142,13 +190,7 @@ function applyUpsert(
   localColumns: string[],
   pk: string
 ) {
-  const stmt = db.prepare(`SELECT updatedAt FROM ${table} WHERE ${pk} = ?`);
-  stmt.bind(sanitizeBindValues([row[pk]]));
-  let localUpdatedAt: string | undefined = undefined;
-  if (stmt.step()) {
-    localUpdatedAt = stmt.getAsObject().updatedAt;
-  }
-  stmt.free();
+  const localUpdatedAt = getLocalUpdatedAt(db, table, pk, row[pk]);
 
   const remoteUpdatedAt = row.updatedAt ?? row.updated_at;
   if (localUpdatedAt && remoteUpdatedAt && new Date(localUpdatedAt) > new Date(remoteUpdatedAt)) {
@@ -170,4 +212,134 @@ function applyUpsert(
      ON CONFLICT(${pk}) DO UPDATE SET ${updates}`,
     sanitizeBindValues(columns.map((c) => row[c]))
   );
+}
+
+/**
+ * Update path — applies { fields: { col: {op:"set"|"inc"|"arrayPatch", value} } }
+ * against the local row. Returns a flat { col: value } map of what changed
+ * (for image-url extraction) or null if nothing was applied.
+ */
+function applyFieldOps(
+  db: any,
+  table: string,
+  recordId: string,
+  payload: UpdatePayload,
+  localColumns: string[],
+  pk: string
+): Record<string, any> | null {
+  const fields = payload.fields ?? {};
+  const keys = Object.keys(fields);
+  if (keys.length === 0) return null;
+
+  const localUpdatedAt = getLocalUpdatedAt(db, table, pk, recordId);
+  if (!localUpdatedAt) {
+    console.warn(`Update target ${table}/${recordId} not found locally — skipping`);
+    return null;
+  }
+
+  if (payload.updatedAt && new Date(localUpdatedAt) > new Date(payload.updatedAt)) {
+    console.log(`Skipping ${table}/${recordId} — local version is newer (LWW)`);
+    return null;
+  }
+
+  const setClauses: string[] = [];
+  const setValues: any[] = [];
+  const changedValues: Record<string, any> = {};
+
+  for (const key of keys) {
+    if (!localColumns.includes(key)) continue;
+    const fieldOp = fields[key];
+
+    if (fieldOp.op === "arrayPatch") {
+      applyArrayPatch(db, table, pk, recordId, key, fieldOp);
+      continue;
+    }
+
+    if (fieldOp.op === "inc") {
+      setClauses.push(`${key} = ${key} + ?`);
+      setValues.push(...sanitizeBindValues([fieldOp.value]));
+      continue;
+    }
+
+    // "set"
+    setClauses.push(`${key} = ?`);
+    setValues.push(...sanitizeBindValues([fieldOp.value]));
+    changedValues[key] = fieldOp.value;
+  }
+
+  if (payload.updatedAt) {
+    setClauses.push(`updatedAt = ?`);
+    setValues.push(...sanitizeBindValues([payload.updatedAt]));
+  }
+
+  if (setClauses.length > 0) {
+    db.run(
+      `UPDATE ${table} SET ${setClauses.join(", ")} WHERE ${pk} = ?`,
+      [...setValues, ...sanitizeBindValues([recordId])]
+    );
+  }
+
+  return Object.keys(changedValues).length > 0 ? changedValues : null;
+}
+
+/**
+ * Mirrors remote's applyArrayPatch: applies per-item numeric deltas / field
+ * sets against a JSON array column, plus whole-item add/remove.
+ */
+function applyArrayPatch(
+  db: any,
+  table: string,
+  pk: string,
+  recordId: string,
+  column: string,
+  patch: {
+    updated: { _id: any; deltas: Record<string, number>; set: Record<string, any> }[];
+    added: any[];
+    removed: any[];
+  }
+) {
+  const stmt = db.prepare(`SELECT ${column} FROM ${table} WHERE ${pk} = ?`);
+  stmt.bind(sanitizeBindValues([recordId]));
+  let raw: string | null = null;
+  if (stmt.step()) {
+    raw = stmt.getAsObject()[column];
+  }
+  stmt.free();
+
+  let arr: any[] = [];
+  if (raw) {
+    try {
+      arr = JSON.parse(raw);
+    } catch {
+      arr = [];
+    }
+  }
+
+  const byId = new Map(arr.map((item: any) => [item._id, item]));
+
+  for (const { _id, deltas, set } of patch.updated ?? []) {
+    const item = byId.get(_id);
+    if (!item) continue;
+    for (const [k, delta] of Object.entries(deltas ?? {})) {
+      item[k] = (item[k] ?? 0) + (delta as number);
+    }
+    for (const [k, v] of Object.entries(set ?? {})) {
+      item[k] = v;
+    }
+  }
+
+  for (const id of patch.removed ?? []) {
+    byId.delete(id);
+  }
+
+  let nextArr = Array.from(byId.values());
+
+  for (const item of patch.added ?? []) {
+    nextArr.push(item);
+  }
+
+  db.run(`UPDATE ${table} SET ${column} = ? WHERE ${pk} = ?`, [
+    JSON.stringify(nextArr),
+    recordId,
+  ]);
 }

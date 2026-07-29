@@ -33,7 +33,6 @@ const CashierSchema: SchemaDef = {
   },
   printer_type: {
     type: "string",
-    enum: ["USB", "NETWORK"],
   },
   printer_IP: {
     type: "string",
