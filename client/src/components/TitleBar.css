@@ -1,0 +1,79 @@
+.titlebar {
+
+    height:42px;
+
+    background:#F8C07A;
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    -webkit-app-region:drag;
+
+    user-select:none;
+
+    border-bottom:1px solid #e9b66e;
+}
+
+.left{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:10px;
+
+    padding-left:15px;
+}
+
+.logo{
+
+    width:24px;
+
+    height:24px;
+}
+
+.title{
+
+    font-size:15px;
+
+    font-weight:600;
+}
+
+.right{
+
+    display:flex;
+
+    align-items:center;
+}
+
+.right button{
+
+    width:45px;
+
+    height:42px;
+
+    border:none;
+
+    background:transparent;
+
+    font-size:16px;
+
+    cursor:pointer;
+
+    -webkit-app-region:no-drag;
+}
+
+.right button:hover{
+
+    background:rgba(255,255,255,.3);
+}
+
+.close:hover{
+
+    background:#e81123;
+
+    color:white;
+}

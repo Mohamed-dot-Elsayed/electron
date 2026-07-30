@@ -171,6 +171,14 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
+    autoHideMenuBar: true,
+    frame: false, // Remove Windows title bar
+    titleBarStyle: "hidden",
+
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+    },
   });
 
   console.log(">>> BrowserWindow created, id:", mainWindow.id);
@@ -339,6 +347,25 @@ if (gotSingleInstanceLock) {
     });
   });
 }
+
+ipcMain.on("window-minimize", () => {
+    BrowserWindow.getFocusedWindow()?.minimize();
+});
+
+ipcMain.on("window-maximize", () => {
+    const win = BrowserWindow.getFocusedWindow();
+
+    if (!win) return;
+
+    if (win.isMaximized())
+        win.unmaximize();
+    else
+        win.maximize();
+});
+
+ipcMain.on("window-close", () => {
+    BrowserWindow.getFocusedWindow()?.close();
+});
 
 app.on("before-quit", async (event) => {
   if (!isQuitting) {
