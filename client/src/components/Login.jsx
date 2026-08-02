@@ -6,11 +6,7 @@ import { z } from "zod";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -54,15 +50,18 @@ export default function LoginPage() {
       const res = await postData("api/auth/login", values);
 
       if (res.success) {
-        const { token, user } = res.data;
+        const { token, user, hasOpenShift } = res.data;
 
         // تخزين البيانات في sessionStorage (مش localStorage)
         sessionStorage.setItem("token", token);
         sessionStorage.setItem("user", JSON.stringify(user));
-        sessionStorage.setItem("warehouseId", JSON.stringify(user?.warehouse_id || null));
+        sessionStorage.setItem(
+          "warehouseId",
+          JSON.stringify(user?.warehouse_id || null),
+        );
 
-        // ✅ بعد النجاح يروح للصفحة الرئيسية
-        navigate("/cashier");
+        // ✅ لو فيه شيفت مفتوح يروح للصفحة الرئيسية، لو مفيش يروح للكاشير
+        navigate(hasOpenShift ? "/" : "/cashier");
       }
     } catch (err) {
       console.error("Login error:", err);
@@ -74,7 +73,13 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-purple-50 to-purple-100">
       <Card className="w-full max-w-lg rounded-lg shadow-lg">
         <CardHeader className="flex flex-col items-center gap-2 text-center">
-          <img src={logo} alt="SalePro Logo" width={100} height={40} className="mb-2" />
+          <img
+            src={logo}
+            alt="SalePro Logo"
+            width={100}
+            height={40}
+            className="mb-2"
+          />
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -87,7 +92,11 @@ export default function LoginPage() {
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
-                      <Input type="email" placeholder="admin@example.com" {...field} />
+                      <Input
+                        type="email"
+                        placeholder="admin@example.com"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -102,7 +111,11 @@ export default function LoginPage() {
                   <FormItem>
                     <FormLabel>Password</FormLabel>
                     <FormControl>
-                      <Input type="password" placeholder="••••••••" {...field} />
+                      <Input
+                        type="password"
+                        placeholder="••••••••"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

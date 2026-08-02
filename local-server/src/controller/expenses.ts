@@ -18,6 +18,7 @@ export const createExpense = async (req: Request, res: Response) => {
     throw new BadRequest("Please provide all required fields");
   }
 
+
   if (amount <= 0) {
     throw new BadRequest("Amount must be greater than 0");
   }
@@ -68,7 +69,7 @@ export const createExpense = async (req: Request, res: Response) => {
 
   const expense = ExpenseModel.create({
     name,
-    amount,
+    amount:Number(amount),
     Category_id,
     note,
     financial_accountId,

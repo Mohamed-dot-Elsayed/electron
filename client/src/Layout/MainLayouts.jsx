@@ -21,14 +21,13 @@ export default function MainLayouts() {
   const shouldHideNavbar = isLoginPage || isCashierPage || isShiftOpenPage;
 
   return (
-    <SidebarProvider>
-      <main className="w-full">
-        <div className="flex flex-col min-h-screen md:!ps-2 sm:!p-0 md:max-w-auto sm:w-full">
-
+    <SidebarProvider className="min-h-0 h-full">
+      <main className="w-full h-full">
+        <div className="flex flex-col h-full md:!ps-2 sm:!p-0 md:max-w-auto sm:w-full">
           {/* 3. تطبيق الشرط هنا */}
           {!shouldHideNavbar && <Navbar className="!p-2" />}
 
-          <div className="relative flex-1 p-4">
+          <div className="relative flex-1 min-h-0 overflow-y-auto p-4">
             {isLoading && <Loading />}
             <Outlet />
           </div>
