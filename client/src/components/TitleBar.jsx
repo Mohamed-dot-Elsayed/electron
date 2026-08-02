@@ -146,7 +146,7 @@ export default function TitleBar({ currentLocalData, lastSyncedData }) {
       const hasPullResults = pullResults && Object.keys(pullResults).length > 0;
       setPullSummary({
         status: pulledData?.status ?? "unknown",
-        text: hasPullResults ? JSON.stringify(pullResults) : "No data",
+        text: hasPullResults ? Object.keys(pullResults).length: "No data",
       });
 
       // ---- STEP 2: PUSH (only starts once pull has fully resolved) ----
