@@ -3,9 +3,10 @@ import { getDB, saveDB } from "../db/db";
 import { deserializeRow } from "../db/createModel";
 import { getModelSchema } from "../db/model-registry";
 import { isIncrementalField } from "../db/schemaHelpers";
-import { getOrCreateClientId } from "./appMeta";
+import { getLastSyncAt, getOrCreateClientId } from "./appMeta";
 
 const REMOTE_BASE = process.env.REMOTE_API_URL;
+const SYNC_CURSOR_KEY = "_global";
 
 type ChangeRow = {
   id: string;
@@ -72,6 +73,8 @@ function buildPayload(
 export async function pushAllChanges() {
   const db = getDB();
   const clientId = getOrCreateClientId();
+  const lastSync = getLastSyncAt(SYNC_CURSOR_KEY)
+
 
   const res = db.exec(`
     SELECT id, table_name, record_id, op, old_payload, new_payload, created_at
@@ -82,7 +85,7 @@ export async function pushAllChanges() {
 
   if (!res[0]) {
     console.log("No pending changes to push");
-    return { pushed: 0 };
+    return { pushed: 0, lastSync };
   }
 
   const columns = res[0].columns;
@@ -162,6 +165,5 @@ export async function pushAllChanges() {
     );
     // left unsynced on purpose -> retried next push cycle
   }
-
-  return { pushed: data.data.applied?.length ?? 0, lastSync:new Date() };
+  return { lastSync, pushed: (data.data.applied?.length ?? 0) };
 }
