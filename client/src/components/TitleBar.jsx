@@ -262,7 +262,7 @@ export default function TitleBar({ currentLocalData, lastSyncedData }) {
                     style={{ display: "flex", flexDirection: "column", gap: 2 }}
                   >
                     <span>
-                      Pull: {pullSummary?.status} — {pullSummary?.results.length || 0} 
+                      Pull: {pullSummary?.status} — {pullSummary?.text} 
                     </span>
                     <span>
                       Push: {pushSummary?.status} — {pushSummary?.pushed} pushed
