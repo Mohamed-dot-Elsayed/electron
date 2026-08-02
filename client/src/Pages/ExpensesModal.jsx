@@ -26,7 +26,7 @@ export default function ExpensesModal({ onClose, expense = null, refetchParent }
 
   const [expense_name, setExpenseName] = useState("");
   const [Category_id, setCategoryId] = useState("");
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(0);
   const [note, setNote] = useState("");
   const [financial_accountId, setFinancialAccountId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);

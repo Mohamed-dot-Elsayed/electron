@@ -15,7 +15,7 @@ export default function OrderPage({
   propUserId,
   discountData = { discount: 0, module: [] },
 }) {
-  const { i18n } = useTranslation()
+  const { i18n } = useTranslation();
   const isArabic = i18n.language === "ar";
   const [ordersByTable, setOrdersByTable] = useState({});
   const [ordersByUser, setOrdersByUser] = useState({});
@@ -27,15 +27,33 @@ export default function OrderPage({
   const navigate = useNavigate();
   const pendingOrder = location.state?.pendingOrder;
 
-  const currentOrderType = propOrderType || location.state?.orderType || sessionStorage.getItem("order_type") || "take_away";
-  const currentTableId = propTableId || location.state?.tableId || sessionStorage.getItem("table_id") || null;
-  const currentUserId = propUserId || location.state?.delivery_user_id || sessionStorage.getItem("delivery_user_id") || null;
+  const currentOrderType =
+    propOrderType ||
+    location.state?.orderType ||
+    sessionStorage.getItem("order_type") ||
+    "take_away";
+  const currentTableId =
+    propTableId ||
+    location.state?.tableId ||
+    sessionStorage.getItem("table_id") ||
+    null;
+  const currentUserId =
+    propUserId ||
+    location.state?.delivery_user_id ||
+    sessionStorage.getItem("delivery_user_id") ||
+    null;
 
   const isDineIn = currentOrderType === "dine_in" && !!currentTableId;
   const isDelivery = currentOrderType === "delivery" && !!currentUserId;
 
-  const { data: dineInData, loading: dineInLoading, refetch: refetchDineIn } = useGet(
-    isDineIn && currentTableId ? `cashier/dine_in_table_order/${currentTableId}` : null
+  const {
+    data: dineInData,
+    loading: dineInLoading,
+    refetch: refetchDineIn,
+  } = useGet(
+    isDineIn && currentTableId
+      ? `cashier/dine_in_table_order/${currentTableId}`
+      : null,
   );
 
   // ✅ FIXED: تحميل الطلب المتكرر من sessionStorage للـ take_away
@@ -50,35 +68,45 @@ export default function OrderPage({
         count: parseInt(detail.count || 1),
         selectedVariation: detail.variation_name || null,
         selectedExtras: Array.isArray(detail.addons) ? detail.addons : [],
-        selectedVariations: detail.variation_name ? [detail.variation_name] : [],
+        selectedVariations: detail.variation_name
+          ? [detail.variation_name]
+          : [],
         selectedExcludes: [],
         preparation_status: "pending",
         type: "main_item",
-        addons: Array.isArray(detail.addons) ? detail.addons.map((addon, addonIndex) => ({
-          id: `addon_${addonIndex}_${Date.now()}`,
-          name: addon.name || "Unknown Addon",
-          price: parseFloat(addon.price || 0),
-          originalPrice: parseFloat(addon.price || 0),
-          count: parseInt(addon.count || 1),
-          preparation_status: "pending",
-        })) : [],
+        addons: Array.isArray(detail.addons)
+          ? detail.addons.map((addon, addonIndex) => ({
+              id: `addon_${addonIndex}_${Date.now()}`,
+              name: addon.name || "Unknown Addon",
+              price: parseFloat(addon.price || 0),
+              originalPrice: parseFloat(addon.price || 0),
+              count: parseInt(addon.count || 1),
+              preparation_status: "pending",
+            }))
+          : [],
       }));
       setTakeAwayItems(mappedItems);
       setPendingOrderLoaded(true);
       sessionStorage.setItem("cart", JSON.stringify(mappedItems));
       sessionStorage.setItem("order_type", "take_away");
-      sessionStorage.setItem("pending_order_info", JSON.stringify({
-        orderId: pendingOrder.orderId,
-        orderNumber: pendingOrder.orderNumber,
-        amount: pendingOrder.amount,
-        notes: pendingOrder.notes,
-      }));
+      sessionStorage.setItem(
+        "pending_order_info",
+        JSON.stringify({
+          orderId: pendingOrder.orderId,
+          orderNumber: pendingOrder.orderNumber,
+          amount: pendingOrder.amount,
+          notes: pendingOrder.notes,
+        }),
+      );
     } else if (!pendingOrderLoaded && currentOrderType === "take_away") {
       const storedCartString = sessionStorage.getItem("cart");
       if (storedCartString && storedCartString !== "undefined") {
         try {
           const storedCart = JSON.parse(storedCartString);
-          console.log("📦 Loading cart from sessionStorage in OrderPage:", storedCart);
+          console.log(
+            "📦 Loading cart from sessionStorage in OrderPage:",
+            storedCart,
+          );
           setTakeAwayItems(Array.isArray(storedCart) ? storedCart : []);
         } catch (error) {
           console.error("Error parsing cart JSON from sessionStorage:", error);
@@ -93,13 +121,14 @@ export default function OrderPage({
     if (isDineIn && currentTableId && dineInData?.success) {
       const mappedItems = Array.isArray(dineInData.success)
         ? dineInData.success.map((item) => ({
-          ...item,
-          originalPrice: item.originalPrice ?? item.price ?? 0,
-          temp_id: item.temp_id || `dinein_${item.id}_${Date.now()}`,
-          count: parseInt(item.count || 1),
-          price: parseFloat(item.price || 0),
-          preparation_status: item.prepration || item.preparation_status || "pending",
-        }))
+            ...item,
+            originalPrice: item.originalPrice ?? item.price ?? 0,
+            temp_id: item.temp_id || `dinein_${item.id}_${Date.now()}`,
+            count: parseInt(item.count || 1),
+            price: parseFloat(item.price || 0),
+            preparation_status:
+              item.prepration || item.preparation_status || "pending",
+          }))
         : [];
 
       setOrdersByTable((prev) => ({
@@ -114,13 +143,14 @@ export default function OrderPage({
     if (isDelivery && currentUserId && dineInData?.success) {
       const mappedItems = Array.isArray(dineInData.success)
         ? dineInData.success.map((item) => ({
-          ...item,
-          originalPrice: item.originalPrice ?? item.price ?? 0,
-          temp_id: item.temp_id || `delivery_${item.id}_${Date.now()}`,
-          count: parseInt(item.count || 1),
-          price: parseFloat(item.price || 0),
-          preparation_status: item.prepration || item.preparation_status || "pending",
-        }))
+            ...item,
+            originalPrice: item.originalPrice ?? item.price ?? 0,
+            temp_id: item.temp_id || `delivery_${item.id}_${Date.now()}`,
+            count: parseInt(item.count || 1),
+            price: parseFloat(item.price || 0),
+            preparation_status:
+              item.prepration || item.preparation_status || "pending",
+          }))
         : [];
 
       setOrdersByUser((prev) => ({
@@ -190,7 +220,9 @@ export default function OrderPage({
   };
 
   const handleAddItem = (product, options = {}) => {
-    const safeCurrentItems = Array.isArray(currentOrderItems) ? currentOrderItems : [];
+    const safeCurrentItems = Array.isArray(currentOrderItems)
+      ? currentOrderItems
+      : [];
 
     if (options.updateExisting && options.index !== undefined) {
       const updatedItems = [...safeCurrentItems];
@@ -199,7 +231,10 @@ export default function OrderPage({
       return;
     }
 
-    const existingItemIndex = safeCurrentItems.findIndex((item) => areProductsEqual(item, product)); let updatedItems = [...safeCurrentItems];
+    const existingItemIndex = safeCurrentItems.findIndex((item) =>
+      areProductsEqual(item, product),
+    );
+    let updatedItems = [...safeCurrentItems];
 
     if (existingItemIndex !== -1) {
       const existingItem = updatedItems[existingItemIndex];
@@ -236,8 +271,11 @@ export default function OrderPage({
   console.log("🎯 OrderPage Order Type:", currentOrderType);
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 p-4 w-full min-h-screen lg:h-screen" dir={isArabic ? "rtl" : "ltr"}>
-      <div className="w-full lg:w-[70%] h-[60vh] lg:h-full overflow-hidden">
+    <div
+      className="flex flex-col lg:flex-row gap-4 p-4 w-full h-full"
+      dir={isArabic ? "rtl" : "ltr"}
+    >
+      <div className="w-full lg:w-[70%] flex-1 min-h-0 lg:h-full overflow-hidden">
         <Item
           onAddToOrder={handleAddItem}
           fetchEndpoint={fetchEndpoint}
@@ -246,7 +284,7 @@ export default function OrderPage({
           orderItems={currentOrderItems}
         />
       </div>
-      <div className="w-full lg:w-[30%] h-[80vh] lg:h-full overflow-y-auto">
+      <div className="w-full lg:w-[30%] flex-1 min-h-0 lg:h-full overflow-y-auto">
         <Card
           key={refreshTrigger}
           orderItems={currentOrderItems}
@@ -260,7 +298,6 @@ export default function OrderPage({
           discountData={discountData}
         />
       </div>
-
     </div>
   );
 }

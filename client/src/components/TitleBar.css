@@ -1,79 +1,162 @@
 .titlebar {
+  position: relative;
+  height: 42px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  -webkit-app-region: drag;
+  user-select: none;
+  overflow: hidden;
 
-    height:42px;
-
-    background:#F8C07A;
-
-    display:flex;
-
-    justify-content:space-between;
-
-    align-items:center;
-
-    -webkit-app-region:drag;
-
-    user-select:none;
-
-    border-bottom:1px solid #e9b66e;
+  /* Signature element: a slow-drifting aurora gradient instead of a flat
+       brand color. Four stops keep it feeling alive without being loud. */
+  background: linear-gradient(115deg, #2d1b4e, #7b2ff7, #f6416c, #ff9a3d);
+  background-size: 300% 300%;
+  animation: aurora-drift 14s ease-in-out infinite;
 }
 
-.left{
-
-    display:flex;
-
-    align-items:center;
-
-    gap:10px;
-
-    padding-left:15px;
+@keyframes aurora-drift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
 }
 
-.logo{
-
-    width:24px;
-
-    height:24px;
+.left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 14px;
+  min-width: 0;
+  z-index: 1;
 }
 
-.title{
-
-    font-size:15px;
-
-    font-weight:600;
+.logo-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(6px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
 }
 
-.right{
-
-    display:flex;
-
-    align-items:center;
+.logo {
+  width: 17px;
+  height: 17px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
 }
 
-.right button{
-
-    width:45px;
-
-    height:42px;
-
-    border:none;
-
-    background:transparent;
-
-    font-size:16px;
-
-    cursor:pointer;
-
-    -webkit-app-region:no-drag;
+.title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
 }
 
-.right button:hover{
-
-    background:rgba(255,255,255,.3);
+.title .spark {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffd166;
+  box-shadow: 0 0 8px 2px rgba(255, 209, 102, 0.85);
+  animation: spark-pulse 2.4s ease-in-out infinite;
 }
 
-.close:hover{
+@keyframes spark-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
 
-    background:#e81123;
+.right {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding-right: 6px;
+  gap: 4px;
+  z-index: 1;
+}
 
-    color:white;
+.right button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition:
+    background-color 0.18s ease,
+    transform 0.12s ease,
+    color 0.18s ease;
+}
+
+.right button svg {
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+
+.right button:hover {
+  background: rgba(255, 255, 255, 0.22);
+  transform: translateY(-1px);
+}
+
+.right button:active {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(0);
+}
+
+.right button:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 1px;
+}
+
+.close:hover {
+  background: #f6416c !important;
+  color: #fff;
+}
+
+.close:active {
+  background: #d62b53 !important;
+}
+/* Animation for the sync icon when loading */
+.sync-btn.syncing svg {
+  animation: spin-sync 1s linear infinite;
+  opacity: 0.6; 
+}
+
+@keyframes spin-sync {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }

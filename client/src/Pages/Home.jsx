@@ -104,7 +104,7 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center w-full">
+    <div className="h-full bg-white flex flex-col items-center w-full">
 
       {/* 1. قسم السفري (TakeAway) - يعرض الطلب المعلق إذا وجد */}
       {state.tabValue === "take_away" && (
