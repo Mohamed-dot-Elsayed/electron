@@ -13,7 +13,7 @@ export const createDiscount = async (req: Request, res: Response) => {
 };
 
 export const getAllDiscounts = async (req: Request, res: Response) => {
-  const discounts = await DiscountModel.find();
+  const discounts = DiscountModel.find();
   SuccessResponse(res, {
     message: "Discounts retrieved successfully",
     discounts,

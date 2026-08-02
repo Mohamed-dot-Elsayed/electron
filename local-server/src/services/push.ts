@@ -163,5 +163,5 @@ export async function pushAllChanges() {
     // left unsynced on purpose -> retried next push cycle
   }
 
-  return { pushed: data.data.applied?.length ?? 0 };
+  return { pushed: data.data.applied?.length ?? 0, lastSync:new Date() };
 }

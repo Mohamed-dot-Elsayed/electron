@@ -26,6 +26,7 @@ import {
 import { authorizePermissions } from "../middlewares/haspremission";
 import { catchAsync } from "../utils/catchAsync";
 import { createCustomer } from "../controller/customerGroupController";
+import { getProductWarehouseStock } from "../controller/product";
 
 const router = express.Router();
 
@@ -48,6 +49,7 @@ router.get(
   authorizePermissions("POS", "View"),
   getProductsByCategory
 );
+router.get("/products/:productId/warehouse-stock", getProductWarehouseStock);
 router.get(
   "/brands/:brandId/products",
   authorizePermissions("POS", "View"),
