@@ -4,6 +4,7 @@ import { RouterProvider } from "react-router-dom";
 import router from "./router";
 import "./firebase";
 import "react-toastify/dist/ReactToastify.css";
+import "./App.css";
 import TitleBar from "./components/TitleBar";
 
 function App() {
