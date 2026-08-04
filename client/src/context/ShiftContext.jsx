@@ -1,11 +1,17 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
 
 const ShiftContext = createContext();
 
 export const useShift = () => {
   const context = useContext(ShiftContext);
   if (!context) {
-    throw new Error('useShift must be used within a ShiftProvider');
+    throw new Error("useShift must be used within a ShiftProvider");
   }
   return context;
 };
@@ -16,41 +22,42 @@ export const ShiftProvider = ({ children }) => {
 
   // Check shift status from localStorage on mount
   useEffect(() => {
-    const shiftStatus = localStorage.getItem('shiftStatus');
-    const startTime = localStorage.getItem('shiftStartTime');
-    
-    if (shiftStatus === 'open' && startTime) {
+    const shiftStatus = localStorage.getItem("shiftStatus");
+    const startTime = localStorage.getItem("shiftStartTime");
+
+    if (shiftStatus === "open" && startTime) {
       setIsShiftOpen(true);
       setShiftStartTime(new Date(startTime));
     }
   }, []);
 
-  const openShift = useCallback(() => {
-    const now = new Date();
+  const openShift = useCallback((serverStartTime) => {
+    // ✅ استخدم الـ start_time الحقيقي القادم من السيرفر لو موجود،
+    // ولو مفيش (شيفت جديد فعلاً) نستخدم الوقت الحالي كـ fallback
+    const now = serverStartTime ? new Date(serverStartTime) : new Date();
     console.log("Opening shift at:", now); // Debug log
     setIsShiftOpen(true);
     setShiftStartTime(now);
-    localStorage.setItem('shiftStatus', 'open');
-    localStorage.setItem('shiftStartTime', now.toISOString());
+    localStorage.setItem("shiftStatus", "open");
+    localStorage.setItem("shiftStartTime", now.toISOString());
   }, []);
 
   const closeShift = useCallback(() => {
     setIsShiftOpen(false);
     setShiftStartTime(null);
-    localStorage.removeItem('shiftStatus');
-    localStorage.removeItem('shiftStartTime');
+    localStorage.removeItem("shiftStatus");
+    localStorage.removeItem("shiftStartTime");
   }, []);
 
   return (
-    <ShiftContext.Provider 
-      value={{ 
-        isShiftOpen, 
-        shiftStartTime, 
-        openShift, 
-        closeShift 
+    <ShiftContext.Provider
+      value={{
+        isShiftOpen,
+        shiftStartTime,
+        openShift,
+        closeShift,
       }}
     >
       {children}
     </ShiftContext.Provider>
-  );
-};
+  )};
