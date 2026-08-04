@@ -5,6 +5,7 @@ import { SuccessResponse } from "../utils/response";
 import { ProductModel } from "../models/product";
 import { UserModel } from "../models/user";
 import { PaymentMethodModel } from "../models/paymentMethod";
+import { WarehouseModel } from "../models/warehouse";
 
 /**
  * GET /admin/online-orders
@@ -31,6 +32,8 @@ export const getAllOnlineOrders = async (req: Request, res: Response) => {
       const user = UserModel.findById(order.user);
 
       const paymentMethod = PaymentMethodModel.findById(order.paymentMethod);
+
+      const warehouse = WarehouseModel.findById(order.warehouse);
 
       const cartItems =
         order.cartItems?.map((item: any) => {
@@ -67,6 +70,13 @@ export const getAllOnlineOrders = async (req: Request, res: Response) => {
               name: paymentMethod.name,
               ar_name: paymentMethod.ar_name,
               type: paymentMethod.type,
+            }
+          : null,
+
+        warehouse: warehouse
+          ? {
+              _id: warehouse._id,
+              name: warehouse.name,
             }
           : null,
 

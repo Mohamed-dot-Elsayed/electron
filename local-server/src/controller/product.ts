@@ -13,14 +13,14 @@ export const getProductWarehouseStock = async (req: Request, res: Response) => {
     throw new BadRequest("productId is required");
   }
 
-  const product = await ProductModel.findOne({ _id: productId });
-
+  const product = ProductModel.findOne({_id:productId});
+  
   if (!product) {
     throw new BadRequest("Product not found");
   }
 
   // all stock rows for this product (base product + variants, across warehouses)
-  const stockRows = await Product_WarehouseModel.find({ productId });
+  const stockRows = Product_WarehouseModel.find({ productId });
 
   // pull warehouse info in one shot instead of N queries
   const warehouseIds = [...new Set(stockRows.map((row: any) => row.warehouseId))];
