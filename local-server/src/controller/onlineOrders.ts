@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { OrderModel } from "../models/order";
-import { NotFound } from "../Errors";
+import { BadRequest, NotFound } from "../Errors";
 import { SuccessResponse } from "../utils/response";
 import { ProductModel } from "../models/product";
 import { UserModel } from "../models/user";
@@ -14,12 +14,23 @@ import { WarehouseModel } from "../models/warehouse";
 export const getAllOnlineOrders = async (req: Request, res: Response) => {
   const { status } = req.query;
 
-  const filter: any = {};
+  const filter: any = {
+    status: { $nin: ["pending", "rejected"] },
+  };
 
-  if (
-    status &&
-    ["pending","rejected","confirmed","processing","out_for_delivery","delivered","returned","failed_to_deliver","canceled","scheduled","refund"].includes(status as string)
-  ) {
+  const allowedStatuses = [
+    "confirmed",
+    "processing",
+    "out_for_delivery",
+    "delivered",
+    "returned",
+    "failed_to_deliver",
+    "canceled",
+    "scheduled",
+    "refund",
+  ];
+
+  if (status && allowedStatuses.includes(status as string)) {
     filter.status = status;
   }
 
@@ -128,7 +139,12 @@ export const getOnlineOrderById = async (req: Request, res: Response) => {
   const order = {
     ...orderRaw,
     user: userPop
-      ? { _id: userPop._id, name: userPop.name, email: userPop.email, phone: userPop.phone }
+      ? {
+          _id: userPop._id,
+          name: userPop.name,
+          email: userPop.email,
+          phone: userPop.phone,
+        }
       : null,
     paymentMethod: paymentMethodPop
       ? {
@@ -155,10 +171,25 @@ export const updateOnlineOrderStatus = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { status, statusDescription } = req.body;
 
-  if (!status || !["pending","rejected","confirmed","processing","out_for_delivery","delivered","returned","failed_to_deliver","canceled","scheduled","refund"].includes(status)) {
-    throw new NotFound(
-      "Invalid status."
-    );
+  if (status == "rejected") {
+    throw new BadRequest("You Don't Have Permission to Reject Order");
+  }
+  if (
+    !status ||
+    ![
+      "pending",
+      "confirmed",
+      "processing",
+      "out_for_delivery",
+      "delivered",
+      "returned",
+      "failed_to_deliver",
+      "canceled",
+      "scheduled",
+      "refund",
+    ].includes(status)
+  ) {
+    throw new NotFound("Invalid status.");
   }
 
   const order = OrderModel.updateById(id, {
