@@ -1,206 +1,136 @@
-# Electron + Express + React — Local/Backend Sync Demo
+# SysteGo Desktop (POS Sync App)
 
-A working demo of an offline-first desktop app: Electron holds a **local SQLite
-database**, and syncs with your **POS web backend** (the same backend your web app
-uses). A "Sync now" button pushes local changes up and pulls remote changes down,
-with last-write-wins conflict resolution.
+A production-ready, offline-first Point of Sale (POS) desktop application built with **Electron**, **Express**, and **React**. SysteGo uses an in-memory/local **SQLite database (sql.js)** inside Electron to provide robust offline-first functionality, allowing cashiers to run shifts, process sales, log expenses, manage inventory, and process returns without an active internet connection. Once online, local data is bidirectionally synchronized with a remote POS cloud backend.
 
-Tested end-to-end: pushing new local rows to the backend, pulling rows created "on
-another device" back into local, and delete propagation — all confirmed working
-before packaging.
+---
 
-## Structure
+## 🛠️ Architecture & Project Structure
+
+The project is structured as a monorepo consisting of three main modules:
 
 ```
 electron-sync-demo/
-├── electron/         # Electron main process + preload
-├── local-server/     # Runs INSIDE Electron. Express + local SQLite (sql.js).
-│                      # No package.json/node_modules of its own on purpose (see note below)
-└── client/           # React frontend (categories + notes CRUD, Sync button)
+├── electron/         # Electron main process, preload scripts, and auto-updater
+├── local-server/     # Local server running INSIDE Electron (Express + sql.js SQLite)
+└── client/           # React frontend (Vite, TailwindCSS / custom styling)
 ```
 
-Two related tables: `categories` and `notes` (notes belong to a category).
+### Dependency Resolution Rule
+To optimize compilation and packaging, `local-server` has no nested `package.json` or `node_modules` of its own. Root-level dependencies (`express`, `sql.js`, and `electron-updater`) are declared in the root `package.json`. At build/package time, `electron-builder` resolves these dependencies from the parent-directory `node_modules`. This setup avoids native module rebuilding issues and prevents `electron-builder` from excluding them during packaging.
 
-**Why `local-server` has no `package.json`/`node_modules` of its own:** electron-builder
-decides what to bundle based on dependencies declared in the **root** `package.json`.
-A separate nested `package.json` (which this project had at first) confuses that
-detection — express/sql.js were installed correctly locally, but electron-builder
-silently excluded them from the packaged app because it didn't see them as
-root-level dependencies. So `express`, `sql.js`, and `electron-updater` are declared
-in the root `package.json` instead, and `local-server`'s compiled code resolves them
-via Node's normal parent-directory `node_modules` lookup — no separate install needed
-there.
+---
 
-## Why sql.js instead of better-sqlite3
+## ✨ Core Features & Recent Updates
 
-`better-sqlite3` needs native compilation per Node/Electron version (a real pain when
-packaging — needs `electron-rebuild`). `sql.js` is SQLite compiled to WebAssembly —
-pure JS, no native step, works identically in dev and after packaging. Trade-off: it's
-an in-memory DB that gets written to a `.db` file on disk after each write, instead of
-a live file handle — irrelevant at this scale.
+### 📦 Offline-First & Bidirectional Sync
+- **WASM SQLite (`sql.js`)**: We use `sql.js` (SQLite compiled to WebAssembly) instead of `better-sqlite3`. Since it is pure JS with no native C++ bindings, it works out-of-the-box across development and packaged builds without requiring native compilation hooks (`electron-rebuild`).
+- **Conflict-Resilient Synchronization**:
+  - Incremental sync tracks records using UUIDs (independent ID generation), `updated_at` timestamps, and a `deleted` soft-delete flag.
+  - **Push**: Transmits all locally modified records since the last successful sync.
+  - **Pull**: Fetches remote updates since the last sync. Upserts locally using a *last-write-wins* resolution strategy (`WHERE excluded.updated_at > existing.updated_at`).
 
-## How sync works
+### 🛒 Online Orders Management
+- **Order Lifecycle Handling**: Visualizes and updates order statuses through their lifecycle (`confirmed`, `processing`, `out_for_delivery`, `delivered`, `returned`, `failed_to_deliver`, `canceled`, `scheduled`, `refund`).
+- **HTTP PUT Status Transitions**: Uses the `PUT /:id/status` endpoint to transition statuses with validation logic.
+- **Robust Local Server Validations**: Prevents illegal actions, such as rejecting an order without the correct supervisor/admin permissions.
+- **Polished UI Panel**: Enhanced UI panels for viewing order tracking, shipping, and payment methods.
 
-Every row has:
-- `updated_at` (ms timestamp) — lets us ask "what changed since X" and resolve conflicts
-- `deleted` (0/1) — soft delete, so deletions propagate through sync instead of just disappearing locally
-- `id` is a UUID (not autoincrement) — required since local and the backend generate IDs independently
+### 🏪 Warehouse & Stock Tracking
+- **Multi-Warehouse Stock**: Tracks product inventory items mapped directly to specific warehouses.
+- **Stock Query Optimization**: Local server endpoints optimize product stock queries to ensure rapid rendering of available items.
+- **Product Details Page**: Displays exhaustive metadata, categorization, images, and live warehouse-specific inventory levels.
 
-**Push**: send every local row with `updated_at` newer than the last successful push.
-**Pull**: ask the backend for every row with `updated_at` newer than the last successful pull, then upsert locally — but only overwrite if the incoming row is actually newer (`WHERE excluded.updated_at > existing.updated_at`). That's the conflict resolution: last write wins.
+### 🔑 Shift Management & Cashier Auditing
+- **Opening Shift Verification**: On login, cashiers are checked for existing open shifts. If no active shift exists, they are routed to open one, preventing unauthorized sales.
+- **`useOpenShift` Custom Hook**: Reusable hook manages shift statuses, verifying server start times to initialize shift periods accurately.
+- **Shift Reports & Drawer Balances**:
+  - Closing a shift requires passcode/password confirmation.
+  - Calculates net drawer balances using the formula:  
+    $$\text{Net Cash in Drawer} = \text{Sales} - \text{Expenses} - \text{Returns}$$
+  - Groups financial transactions dynamically by bank/cash account.
+  - Generates detailed, printable shift breakdown reports containing sales receipts, logged expenses, and returns.
 
-See `local-server/src/sync.ts` for the sync logic. It talks to your **POS web backend**
-directly — there's no separate local "remote-server" simulator anymore; sync targets
-the real backend endpoint via `REMOTE_API_URL`.
+### 🔄 Sales Returns & Refunds
+- **Refund Validation**: Refund and return modules allow cashiers to process returned sales (`ReturnSalePage.jsx`).
+- **Accounting Adjustments**: Processing returns automatically deducts the refund amount from the specific cash/bank account used for the refund and records the transaction to adjust inventory stock.
 
-## Run it
+---
 
-**1. Install everything**
+## 🚀 Running the App Locally
+
+### 1. Install Dependencies
+Installs both the root packaging dependencies and client dependencies:
 ```bash
 npm run install:all
 ```
-This installs root dependencies (which now includes `express`/`sql.js` for
-`local-server`), then `client`'s own dependencies.
 
-**2. Launch the Electron app**
+### 2. Run the Desktop App in Development Mode
+Compiles the TypeScript backend and Vite frontend, then launches the Electron desktop shell:
 ```bash
 npm start
 ```
-This builds the local server + React app, then opens the Electron window pointed at
-the local Express server (packaged) or the Vite dev server (development).
 
-**3. Client-only dev mode**
-
-To iterate on the React UI without launching Electron or the local Express server:
+### 3. Frontend-Only Dev Mode
+To prototype UI layouts in the browser without launching Electron or the local SQLite database:
 ```bash
 npm run dev:client
 ```
-This runs just the Vite dev server (`client/`) on its own — useful for fast UI
-iteration when you don't need the Electron shell or local SQLite running.
 
-**4. Try it**
-- Add categories/notes in the window.
-- Click **Sync now** — it pushes your local changes to the POS web backend and pulls
-  anything new from it.
+---
 
-## Pointing at your POS web backend
+## 🌐 Linking to Your POS Cloud Backend
 
-Set `REMOTE_API_URL` (in `local-server/.env`, loaded by `electron/main.js`) to your
-actual deployed POS backend URL. The backend needs to implement the same two
-endpoints local-server expects: `GET /sync/pull?since=<timestamp>` and
-`POST /sync/push`.
+Specify your cloud endpoint in `local-server/.env` (which is automatically loaded by the Electron main process):
+```env
+REMOTE_API_URL=https://your-deployed-pos-api.com
+```
+The cloud backend must expose matching sync endpoints:
+- `GET /sync/pull?since=<timestamp>` — returns records updated after the timestamp.
+- `POST /sync/push` — accepts local batch changes and updates the remote DB.
 
-## Packaging into an installer
+---
 
+## 📦 Packaging & Installer Generation
+
+To package the application into a distribution-ready platform-native installer (output is saved to `release/`):
 ```bash
-npm install --save-dev electron-builder
 npm run dist
 ```
-Output lands in `release/`. Since there's no native module to rebuild (sql.js is pure
-WASM), this should package cleanly without extra rebuild steps.
+*Note: Because `sql.js` runs in WebAssembly, there are no C++ compilation steps. Packaged applications compile flawlessly on Windows, Mac, and Linux.*
 
-## Auto-updates (install once, update automatically after that)
+---
 
-This project ships with `electron-updater` wired up in `electron/main.js`. On launch,
-the app checks a GitHub repo's Releases for a newer version, downloads it quietly in
-the background, and — once ready — asks the user to restart to install it. No manual
-reinstall, no re-running the setup `.exe` again.
+## 🔄 Automatic Updates Setup
 
-**One-time setup:**
+SysteGo implements automatic updates using `electron-updater`. When launched, it queries GitHub Releases, downloads updates in the background, and prompts the user to restart and install.
 
-1. Create a GitHub repo (can be private) to host releases.
-2. Edit `package.json` → `build.publish`:
+### Setup Instructions
+1. In `package.json`, specify your repository details:
    ```json
-   "publish": { "provider": "github", "owner": "your-username", "repo": "your-repo-name" }
+   "publish": {
+     "provider": "github",
+     "owner": "your-username",
+     "repo": "your-repo-name"
+   }
    ```
-3. Generate a GitHub personal access token with `repo` scope, then put it in a file
-   named exactly `electron-builder.env` in the project root — electron-builder's CLI
-   loads this automatically before every build/publish, so you never need to set an
-   env var in your terminal:
-   ```bash
-   cp electron-builder.env.example electron-builder.env
+2. Create an `electron-builder.env` file in the root directory (already added to `.gitignore`):
+   ```env
+   GH_TOKEN=ghp_yourpersonalaccesstokenhere
    ```
-   Then edit `electron-builder.env`:
-   ```
-   GH_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
-   ```
-   `electron-builder.env` is already in `.gitignore` so the token never gets committed.
-
-**Every time you ship a new version:**
-
-1. Bump the version number in `package.json` (e.g. `1.0.0` → `1.0.1`) — electron-updater
-   compares this to decide if an update exists.
-2. Build and publish in one step:
+3. **Publishing a release**: Increment the version in `package.json`, then run:
    ```bash
    npm run dist:publish
    ```
-   This builds the installer AND uploads it (plus the metadata electron-updater needs)
-   to a new GitHub Release automatically.
-3. Anyone with a previously installed copy of the app will get the update automatically
-   next time they open it — no need to send them a new installer or have them reinstall.
+   This compiles the app, builds the installer, generates update metadata, and uploads the artifacts directly to a draft/pre-release on GitHub.
 
-**First install still needs the installer once** — auto-update only handles versions
-*after* that. Distribute the very first `.exe`/`.dmg` normally; every version after
-that updates itself.
+### Private GitHub Repository Updates
+If your update repository is private:
+- Set `"private": true` inside the `publish` block of `package.json`.
+- The update check pipeline reads the compiled release token embedded in `electron/embedded-token.json` (auto-generated during `npm run build` from `electron-builder.env`) to authenticate update requests against the GitHub API.
+- **Security Precaution**: Because the GitHub token is stored in the app's static assets, use a fine-grained token with read-only permission for Releases/Contents only.
 
-**Don't have GitHub / want something simpler?** Swap the `publish` provider to
-`"generic"` and point `url` at any static file host (a folder on your own web server,
-an S3 bucket, even a shared network drive electron-updater can read over `file://`):
-```json
-"publish": { "provider": "generic", "url": "https://your-server.com/updates/" }
-```
-Then `npm run dist` (not `dist:publish`) builds the files, and you manually copy the
-contents of `release/` to that URL's folder each time.
-
-## Updating from a private GitHub repo
-
-Since your update repo is **private**, `electron-updater` needs to authenticate every
-update check — the public releases feed it normally uses (`github.com/owner/repo/releases.atom`)
-returns 404 for private repos regardless of any token, because it's an unauthenticated
-endpoint. Two things make private-repo updates work here:
-
-1. `"private": true` in `package.json` → `build.publish` tells electron-updater to use
-   the authenticated GitHub API instead of that public feed.
-2. Your `GH_TOKEN` (from `electron-builder.env`) gets baked into
-   `electron/embedded-token.json` at build time (via `scripts/generate-token-file.js`,
-   which runs automatically as part of `npm run build`), and `electron/main.js` sends
-   it as an `Authorization` header on every update check.
-
-**Security tradeoff, stated plainly:** this means your GitHub token ships inside the
-built app. Anyone with access to the installed app's files could technically extract
-it (it's sitting in a plain JSON file inside `resources/app.asar`, which can be
-unpacked with `npx asar extract`). This is a reasonable tradeoff for personal or
-small-team internal use, but:
-- Use a token scoped as narrowly as possible — ideally a fine-grained token limited to
-  just this one repo with read-only Contents access (write access, needed for
-  *publishing*, is only needed on your own dev machine — the *embedded* token only
-  needs to *read* releases, not create them).
-- Don't use this approach if you're distributing to people you don't fully trust, or
-  if the repo ever contains anything more sensitive than this demo.
-- The simplest way to remove this tradeoff entirely is to make the repo public —
-  update checks then need no auth at all.
-
-`electron/embedded-token.json` is generated fresh on every build and is gitignored —
-it's never committed, only baked into the packaged app itself.
-
-## Debugging update checks
-
-Every step of the update-check process gets logged to a plain text file (since a
-packaged app has no visible console):
+### Debugging Updates
+Check log events (such as update discovery, download states, and errors) in the localized platform log file:
 ```
 %APPDATA%\SyncDemo\update-log.txt
 ```
-Check this first if updates seem to silently do nothing — it'll show whether the app
-is even packaged (updates never run via `npm start`), what version it found, and any
-errors encountered.
-
-## Where to plug in your real project
-
-- `local-server/src/app.ts` and `db.ts` — replace the demo schema with your real tables (this is where your Drizzle/Better Auth/Zod code would eventually live, though switching from Drizzle+Postgres to this local-DB pattern is a bigger architectural decision — see note below).
-- `client/src/App.jsx` — replace with your real React components/pages.
-
-**Important**: this pattern (local SQLite + sync) is a genuinely different architecture
-than "Express + Postgres always-online" (like your POS web app might already be). It
-only makes sense if you actually want offline-capable desktop behavior. If the app can
-assume it's always online, the earlier simpler pattern (Electron → Express → POS
-backend directly, no local DB, no sync) is less code and less to maintain.
