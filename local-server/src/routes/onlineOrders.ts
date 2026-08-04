@@ -11,6 +11,6 @@ const router = Router();
 
 router.get("/", authorizePermissions("orders", "View"), catchAsync(getAllOnlineOrders));
 router.get("/:id", authorizePermissions("orders", "View"), catchAsync(getOnlineOrderById));
-router.patch("/:id/status", authorizePermissions("orders", "Edit"), catchAsync(updateOnlineOrderStatus));
+router.put("/:id/status", authorizePermissions("orders", "Edit"), catchAsync(updateOnlineOrderStatus));
 
 export default router;
