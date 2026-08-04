@@ -19,6 +19,7 @@ import AllOrders from "./Pages/AllOrders/AllOrders";
 import SinglePage from "./Pages/OnlineOrders/SinglePage";
 import OnlineTabs from "./Pages/OnlineOrders/OnlineTabs";
 import ReturnSalePage from "./Pages/Return/ReturnSalePage";
+import ProductDetails from "./Pages/Details/Productdetails";
 
 const routes = [
   {
@@ -98,6 +99,19 @@ const routes = [
             element: (
               <ProtectedRoute>
                 <Item />
+              </ProtectedRoute>
+            ),
+          },
+        ],
+      },
+      {
+        path: "product-details/:id",
+        children: [
+          {
+            index: true,
+            element: (
+              <ProtectedRoute>
+                <ProductDetails />
               </ProtectedRoute>
             ),
           },

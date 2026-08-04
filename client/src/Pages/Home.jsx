@@ -1,8 +1,15 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 
 import TakeAway from "./TakeAway";
 import OrderPage from "./OrderPage";
 import { usePost } from "@/Hooks/usePost";
+import { useOpenShift } from "@/Hooks/useOpenShift";
 import { useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
@@ -27,10 +34,17 @@ const getInitialState = (locationState) => {
   const storedOrderType = sessionStorage.getItem("order_type") || "take_away";
   const storedTab = sessionStorage.getItem("tab") || storedOrderType;
   const storedTableId = sessionStorage.getItem("table_id") || null;
-  const storedDeliveryUserId = sessionStorage.getItem("selected_user_id") || null;
-  const transferSourceTableId = sessionStorage.getItem("transfer_source_table_id") || null;
-  const transferCartIds = JSON.parse(sessionStorage.getItem("transfer_cart_ids")) || null;
-  const isTransferring = !!(transferSourceTableId && transferCartIds && transferCartIds.length > 0);
+  const storedDeliveryUserId =
+    sessionStorage.getItem("selected_user_id") || null;
+  const transferSourceTableId =
+    sessionStorage.getItem("transfer_source_table_id") || null;
+  const transferCartIds =
+    JSON.parse(sessionStorage.getItem("transfer_cart_ids")) || null;
+  const isTransferring = !!(
+    transferSourceTableId &&
+    transferCartIds &&
+    transferCartIds.length > 0
+  );
 
   return {
     tabValue: storedTab,
@@ -47,9 +61,28 @@ const getInitialState = (locationState) => {
 export default function Home() {
   const { t, i18n } = useTranslation();
   const location = useLocation();
+  const { openShiftRequest } = useOpenShift();
+  const hasCalledOpenShift = useRef(false);
 
   // ضبط الحالة الابتدائية باستخدام location.state
   const [state, setState] = useState(() => getInitialState(location.state));
+
+  // 🔁 لو جاي مباشرة من صفحة اللوجين وفيه شيفت مفتوح بالفعل على السيرفر،
+  // نفتح شيفت جديد فعليًا (نفس منطق handleOpenShift في Shift.jsx)
+  useEffect(() => {
+    if (location.state?.fromLogin && !hasCalledOpenShift.current) {
+      hasCalledOpenShift.current = true;
+
+      openShiftRequest().then((result) => {
+        if (!result.success) {
+          toast.error(t(result.message) || t("FailedToOpenShift"));
+        }
+      });
+
+      // تنظيف الـ state من الـ history عشان مايتكررش عند الـ refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state, openShiftRequest, t]);
 
   // 2. مراقبة التغييرات في الرابط (خاصة عند الانتقال من صفحات أخرى)
   useEffect(() => {
@@ -69,7 +102,10 @@ export default function Home() {
     }
 
     // حالة (B): إعادة طلب سابق (Repeated Order)
-    if (locationState?.repeatedOrder && locationState?.tabValue === "take_away") {
+    if (
+      locationState?.repeatedOrder &&
+      locationState?.tabValue === "take_away"
+    ) {
       setState((prevState) => ({
         ...prevState,
         orderType: "take_away",
@@ -92,7 +128,7 @@ export default function Home() {
 
   // دالة لاختيار الطاولة (خاصة بقسم Dine-In)
   const handleTableSelect = useCallback((tableObj) => {
-    const newTableId = typeof tableObj === 'object' ? tableObj.id : tableObj;
+    const newTableId = typeof tableObj === "object" ? tableObj.id : tableObj;
     setState((prevState) => ({
       ...prevState,
       tableId: newTableId,
@@ -105,7 +141,6 @@ export default function Home() {
 
   return (
     <div className="h-full bg-white flex flex-col items-center w-full">
-
       {/* 1. قسم السفري (TakeAway) - يعرض الطلب المعلق إذا وجد */}
       {state.tabValue === "take_away" && (
         <TakeAway
@@ -113,9 +148,6 @@ export default function Home() {
           pendingOrderData={state.pendingOrderData}
         />
       )}
-
-
-
     </div>
   );
 }

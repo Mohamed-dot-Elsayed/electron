@@ -1,4 +1,6 @@
-{/* ProductModal.jsx - Full Updated Version with different_price + variations + notes + weight + duplicate check */ }
+{
+  /* ProductModal.jsx - Full Updated Version with different_price + variations + notes + weight + duplicate check */
+}
 
 import React, { useState } from "react";
 import {
@@ -8,13 +10,18 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Minus, Plus } from "lucide-react";
+import { Minus, Plus, Info } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 
 // تحويل prices إلى variation وهمية عشان نعرضها بنفس الطريقة
 const getPricesAsVariation = (product, t) => {
-  if (!product.different_price || !product.prices || product.prices.length === 0) {
+  if (
+    !product.different_price ||
+    !product.prices ||
+    product.prices.length === 0
+  ) {
     return null;
   }
 
@@ -38,12 +45,12 @@ const calculateProductTotalPrice = (
   baseProduct,
   selectedVariation = {},
   selectedExtras = [],
-  quantity = 1
+  quantity = 1,
 ) => {
   // حالة different_price: السعر يؤخذ من النسخة المختارة فقط
   if (baseProduct.different_price && selectedVariation.price_variation) {
     const selectedPrice = baseProduct.prices?.find(
-      (p) => p._id === selectedVariation.price_variation
+      (p) => p._id === selectedVariation.price_variation,
     );
     if (selectedPrice) {
       return parseFloat(selectedPrice.price || 0) * quantity;
@@ -68,11 +75,11 @@ const calculateProductTotalPrice = (
       if (selectedOptions !== undefined) {
         if (variation.type === "single") {
           const selectedOption = variation.options?.find(
-            (opt) => opt.id === selectedOptions
+            (opt) => opt.id === selectedOptions,
           );
           if (selectedOption) {
             totalPrice += parseFloat(
-              selectedOption.price_after_tax || selectedOption.price || 0
+              selectedOption.price_after_tax || selectedOption.price || 0,
             );
           }
         } else if (variation.type === "multiple") {
@@ -80,10 +87,12 @@ const calculateProductTotalPrice = (
             ? selectedOptions
             : [selectedOptions];
           optionsArray.forEach((optionId) => {
-            const option = variation.options?.find((opt) => opt.id === optionId);
+            const option = variation.options?.find(
+              (opt) => opt.id === optionId,
+            );
             if (option) {
               totalPrice += parseFloat(
-                option.price_after_tax || option.price || 0
+                option.price_after_tax || option.price || 0,
               );
             }
           });
@@ -101,15 +110,17 @@ const calculateProductTotalPrice = (
 
     Object.entries(extraCounts).forEach(([extraId, count]) => {
       let extraItem =
-        baseProduct.allExtras?.find((extra) => extra.id === parseInt(extraId)) ||
+        baseProduct.allExtras?.find(
+          (extra) => extra.id === parseInt(extraId),
+        ) ||
         baseProduct.addons?.find((addon) => addon.id === parseInt(extraId));
 
       if (extraItem) {
         const extraPrice = parseFloat(
           extraItem.price_after_discount ||
-          extraItem.price_after_tax ||
-          extraItem.price ||
-          0
+            extraItem.price_after_tax ||
+            extraItem.price ||
+            0,
         );
         totalPrice += extraPrice * count;
       }
@@ -129,14 +140,22 @@ export const areProductsEqual = (product1, product2) => {
   // مقارنة price_variation أولاً
   if (vars1.price_variation !== vars2.price_variation) return false;
 
-  const varKeys1 = Object.keys(vars1).filter(k => k !== "price_variation").sort();
-  const varKeys2 = Object.keys(vars2).filter(k => k !== "price_variation").sort();
+  const varKeys1 = Object.keys(vars1)
+    .filter((k) => k !== "price_variation")
+    .sort();
+  const varKeys2 = Object.keys(vars2)
+    .filter((k) => k !== "price_variation")
+    .sort();
 
   if (JSON.stringify(varKeys1) !== JSON.stringify(varKeys2)) return false;
 
   for (let key of varKeys1) {
-    const val1 = Array.isArray(vars1[key]) ? [...vars1[key]].sort() : vars1[key];
-    const val2 = Array.isArray(vars2[key]) ? [...vars2[key]].sort() : vars2[key];
+    const val1 = Array.isArray(vars1[key])
+      ? [...vars1[key]].sort()
+      : vars1[key];
+    const val2 = Array.isArray(vars2[key])
+      ? [...vars2[key]].sort()
+      : vars2[key];
     if (JSON.stringify(val1) !== JSON.stringify(val2)) return false;
   }
 
@@ -177,10 +196,12 @@ const ProductModal = ({
   const [notes, setNotes] = useState("");
   const { t, i18n } = useTranslation();
   const isArabic = i18n.language === "ar";
+  const navigate = useNavigate();
 
   if (!selectedProduct) return null;
 
-  const isWeightProduct = productType === "weight" || selectedProduct.weight_status === 1;
+  const isWeightProduct =
+    productType === "weight" || selectedProduct.weight_status === 1;
 
   // دعم different_price كـ variation
   const priceVariation = selectedProduct.different_price
@@ -193,21 +214,24 @@ const ProductModal = ({
 
   const hasVariations = effectiveVariations.length > 0;
   const hasAddons = selectedProduct.addons && selectedProduct.addons.length > 0;
-  const hasExtras = selectedProduct.allExtras && selectedProduct.allExtras.length > 0;
-  const hasExcludes = selectedProduct.excludes && selectedProduct.excludes.length > 0;
+  const hasExtras =
+    selectedProduct.allExtras && selectedProduct.allExtras.length > 0;
+  const hasExcludes =
+    selectedProduct.excludes && selectedProduct.excludes.length > 0;
 
   const totalPrice = calculateProductTotalPrice(
     selectedProduct,
     selectedVariation,
     selectedExtras,
-    quantity
+    quantity,
   );
 
   // صورة النسخة المختارة (لو موجودة)
   const selectedPriceImage =
     selectedVariation.price_variation &&
-    selectedProduct.prices?.find((p) => p._id === selectedVariation.price_variation)
-      ?.gallery?.[0];
+    selectedProduct.prices?.find(
+      (p) => p._id === selectedVariation.price_variation,
+    )?.gallery?.[0];
 
   const displayedImage = selectedPriceImage || selectedProduct.image;
 
@@ -287,7 +311,7 @@ const ProductModal = ({
                   <p className="text-sm text-gray-600 mt-1">
                     {
                       selectedProduct.prices?.find(
-                        (p) => p._id === selectedVariation.price_variation
+                        (p) => p._id === selectedVariation.price_variation,
                       )?.code
                     }
                   </p>
@@ -298,14 +322,20 @@ const ProductModal = ({
                   const startQty = Number(selectedProduct.start_quantaty || 0);
                   const wholePrice = Number(selectedProduct.whole_price || 0);
                   // هنا نستخدم quantity (الكمية المختارة في المودال) بدلاً من الكمية في الداتا
-                  const isWholesale = startQty > 0 && quantity >= startQty && wholePrice > 0;
+                  const isWholesale =
+                    startQty > 0 && quantity >= startQty && wholePrice > 0;
 
                   if (isWholesale && !selectedProduct.different_price) {
-                    const originalTotal = (parseFloat(selectedProduct.price_after_discount || selectedProduct.price || 0)) * quantity;
+                    const originalTotal =
+                      parseFloat(
+                        selectedProduct.price_after_discount ||
+                          selectedProduct.price ||
+                          0,
+                      ) * quantity;
                     return (
                       <div className="flex flex-col items-end">
                         <span className="text-sm text-gray-500 line-through">
-                          {(originalTotal).toFixed(2)} {t("EGP")}
+                          {originalTotal.toFixed(2)} {t("EGP")}
                         </span>
                         <span className="text-xl font-semibold text-purple-600">
                           {totalPrice.toFixed(2)} {t("EGP")}
@@ -323,12 +353,25 @@ const ProductModal = ({
               </div>
             </div>
 
-            <DialogDescription className="text-gray-500 text-sm mb-4">
+            <DialogDescription className="text-gray-500 text-sm mb-2">
               {selectedProduct.description &&
-                selectedProduct.description !== "null"
+              selectedProduct.description !== "null"
                 ? selectedProduct.description
                 : t("Nodescriptionavailable")}
             </DialogDescription>
+
+            <button
+              type="button"
+              onClick={() => {
+                setNotes("");
+                onClose();
+                navigate(`/product-details/${selectedProduct._id}`);
+              }}
+              className="flex items-center gap-1.5 text-sm font-medium text-purple-600 hover:text-purple-700 mb-4"
+            >
+              <Info size={16} />
+              {t("MoreInformation") || "More information"}
+            </button>
 
             {/* Variations Section - يشمل different_price */}
             {hasVariations && (
@@ -361,18 +404,20 @@ const ProductModal = ({
                               onClick={() =>
                                 onVariationChange(variation.id, option.id)
                               }
-                              className={`relative overflow-hidden rounded-xl border-2 px-4 py-3 text-sm font-medium transition-all duration-200 ${isSelected
-                                ? "bg-purple-600 text-white border-purple-600 shadow-lg scale-105"
-                                : "bg-white text-gray-700 border-gray-300 hover:border-purple-400"
-                                }`}
+                              className={`relative overflow-hidden rounded-xl border-2 px-4 py-3 text-sm font-medium transition-all duration-200 ${
+                                isSelected
+                                  ? "bg-purple-600 text-white border-purple-600 shadow-lg scale-105"
+                                  : "bg-white text-gray-700 border-gray-300 hover:border-purple-400"
+                              }`}
                             >
-                              {option.image && variation.id === "price_variation" && (
-                                <img
-                                  src={option.image}
-                                  alt={option.name}
-                                  className="w-12 h-12 object-cover rounded-lg mb-2 mx-auto"
-                                />
-                              )}
+                              {option.image &&
+                                variation.id === "price_variation" && (
+                                  <img
+                                    src={option.image}
+                                    alt={option.name}
+                                    className="w-12 h-12 object-cover rounded-lg mb-2 mx-auto"
+                                  />
+                                )}
                               <div className="text-center">
                                 <div className="capitalize">{option.name}</div>
                                 {parseFloat(option.price || 0) > 0 && (
@@ -392,12 +437,17 @@ const ProductModal = ({
                       // نفس الكود القديم للـ multiple
                       <div className="space-y-3">
                         {variation.options.map((option) => {
-                          const selectedOptions = selectedVariation[variation.id] || [];
-                          const optionCount = selectedOptions.filter(id => id === option.id).length;
+                          const selectedOptions =
+                            selectedVariation[variation.id] || [];
+                          const optionCount = selectedOptions.filter(
+                            (id) => id === option.id,
+                          ).length;
                           const totalSelected = selectedOptions.length;
 
-                          const canDecrease = totalSelected > (variation.min || 0);
-                          const canIncrease = !variation.max || totalSelected < variation.max;
+                          const canDecrease =
+                            totalSelected > (variation.min || 0);
+                          const canIncrease =
+                            !variation.max || totalSelected < variation.max;
 
                           return (
                             <div
@@ -409,7 +459,9 @@ const ProductModal = ({
                                   {option.name}
                                 </span>
                                 <div className="text-xs text-gray-500">
-                                  {parseFloat(option.price_after_tax || option.price || 0) === 0
+                                  {parseFloat(
+                                    option.price_after_tax || option.price || 0,
+                                  ) === 0
                                     ? "Free"
                                     : `+${(option.price_after_tax || option.price).toFixed(2)} EGP`}
                                 </div>
@@ -417,15 +469,29 @@ const ProductModal = ({
                               <div className="flex items-center space-x-2">
                                 <button
                                   className="bg-gray-200 text-purple-600 p-1 rounded-full hover:bg-gray-300 disabled:opacity-50"
-                                  onClick={() => onVariationChange(variation.id, option.id, "remove")}
+                                  onClick={() =>
+                                    onVariationChange(
+                                      variation.id,
+                                      option.id,
+                                      "remove",
+                                    )
+                                  }
                                   disabled={optionCount === 0 || !canDecrease}
                                 >
                                   <Minus size={16} />
                                 </button>
-                                <span className="text-sm font-semibold w-8 text-center">{optionCount}</span>
+                                <span className="text-sm font-semibold w-8 text-center">
+                                  {optionCount}
+                                </span>
                                 <button
                                   className="bg-purple-600 text-white p-1 rounded-full hover:bg-purple-700 disabled:opacity-50"
-                                  onClick={() => onVariationChange(variation.id, option.id, "add")}
+                                  onClick={() =>
+                                    onVariationChange(
+                                      variation.id,
+                                      option.id,
+                                      "add",
+                                    )
+                                  }
                                   disabled={!canIncrease}
                                 >
                                   <Plus size={16} />
@@ -454,9 +520,14 @@ const ProductModal = ({
                   {selectedProduct.allExtras.map((extra) => {
                     const count = getExtraCount(extra.id);
                     return (
-                      <div key={extra.id} className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
+                      <div
+                        key={extra.id}
+                        className="flex items-center justify-between p-3 border rounded-lg bg-gray-50"
+                      >
                         <div className="flex-1">
-                          <span className="text-sm font-medium text-gray-700 capitalize">{extra.name}</span>
+                          <span className="text-sm font-medium text-gray-700 capitalize">
+                            {extra.name}
+                          </span>
                           <div className="text-xs text-gray-500">
                             {extra.price > 0
                               ? `+${(extra.price_after_discount || extra.price || 0).toFixed(2)} ${t("EGP")}`
@@ -471,7 +542,9 @@ const ProductModal = ({
                           >
                             <Minus size={16} />
                           </button>
-                          <span className="text-sm font-semibold w-8 text-center">{count}</span>
+                          <span className="text-sm font-semibold w-8 text-center">
+                            {count}
+                          </span>
                           <button
                             className="bg-purple-600 text-white p-1 rounded-full hover:bg-purple-700"
                             onClick={() => handleExtraIncrement(extra.id)}
@@ -496,11 +569,22 @@ const ProductModal = ({
                   {selectedProduct.addons.map((addon) => {
                     const count = getExtraCount(addon.id);
                     return (
-                      <div key={addon.id} className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
+                      <div
+                        key={addon.id}
+                        className="flex items-center justify-between p-3 border rounded-lg bg-gray-50"
+                      >
                         <div className="flex-1">
-                          <span className="text-sm font-medium text-gray-700 capitalize">{addon.name}</span>
+                          <span className="text-sm font-medium text-gray-700 capitalize">
+                            {addon.name}
+                          </span>
                           <div className="text-xs text-gray-500">
-                            +{(addon.price_after_discount || addon.price || 0).toFixed(2)} {t("EGP")}
+                            +
+                            {(
+                              addon.price_after_discount ||
+                              addon.price ||
+                              0
+                            ).toFixed(2)}{" "}
+                            {t("EGP")}
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
@@ -511,7 +595,9 @@ const ProductModal = ({
                           >
                             <Minus size={16} />
                           </button>
-                          <span className="text-sm font-semibold w-8 text-center">{count}</span>
+                          <span className="text-sm font-semibold w-8 text-center">
+                            {count}
+                          </span>
                           <button
                             className="bg-purple-600 text-white p-1 rounded-full hover:bg-purple-700"
                             onClick={() => handleExtraIncrement(addon.id)}
@@ -537,12 +623,15 @@ const ProductModal = ({
                     <button
                       key={item.id}
                       onClick={() => onExclusionChange(item.id)}
-                      className={`px-4 py-2 rounded-lg border-2 text-sm font-medium transition-all ${selectedExcludes.includes(item.id)
-                        ? "bg-purple-600 text-white border-purple-600"
-                        : "bg-gray-100 text-gray-700 border-gray-300 hover:border-purple-400"
-                        }`}
+                      className={`px-4 py-2 rounded-lg border-2 text-sm font-medium transition-all ${
+                        selectedExcludes.includes(item.id)
+                          ? "bg-purple-600 text-white border-purple-600"
+                          : "bg-gray-100 text-gray-700 border-gray-300 hover:border-purple-400"
+                      }`}
                     >
-                      <span className="line-through capitalize">{item.name}</span>
+                      <span className="line-through capitalize">
+                        {item.name}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -599,7 +688,9 @@ const ProductModal = ({
                   >
                     <Minus size={16} />
                   </button>
-                  <span className="text-base font-semibold w-12 text-center">{quantity}</span>
+                  <span className="text-base font-semibold w-12 text-center">
+                    {quantity}
+                  </span>
                   <button
                     className="bg-purple-600 text-white p-1 rounded-full hover:bg-purple-700"
                     onClick={() => onQuantityChange(quantity + 1)}
@@ -616,29 +707,31 @@ const ProductModal = ({
                   selectedProduct,
                   selectedVariation,
                   selectedExtras,
-                  1
+                  1,
                 );
 
                 const filteredExtras = selectedExtras.filter((id) =>
-                  (selectedProduct.allExtras || []).some((e) => e.id === id)
+                  (selectedProduct.allExtras || []).some((e) => e.id === id),
                 );
 
                 const filteredAddons = selectedExtras.filter((id) =>
-                  (selectedProduct.addons || []).some((a) => a.id === id)
+                  (selectedProduct.addons || []).some((a) => a.id === id),
                 );
 
                 const addonsForBackend = filteredAddons.map((addonId) => {
-                  const src = (selectedProduct.addons || []).find((a) => a.id === addonId);
+                  const src = (selectedProduct.addons || []).find(
+                    (a) => a.id === addonId,
+                  );
                   return {
                     addon_id: addonId,
                     quantity: 1,
                     price: src
                       ? parseFloat(
-                        src.price_after_discount ||
-                        src.price_after_tax ||
-                        src.price ||
-                        0
-                      )
+                          src.price_after_discount ||
+                            src.price_after_tax ||
+                            src.price ||
+                            0,
+                        )
                       : 0,
                   };
                 });
@@ -657,12 +750,16 @@ const ProductModal = ({
                   addons: addonsForBackend,
                   allExtras: selectedProduct.allExtras,
                   addons_list: selectedProduct.addons,
-                  variations: (selectedProduct.variations || []).map((group) => ({
-                    ...group,
-                    selected_option_id: Array.isArray(selectedVariation[group.id])
-                      ? selectedVariation[group.id]
-                      : selectedVariation[group.id] || null,
-                  })),
+                  variations: (selectedProduct.variations || []).map(
+                    (group) => ({
+                      ...group,
+                      selected_option_id: Array.isArray(
+                        selectedVariation[group.id],
+                      )
+                        ? selectedVariation[group.id]
+                        : selectedVariation[group.id] || null,
+                    }),
+                  ),
                 };
 
                 onAddFromModal(enhancedProduct, { checkDuplicate: true });

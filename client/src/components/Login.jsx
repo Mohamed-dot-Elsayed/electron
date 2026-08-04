@@ -61,7 +61,11 @@ export default function LoginPage() {
         );
 
         // ✅ لو فيه شيفت مفتوح يروح للصفحة الرئيسية، لو مفيش يروح للكاشير
-        navigate(hasOpenShift ? "/" : "/cashier");
+        if (hasOpenShift) {
+          navigate("/", { state: { fromLogin: true } });
+        } else {
+          navigate("/cashier");
+        }
       }
     } catch (err) {
       console.error("Login error:", err);
