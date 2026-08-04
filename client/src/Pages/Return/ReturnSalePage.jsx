@@ -151,7 +151,7 @@ export default function ReturnSalePage() {
     const payload = {
       sale_id: saleData._id,
       items: validItems.map((item) => ({
-        product_price_id: item.product_price?._id || item._id,
+        product_sale_id: item.product_price?._id || item._id,
         quantity: item.return_quantity,
         reason: item.reason.trim(),
       })),
@@ -167,7 +167,7 @@ export default function ReturnSalePage() {
       formData.append("refund_account_id", payload.refund_account_id);
       formData.append("note", payload.note);
       payload.items.forEach((item, idx) => {
-        formData.append(`items[${idx}][product_price_id]`, item.product_price_id);
+        formData.append(`items[${idx}][product_sale_id]`, item.product_sale_id);
         formData.append(`items[${idx}][quantity]`, item.quantity);
         formData.append(`items[${idx}][reason]`, item.reason);
       });

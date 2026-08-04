@@ -110,6 +110,10 @@ const ReturnSchema: SchemaDef = {
     type: "date",
     default: () => new Date(),
   },
+  reason:{
+    type: "string",
+    default: "",
+  },
 };
 
 export const ReturnModel = createModel("Return", ReturnSchema, {
