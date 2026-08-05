@@ -126,7 +126,6 @@ export const getProductsByCategory = async (req: Request, res: Response) => {
   const warehouseProducts = Product_WarehouseModel.find({
     warehouseId: warehouseId,
   })
-    .filter((item) => item.quantity > 0)
     .map(({ productId, quantity }) => ({ productId, quantity }));
 
   const productIds = warehouseProducts.map((wp) => wp.productId);
@@ -210,7 +209,6 @@ export const getProductsByBrand = async (req: Request, res: Response) => {
   const warehouseProducts = Product_WarehouseModel.find({
     warehouseId: warehouseId,
   })
-    .filter((item) => item.quantity > 0)
     .map(({ productId, quantity }) => ({ productId, quantity }));
 
   const productIds = warehouseProducts.map((wp) => wp.productId);
