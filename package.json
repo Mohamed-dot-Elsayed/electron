@@ -76,7 +76,7 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "include": "installer.nsh",
-      "deleteAppDataOnUninstall": false,
+      "deleteAppDataOnUninstall": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "SysteGo",
