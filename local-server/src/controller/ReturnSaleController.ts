@@ -18,6 +18,9 @@ import { WarehouseModel } from "../models/warehouse";
 import { GiftCardModel } from "../models/giftCard";
 import { TaxesModel } from "../models/taxes";
 import { DiscountModel } from "../models/discount";
+
+const roundCurrency = (value: number) => Math.round(value * 100) / 100;
+const toCents = (n: number) => Math.round(Number(n) * 100);
 // ═══════════════════════════════════════════════════════════
 // GET SALE FOR RETURN
 // ═══════════════════════════════════════════════════════════
@@ -237,23 +240,27 @@ export const getSaleForReturn = async (req: Request, res: Response) => {
     };
   });
 
-  const previousReturns = ReturnModel.find({
-    sale_id: sale._id,
-  }).map((item) => {
-    const account = BankAccountModel.findById(item.financial_account_id);
+  const previousReturns = ReturnModel.find({ sale_id: sale._id }).map(
+    (item) => {
+      const accountId =
+        item.refund_account_id ||
+        (item.financials &&
+          item.financials[0] &&
+          item.financials[0].account_id);
+      const account = accountId ? BankAccountModel.findById(accountId) : null;
 
-    return {
-      ...item,
-
-      financial_account_id: account
-        ? {
-            _id: account._id,
-            name: account.name,
-            ar_name: account.ar_name,
-          }
-        : null,
-    };
-  });
+      return {
+        ...item,
+        financial_account_id: account
+          ? {
+              _id: account._id,
+              name: account.name,
+              ar_name: account.ar_name,
+            }
+          : null,
+      };
+    }
+  );
 
   const returnedQuantities: { [key: string]: number } = {};
 
@@ -407,7 +414,7 @@ export const createReturn = async (req: Request, res: Response) => {
     );
   }
 
-  const { sale_id, items, reason, note, image } = req.body;
+  const { sale_id, items, reason, note, image, financials = [] } = req.body;
 
   if (!sale_id) {
     throw new BadRequest("sale_id is required");
@@ -465,8 +472,13 @@ export const createReturn = async (req: Request, res: Response) => {
   let totalReturnAmount = 0;
 
   for (const item of items) {
-    const { product_sale_id, product_id, product_price_id, bundle_id, quantity } =
-      item;
+    const {
+      product_sale_id,
+      product_id,
+      product_price_id,
+      bundle_id,
+      quantity,
+    } = item;
 
     if (!quantity || Number(quantity) <= 0) {
       throw new BadRequest("Return quantity must be greater than 0");
@@ -533,6 +545,45 @@ export const createReturn = async (req: Request, res: Response) => {
     );
   }
 
+  // Validate refund financial lines (if provided)
+  const finArr = Array.isArray(financials) ? financials : [];
+
+  if (finArr.length > 0) {
+    const totalFromFin = finArr.reduce(
+      (s: number, f: any) => s + Number(f.amount || 0),
+      0
+    );
+
+    if (toCents(totalFromFin) !== toCents(totalReturnAmount)) {
+      throw new BadRequest(
+        `Sum of refund payments (${totalFromFin.toFixed(
+          2
+        )}) must equal total return amount (${totalReturnAmount.toFixed(2)})`
+      );
+    }
+
+    for (const f of finArr) {
+      const accId = f.account_id || f.id;
+      const amt = Number(f.amount);
+      if (!accId) throw new BadRequest("Invalid account_id in financials");
+      if (!amt || amt <= 0)
+        throw new BadRequest("Each refund line must have amount > 0");
+
+      const bankAccount = BankAccountModel.findOne({
+        _id: accId,
+        warehouseId: { $contains: warehouseId },
+        status: true,
+        in_POS: true,
+      });
+
+      if (!bankAccount) {
+        throw new BadRequest(
+          "One of the refund financial accounts is not valid or not allowed in POS"
+        );
+      }
+    }
+  }
+
   const returnDoc = ReturnModel.create({
     sale_id: sale._id,
     sale_reference: sale.reference,
@@ -545,6 +596,9 @@ export const createReturn = async (req: Request, res: Response) => {
     reason: reason || "",
     note: note || "",
     image: image_url,
+    financials: finArr,
+    refund_account_id:
+      finArr.length === 1 ? finArr[0].account_id || finArr[0].id : undefined,
   });
 
   for (const item of returnItems) {
@@ -579,6 +633,33 @@ export const createReturn = async (req: Request, res: Response) => {
         }
       }
     }
+  }
+
+  // Apply refund financials: deduct from accounts
+  if (finArr.length > 0) {
+    for (const f of finArr) {
+      const accId = f.account_id || f.id;
+      const amt = Number(f.amount || 0);
+
+      const account = BankAccountModel.findById(accId);
+      if (!account) {
+        // shouldn't happen due to earlier validation, but guard anyway
+        continue;
+      }
+
+      BankAccountModel.updateById(account._id, {
+        balance: (account.balance || 0) - amt,
+      });
+    }
+
+    // adjust sale paid/remaining amounts to reflect refund
+    const newPaid = Math.max(0, (sale.paid_amount || 0) - totalReturnAmount);
+    const newRemaining = Math.max(0, (sale.grand_total || 0) - newPaid);
+
+    SaleModel.updateById(sale._id, {
+      paid_amount: newPaid,
+      remaining_amount: newRemaining,
+    });
   }
 
   // ✅ manual populate — top level
@@ -675,7 +756,11 @@ export const createReturn = async (req: Request, res: Response) => {
       ? { _id: cashierPop._id, name: cashierPop.name, email: cashierPop.email }
       : null,
     shift_id: shiftPop
-      ? { _id: shiftPop._id, start_time: shiftPop.start_time, status: shiftPop.status }
+      ? {
+          _id: shiftPop._id,
+          start_time: shiftPop.start_time,
+          status: shiftPop.status,
+        }
       : null,
     refund_account_id: refundAccountPop
       ? {
@@ -909,10 +994,18 @@ export const getReturnById = async (req: Request, res: Response) => {
       ? { _id: cashierPop._id, name: cashierPop.name, email: cashierPop.email }
       : null,
     shift_id: shiftPop
-      ? { _id: shiftPop._id, start_time: shiftPop.start_time, status: shiftPop.status }
+      ? {
+          _id: shiftPop._id,
+          start_time: shiftPop.start_time,
+          status: shiftPop.status,
+        }
       : null,
     refund_account_id: refundAccountPop
-      ? { _id: refundAccountPop._id, name: refundAccountPop.name, type: refundAccountPop.type }
+      ? {
+          _id: refundAccountPop._id,
+          name: refundAccountPop.name,
+          type: refundAccountPop.type,
+        }
       : null,
     items: populatedItems,
   };

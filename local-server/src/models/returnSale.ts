@@ -1,5 +1,5 @@
 import { createModel } from "../db/createModel";
-import {SchemaDef} from "../db/types"
+import { SchemaDef } from "../db/types";
 
 // Return Item sub-schema
 const ReturnItemSchema: SchemaDef = {
@@ -89,6 +89,24 @@ const ReturnSchema: SchemaDef = {
     type: "number",
     required: true,
   },
+  financials: {
+    type: "array",
+    items: {
+      type: "object",
+      schema: {
+        account_id: {
+          type: "string",
+          ref: "BankAccount",
+          required: true,
+        },
+        amount: {
+          type: "number",
+          required: true,
+        },
+      },
+    },
+    default: [],
+  },
   refund_method: {
     type: "string",
     enum: ["cash", "card", "store_credit", "original_method"],
@@ -110,7 +128,7 @@ const ReturnSchema: SchemaDef = {
     type: "date",
     default: () => new Date(),
   },
-  reason:{
+  reason: {
     type: "string",
     default: "",
   },
