@@ -1,6 +1,6 @@
 {
   "name": "Systego-Desktop",
-  "version": "1.0.39",
+  "version": "1.0.40",
   "main": "electron/main.js",
   "scripts": {
     "install:all": "npm install &&  cd client && npm install",
