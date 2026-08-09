@@ -23,7 +23,11 @@ type FieldOp =
   | { op: "inc"; value: number }
   | {
       op: "arrayPatch";
-      updated: { _id: any; deltas: Record<string, number>; set: Record<string, any> }[];
+      updated: {
+        _id: any;
+        deltas: Record<string, number>;
+        set: Record<string, any>;
+      }[];
       added: any[];
       removed: any[];
     };
@@ -78,8 +82,11 @@ export async function pullAllTables(): Promise<Record<string, number>> {
   } catch (error: any) {
     // Log the server's error message for debugging
     if (error.response) {
-      console.error('Response data:', JSON.stringify(error.response.data, null, 2));
-      console.error('Server error:', error.response.data.error);
+      console.error(
+        "Response data:",
+        JSON.stringify(error.response.data, null, 2)
+      );
+      console.error("Server error:", error.response.data.error);
     }
     throw error; // rethrow to be handled by the caller
   }
@@ -89,6 +96,7 @@ export async function pullAllTables(): Promise<Record<string, number>> {
   const changes: RemoteChange[] = payload.changes ?? [];
   const serverTime: string = payload.serverTime;
   const results: Record<string, number> = {};
+  console.log("changes ", changes);
 
   if (changes.length === 0) {
     setLastSyncAt(SYNC_CURSOR_KEY, serverTime);
@@ -124,14 +132,34 @@ export async function pullAllTables(): Promise<Record<string, number>> {
           }
 
           if (change.op === "insert") {
-            const row = (change.data ?? {}) as Record<string, any>;
+            const raw = (change.data ?? {}) as Record<string, any>;
+            const row =
+              raw.fields &&
+              typeof raw.fields === "object" &&
+              !Array.isArray(raw.fields)
+                ? raw.fields
+                : raw;
+
+            if (Object.keys(row).length === 0) {
+              console.warn(
+                `Empty insert payload for ${table}/${change.record_id}, skipping`
+              );
+              continue;
+            }
+
+            // Server payload doesn't guarantee the id is under the local pk column name
+            // (e.g. sends "id" while local schema uses "_id") — normalize it.
+            row[pk] = row[pk] ?? row.id ?? change.record_id;
+
             applyUpsert(db, table, row, localColumns, pk);
             enqueuePendingImages(extractImageUrls(table, row));
             continue;
           }
 
           // change.op === "update"
-          const updatePayload = (change.data ?? { fields: {} }) as UpdatePayload;
+          const updatePayload = (change.data ?? {
+            fields: {},
+          }) as UpdatePayload;
           const changedValues = applyFieldOps(
             db,
             table,
@@ -163,13 +191,20 @@ export async function pullAllTables(): Promise<Record<string, number>> {
   if (allSucceeded) {
     setLastSyncAt(SYNC_CURSOR_KEY, serverTime);
   } else {
-    console.warn("Some tables failed to sync — cursor not advanced, will retry next pull");
+    console.warn(
+      "Some tables failed to sync — cursor not advanced, will retry next pull"
+    );
   }
 
   return results;
 }
 
-function getLocalUpdatedAt(db: any, table: string, pk: string, recordId: string): string | undefined {
+function getLocalUpdatedAt(
+  db: any,
+  table: string,
+  pk: string,
+  recordId: string
+): string | undefined {
   const stmt = db.prepare(`SELECT updatedAt FROM ${table} WHERE ${pk} = ?`);
   stmt.bind(sanitizeBindValues([recordId]));
   let updatedAt: string | undefined = undefined;
@@ -193,7 +228,11 @@ function applyUpsert(
   const localUpdatedAt = getLocalUpdatedAt(db, table, pk, row[pk]);
 
   const remoteUpdatedAt = row.updatedAt ?? row.updated_at;
-  if (localUpdatedAt && remoteUpdatedAt && new Date(localUpdatedAt) > new Date(remoteUpdatedAt)) {
+  if (
+    localUpdatedAt &&
+    remoteUpdatedAt &&
+    new Date(localUpdatedAt) > new Date(remoteUpdatedAt)
+  ) {
     console.log(`Skipping ${table}/${row[pk]} — local version is newer (LWW)`);
     return;
   }
@@ -233,11 +272,16 @@ function applyFieldOps(
 
   const localUpdatedAt = getLocalUpdatedAt(db, table, pk, recordId);
   if (!localUpdatedAt) {
-    console.warn(`Update target ${table}/${recordId} not found locally — skipping`);
+    console.warn(
+      `Update target ${table}/${recordId} not found locally — skipping`
+    );
     return null;
   }
 
-  if (payload.updatedAt && new Date(localUpdatedAt) > new Date(payload.updatedAt)) {
+  if (
+    payload.updatedAt &&
+    new Date(localUpdatedAt) > new Date(payload.updatedAt)
+  ) {
     console.log(`Skipping ${table}/${recordId} — local version is newer (LWW)`);
     return null;
   }
@@ -273,10 +317,10 @@ function applyFieldOps(
   }
 
   if (setClauses.length > 0) {
-    db.run(
-      `UPDATE ${table} SET ${setClauses.join(", ")} WHERE ${pk} = ?`,
-      [...setValues, ...sanitizeBindValues([recordId])]
-    );
+    db.run(`UPDATE ${table} SET ${setClauses.join(", ")} WHERE ${pk} = ?`, [
+      ...setValues,
+      ...sanitizeBindValues([recordId]),
+    ]);
   }
 
   return Object.keys(changedValues).length > 0 ? changedValues : null;
@@ -293,7 +337,11 @@ function applyArrayPatch(
   recordId: string,
   column: string,
   patch: {
-    updated: { _id: any; deltas: Record<string, number>; set: Record<string, any> }[];
+    updated: {
+      _id: any;
+      deltas: Record<string, number>;
+      set: Record<string, any>;
+    }[];
     added: any[];
     removed: any[];
   }

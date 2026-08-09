@@ -25,6 +25,7 @@ import { BadRequest } from "../Errors/BadRequest";
 import { Product_WarehouseModel } from "../models/productWarehouse";
 import { ServiceFeeModel } from "../models/serviceFee";
 import { CashierShift } from "../models/cashierShift";
+import { log } from "console";
 // get all category
 export const getAllCategorys = async (req: Request, res: Response) => {
   const jwtUser = req.user as any;
@@ -63,7 +64,8 @@ export const getAllCategorys = async (req: Request, res: Response) => {
   const category = CategoryModel.find({
     _id: { $in: uniqueCategoryIds },
   });
-
+  console.log(uniqueCategoryIds);
+  
   SuccessResponse(res, { message: "Category list", category });
 };
 
