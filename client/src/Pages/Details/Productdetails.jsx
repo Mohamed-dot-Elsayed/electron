@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Package,
   MapPin,
@@ -6,6 +6,8 @@ import {
   Building2,
   AlertTriangle,
   ArrowLeft,
+  ChevronDown,
+  Tag,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useGet } from "../../Hooks/useGet"; // ⚠️ adjust this path to wherever useGet.js actually lives in your project
@@ -15,16 +17,24 @@ import { useGet } from "../../Hooks/useGet"; // ⚠️ adjust this path to where
  * ---------------------------------------------------------------------------
  * GET /pos-home/products/:productId/warehouse-stock
  *
- * Response shape:
+ * Real response shape:
  * {
  *   success: true,
  *   data: {
  *     message: string,
  *     product: { name, ar_name, image, price, quantity, code, description,
  *                low_stock, cost, whole_price, minimum_quantity_sale,
- *                free_shipping, Is_Online, ... },
+ *                free_shipping, Is_Online, different_price, ... },
  *     warehouseStock: [
- *       { warehouseId, warehouseName, warehouseAddress, quantity, low_stock }
+ *       {
+ *         warehouseId, warehouseName, warehouseAddress,
+ *         totalQuantity: number,
+ *         base: null | { code, price, quantity, low_stock },   // used when product has NO variations
+ *         variations: [                                        // used when product HAS variations
+ *           { productPriceId, code, price, quantity, low_stock,
+ *             options: [{ variationName, optionName }] }
+ *         ]
+ *       }
  *     ]
  *   }
  * }
@@ -48,12 +58,24 @@ const COLORS = {
   outSoft: "#FBE9EC",
 };
 
-// quantity <= 0 → out · quantity <= threshold → low · else in stock
-/* function stockStatus(quantity, threshold) {
-  if (threshold && quantity <= threshold)
+// quantity <= 0 → out of stock · quantity <= threshold → low stock · else in stock
+function stockStatus(quantity, threshold) {
+  const qty = Number(quantity) || 0;
+  if (qty <= 0) return { label: "Out of stock", color: COLORS.out, soft: COLORS.outSoft };
+  if (threshold && qty <= threshold)
     return { label: "Low stock", color: COLORS.low, soft: COLORS.lowSoft };
   return { label: "In stock", color: COLORS.good, soft: COLORS.goodSoft };
-} */
+}
+
+function money(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(2) : "0.00";
+}
+
+function optionLabel(options) {
+  if (!options || options.length === 0) return null;
+  return options.map((o) => `${o.variationName}: ${o.optionName}`).join(" · ");
+}
 
 function StatusPill({ status }) {
   return (
@@ -70,49 +92,166 @@ function StatusPill({ status }) {
   );
 }
 
-function WarehouseRow({ wh, isLast }) {
- // const status = stockStatus(wh.quantity, wh.low_stock);
+// A warehouse's overall status: out if nothing left, low if any line item
+// (variation, or the base line for non-variant products) is at/under its
+// own threshold, otherwise in stock.
+function warehouseStatus(wh) {
+  const lines = wh.variations && wh.variations.length > 0
+    ? wh.variations
+    : wh.base
+    ? [wh.base]
+    : [];
+
+  if ((wh.totalQuantity || 0) <= 0) {
+    return { label: "Out of stock", color: COLORS.out, soft: COLORS.outSoft };
+  }
+  const anyLow = lines.some(
+    (l) => l.quantity > 0 && l.low_stock && l.quantity <= l.low_stock,
+  );
+  if (anyLow) return { label: "Low stock", color: COLORS.low, soft: COLORS.lowSoft };
+  return { label: "In stock", color: COLORS.good, soft: COLORS.goodSoft };
+}
+
+function VariationsTable({ lines }) {
+  if (!lines || lines.length === 0) return null;
   return (
-    <tr style={{ borderBottom: isLast ? "none" : `1px solid ${COLORS.line}` }}>
-      <td className="py-4 pl-5 pr-3">
-        <div className="flex items-center gap-2">
-          <Building2
-            className="h-3.5 w-3.5 shrink-0"
-            style={{ color: COLORS.faint }}
-          />
-          <span className="text-sm font-medium" style={{ color: COLORS.ink }}>
-            {wh.warehouseName}
+    <div
+      className="mt-3 overflow-hidden rounded-lg"
+      style={{ border: `1px solid ${COLORS.line}` }}
+    >
+      <table className="w-full border-collapse">
+        <thead>
+          <tr style={{ backgroundColor: COLORS.page }}>
+            {["Variant", "Code", "Price", "Qty", "Status"].map((h) => (
+              <th
+                key={h}
+                className="text-left text-[11px] font-semibold uppercase tracking-wide py-2 px-3"
+                style={{ color: COLORS.faint }}
+              >
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {lines.map((line, i) => {
+            const status = stockStatus(line.quantity, line.low_stock);
+            const label = optionLabel(line.options) || "Standard";
+            return (
+              <tr
+                key={line.productPriceId || i}
+                style={{
+                  borderTop: `1px solid ${COLORS.line}`,
+                }}
+              >
+                <td className="py-2.5 px-3 text-sm" style={{ color: COLORS.ink }}>
+                  {label}
+                </td>
+                <td className="py-2.5 px-3">
+                  {line.code ? (
+                    <span
+                      className="font-mono text-xs"
+                      style={{ color: COLORS.muted }}
+                    >
+                      {line.code}
+                    </span>
+                  ) : (
+                    <span className="text-xs" style={{ color: COLORS.faint }}>
+                      —
+                    </span>
+                  )}
+                </td>
+                <td className="py-2.5 px-3 font-mono text-sm tabular-nums" style={{ color: COLORS.ink }}>
+                  EGP {money(line.price)}
+                </td>
+                <td className="py-2.5 px-3 font-mono text-sm tabular-nums" style={{ color: COLORS.ink }}>
+                  {(line.quantity || 0).toLocaleString()}
+                </td>
+                <td className="py-2.5 px-3">
+                  <StatusPill status={status} />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function WarehouseRow({ wh, isLast }) {
+  const [open, setOpen] = useState(false);
+  const status = warehouseStatus(wh);
+  const lines = wh.variations && wh.variations.length > 0 ? wh.variations : wh.base ? [wh.base] : [];
+  const hasLines = lines.length > 0;
+
+  return (
+    <>
+      <tr
+        style={{ borderBottom: !hasLines && isLast ? "none" : `1px solid ${COLORS.line}` }}
+        className={hasLines ? "cursor-pointer hover:bg-black/[0.015]" : undefined}
+        onClick={hasLines ? () => setOpen((v) => !v) : undefined}
+      >
+        <td className="py-4 pl-5 pr-3">
+          <div className="flex items-center gap-2">
+            {hasLines && (
+              <ChevronDown
+                className="h-3.5 w-3.5 shrink-0 transition-transform"
+                style={{
+                  color: COLORS.faint,
+                  transform: open ? "rotate(180deg)" : "rotate(0deg)",
+                }}
+              />
+            )}
+            <Building2
+              className="h-3.5 w-3.5 shrink-0"
+              style={{ color: COLORS.faint }}
+            />
+            <span className="text-sm font-medium" style={{ color: COLORS.ink }}>
+              {wh.warehouseName}
+            </span>
+          </div>
+        </td>
+        <td className="py-4 pr-3 max-w-[300px]">
+          <div className="flex items-start gap-2">
+            <MapPin
+              className="h-3.5 w-3.5 shrink-0 mt-0.5"
+              style={{ color: COLORS.faint }}
+            />
+            <span className="text-sm" style={{ color: COLORS.muted }}>
+              {wh.warehouseAddress}
+            </span>
+          </div>
+        </td>
+        <td className="py-4 pr-3">
+          <span
+            className="font-mono text-sm tabular-nums"
+            style={{ color: COLORS.ink }}
+          >
+            {(wh.totalQuantity || 0).toLocaleString()}
           </span>
-        </div>
-      </td>
-      <td className="py-4 pr-3 max-w-[300px]">
-        <div className="flex items-start gap-2">
-          <MapPin
-            className="h-3.5 w-3.5 shrink-0 mt-0.5"
-            style={{ color: COLORS.faint }}
-          />
-          <span className="text-sm" style={{ color: COLORS.muted }}>
-            {wh.warehouseAddress}
-          </span>
-        </div>
-      </td>
-      <td className="py-4 pr-3">
-        <span
-          className="font-mono text-sm tabular-nums"
-          style={{ color: COLORS.ink }}
-        >
-          {wh.quantity.toLocaleString()}
-        </span>
-      </td>
-      <td className="py-4 pr-5">
-        <StatusPill status={status} />
-      </td>
-    </tr>
+        </td>
+        <td className="py-4 pr-5">
+          <StatusPill status={status} />
+        </td>
+      </tr>
+      {hasLines && open && (
+        <tr style={{ borderBottom: isLast ? "none" : `1px solid ${COLORS.line}` }}>
+          <td colSpan={4} className="pb-4 px-5">
+            <VariationsTable lines={lines} />
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
 function WarehouseCardMobile({ wh }) {
-  //const status = stockStatus(wh.quantity, wh.low_stock);
+  const [open, setOpen] = useState(false);
+  const status = warehouseStatus(wh);
+  const lines = wh.variations && wh.variations.length > 0 ? wh.variations : wh.base ? [wh.base] : [];
+  const hasLines = lines.length > 0;
+
   return (
     <div
       className="rounded-xl p-4"
@@ -130,12 +269,28 @@ function WarehouseCardMobile({ wh }) {
       <div className="text-sm mb-3" style={{ color: COLORS.muted }}>
         {wh.warehouseAddress}
       </div>
-      <div
-        className="font-mono text-sm tabular-nums"
-        style={{ color: COLORS.ink }}
-      >
-        {wh.quantity.toLocaleString()} units
+      <div className="flex items-center justify-between">
+        <span
+          className="font-mono text-sm tabular-nums"
+          style={{ color: COLORS.ink }}
+        >
+          {(wh.totalQuantity || 0).toLocaleString()} units
+        </span>
+        {hasLines && (
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className="inline-flex items-center gap-1 text-xs font-medium"
+            style={{ color: COLORS.accent }}
+          >
+            {open ? "Hide variants" : `View ${lines.length} variant${lines.length === 1 ? "" : "s"}`}
+            <ChevronDown
+              className="h-3 w-3 transition-transform"
+              style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+            />
+          </button>
+        )}
       </div>
+      {hasLines && open && <VariationsTable lines={lines} />}
     </div>
   );
 }
@@ -219,13 +374,17 @@ export default function ProductDetails({ productId: productIdProp }) {
 
   const totals = useMemo(() => {
     const totalStock = warehouseStock.reduce(
-      (s, w) => s + (w.quantity || 0),
+      (s, w) => s + (w.totalQuantity || 0),
       0,
     );
-    const outCount = warehouseStock.filter((w) => w.quantity <= 0).length;
-    const lowCount = warehouseStock.filter(
-      (w) => w.quantity > 0 && w.low_stock && w.quantity <= w.low_stock,
-    ).length;
+    const outCount = warehouseStock.filter((w) => (w.totalQuantity || 0) <= 0).length;
+    const lowCount = warehouseStock.filter((w) => {
+      const lines = w.variations && w.variations.length > 0 ? w.variations : w.base ? [w.base] : [];
+      return (
+        (w.totalQuantity || 0) > 0 &&
+        lines.some((l) => l.quantity > 0 && l.low_stock && l.quantity <= l.low_stock)
+      );
+    }).length;
     return { totalStock, outCount, lowCount, whCount: warehouseStock.length };
   }, [warehouseStock]);
 
@@ -273,8 +432,9 @@ export default function ProductDetails({ productId: productIdProp }) {
     );
   }
 
- // const overallStatus = stockStatus(product.quantity, product.low_stock);
+  const overallStatus = stockStatus(product.quantity, product.low_stock);
   const hasCode = product.code && product.code !== "null";
+  const hasVariations = warehouseStock.some((w) => w.variations && w.variations.length > 0);
 
   return (
     <div
@@ -345,7 +505,7 @@ export default function ProductDetails({ productId: productIdProp }) {
                     className="pd-display text-2xl font-semibold"
                     style={{ color: COLORS.ink }}
                   >
-                    EGP {Number(product.price).toFixed(2)}
+                    EGP {money(product.price)}
                   </div>
                   {hasCode && (
                     <span
@@ -356,6 +516,15 @@ export default function ProductDetails({ productId: productIdProp }) {
                       }}
                     >
                       {product.code}
+                    </span>
+                  )}
+                  {hasVariations && (
+                    <span
+                      className="inline-flex items-center gap-1 text-xs font-medium mt-1 ml-1"
+                      style={{ color: COLORS.muted }}
+                    >
+                      <Tag className="h-3 w-3" />
+                      has variants
                     </span>
                   )}
                 </div>
@@ -379,7 +548,7 @@ export default function ProductDetails({ productId: productIdProp }) {
                 <span className="text-xs" style={{ color: COLORS.faint }}>
                   Total quantity across warehouses
                 </span>
-                {/* <StatusPill status={overallStatus} /> */}
+                <StatusPill status={overallStatus} />
               </div>
 
               <div className="grid grid-cols-2 gap-x-6 gap-y-3">
@@ -391,7 +560,7 @@ export default function ProductDetails({ productId: productIdProp }) {
                     className="text-sm font-medium"
                     style={{ color: COLORS.ink }}
                   >
-                    EGP {Number(product.cost).toFixed(2)}
+                    EGP {money(product.cost)}
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between gap-2">
@@ -402,7 +571,7 @@ export default function ProductDetails({ productId: productIdProp }) {
                     className="text-sm font-medium"
                     style={{ color: COLORS.ink }}
                   >
-                    EGP {Number(product.whole_price).toFixed(2)}
+                    EGP {money(product.whole_price)}
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between gap-2">
@@ -413,7 +582,7 @@ export default function ProductDetails({ productId: productIdProp }) {
                     className="text-sm font-medium"
                     style={{ color: COLORS.ink }}
                   >
-                    {product.low_stock}
+                    {product.low_stock ?? "—"}
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between gap-2">
@@ -424,7 +593,7 @@ export default function ProductDetails({ productId: productIdProp }) {
                     className="text-sm font-medium"
                     style={{ color: COLORS.ink }}
                   >
-                    {product.minimum_quantity_sale}
+                    {product.minimum_quantity_sale ?? "—"}
                   </span>
                 </div>
               </div>
@@ -447,8 +616,16 @@ export default function ProductDetails({ productId: productIdProp }) {
             <span className="font-mono text-xs" style={{ color: COLORS.muted }}>
               {totals.whCount} location{totals.whCount === 1 ? "" : "s"} ·{" "}
               {totals.totalStock.toLocaleString()} units total
+              {totals.lowCount > 0 && ` · ${totals.lowCount} low`}
+              {totals.outCount > 0 && ` · ${totals.outCount} out`}
             </span>
           </div>
+
+          {hasVariations && (
+            <p className="text-xs mb-3" style={{ color: COLORS.faint }}>
+              Click a warehouse row to see stock per variant.
+            </p>
+          )}
 
           {warehouseStock.length === 0 ? (
             <div
@@ -475,7 +652,7 @@ export default function ProductDetails({ productId: productIdProp }) {
                 <table className="w-full border-collapse">
                   <thead>
                     <tr style={{ borderBottom: `1px solid ${COLORS.line}` }}>
-                      {["Warehouse", "Address", "Stock"].map((h) => (
+                      {["Warehouse", "Address", "Stock", "Status"].map((h) => (
                         <th
                           key={h}
                           className="text-left text-xs font-semibold uppercase tracking-wide py-3 first:pl-5 last:pr-5 px-0 pr-3"

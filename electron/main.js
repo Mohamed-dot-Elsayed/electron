@@ -367,6 +367,49 @@ ipcMain.on("window-close", () => {
     BrowserWindow.getFocusedWindow()?.close();
 });
 
+ipcMain.handle("get-printers", async () => {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  if (!win) return [];
+  return await win.webContents.getPrintersAsync();
+});
+
+ipcMain.handle("print-html", async (event, { html, printerName }) => {
+  let workerWindow = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  });
+
+  workerWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+
+  return new Promise((resolve, reject) => {
+    workerWindow.webContents.on("did-finish-load", () => {
+      workerWindow.webContents.print(
+        {
+          silent: true,
+          printBackground: true,
+          printerName: printerName,
+        },
+        (success, errorType) => {
+          workerWindow.close();
+          if (success) {
+            resolve({ success: true });
+          } else {
+            reject(new Error(`Failed to print: ${errorType}`));
+          }
+        }
+      );
+    });
+
+    workerWindow.webContents.on("did-fail-load", (e, errorCode, errorDescription) => {
+      workerWindow.close();
+      reject(new Error(`Failed to load HTML into print worker: ${errorDescription} (${errorCode})`));
+    });
+  });
+});
+
 app.on("before-quit", async (event) => {
   if (!isQuitting) {
     event.preventDefault();

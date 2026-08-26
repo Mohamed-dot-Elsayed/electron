@@ -437,9 +437,20 @@ export const createReturn = async (req: Request, res: Response) => {
     throw new BadRequest("This sale belongs to a different warehouse");
   }
 
+  // block returns entirely if sale is already fully returned
+  if (sale.return_status === "full") {
+    throw new BadRequest("This sale has already been fully returned");
+  }
+
   const saleItems = ProductSalesModel.find({
     sale_id: sale._id,
   });
+
+  // total original quantity across the whole sale
+  const totalSaleQty = saleItems.reduce(
+    (sum: number, si: any) => sum + si.quantity,
+    0
+  );
 
   const previousReturns = ReturnModel.find({
     sale_id: sale._id,
@@ -467,9 +478,11 @@ export const createReturn = async (req: Request, res: Response) => {
     returned_quantity: number;
     price: number;
     subtotal: number;
+    reason?: string;
   }> = [];
 
   let totalReturnAmount = 0;
+  let totalReturnQty = 0;
 
   for (const item of items) {
     const {
@@ -478,6 +491,7 @@ export const createReturn = async (req: Request, res: Response) => {
       product_price_id,
       bundle_id,
       quantity,
+      reason,
     } = item;
 
     if (!quantity || Number(quantity) <= 0) {
@@ -523,6 +537,7 @@ export const createReturn = async (req: Request, res: Response) => {
 
     const itemSubtotal = returnQuantity * saleItem.price;
     totalReturnAmount += itemSubtotal;
+    totalReturnQty += returnQuantity;
 
     returnItems.push({
       product_id: saleItem.product_id,
@@ -532,6 +547,7 @@ export const createReturn = async (req: Request, res: Response) => {
       returned_quantity: returnQuantity,
       price: saleItem.price,
       subtotal: itemSubtotal,
+      reason: reason || "",
     });
   }
 
@@ -545,7 +561,6 @@ export const createReturn = async (req: Request, res: Response) => {
     );
   }
 
-  // Validate refund financial lines (if provided)
   const finArr = Array.isArray(financials) ? financials : [];
 
   if (finArr.length > 0) {
@@ -601,6 +616,9 @@ export const createReturn = async (req: Request, res: Response) => {
       finArr.length === 1 ? finArr[0].account_id || finArr[0].id : undefined,
   });
 
+  // ═══════════════════════════════════════════════════════════
+  // RESTOCK — product / variation / bundle components
+  // ═══════════════════════════════════════════════════════════
   for (const item of returnItems) {
     if (item.product_price_id) {
       const productPrice = ProductPriceModel.findById(item.product_price_id);
@@ -621,21 +639,60 @@ export const createReturn = async (req: Request, res: Response) => {
     } else if (item.bundle_id) {
       const bundle = PandelModel.findById(item.bundle_id);
 
+      // NOTE: confirm your local Pandel schema's field name — earlier code used
+      // `bundle.productsId`, the remote createSale uses `bundleDoc.products`
+      // with a `.quantity` per component. Using `productsId` here to match
+      // your original local code; adjust if the field name differs.
       if (bundle) {
-        for (const productId of bundle.productsId || []) {
-          const productPrice = ProductPriceModel.findById(productId);
+        for (const bp of bundle.productsId || []) {
+          const componentQty = bp.quantity || 1;
+          const restockQty = item.returned_quantity * componentQty;
+          const productPriceId = bp.productPriceId || bp;
+          const productId = bp.productId || bp;
 
-          if (productPrice) {
-            ProductPriceModel.updateById(productId, {
-              quantity: (productPrice.quantity || 0) + item.returned_quantity,
-            });
+          if (bp.productPriceId) {
+            const productPrice = ProductPriceModel.findById(productPriceId);
+            if (productPrice) {
+              ProductPriceModel.updateById(productPriceId, {
+                quantity: (productPrice.quantity || 0) + restockQty,
+              });
+            }
+          } else {
+            const product = ProductModel.findById(productId);
+            if (product) {
+              ProductModel.updateById(productId, {
+                quantity: (product.quantity || 0) + restockQty,
+              });
+            }
           }
         }
       }
     }
   }
 
-  // Apply refund financials: deduct from accounts
+  // compute sale-level return tracking (cache fields on Sale)
+  const newReturnedQty = (sale.returned_quantity || 0) + totalReturnQty;
+  const newReturnedAmount = (sale.returned_amount || 0) + totalReturnAmount;
+  const newReturnStatus =
+    newReturnedQty <= 0
+      ? "none"
+      : newReturnedQty >= totalSaleQty
+      ? "full"
+      : "partial";
+
+  // ═══════════════════════════════════════════════════════════
+  // SALE MONEY UPDATE — Due-aware, same logic as the Mongoose version
+  // ═══════════════════════════════════════════════════════════
+  let newPaid = sale.paid_amount || 0;
+  let newRemaining = sale.remaining_amount || 0;
+
+  if (sale.Due === 1) {
+    newRemaining = Math.max(0, newRemaining - totalReturnAmount);
+  } else {
+    newPaid = Math.max(0, newPaid - totalReturnAmount);
+    newRemaining = 0;
+  }
+
   if (finArr.length > 0) {
     for (const f of finArr) {
       const accId = f.account_id || f.id;
@@ -643,7 +700,6 @@ export const createReturn = async (req: Request, res: Response) => {
 
       const account = BankAccountModel.findById(accId);
       if (!account) {
-        // shouldn't happen due to earlier validation, but guard anyway
         continue;
       }
 
@@ -652,13 +708,20 @@ export const createReturn = async (req: Request, res: Response) => {
       });
     }
 
-    // adjust sale paid/remaining amounts to reflect refund
-    const newPaid = Math.max(0, (sale.paid_amount || 0) - totalReturnAmount);
-    const newRemaining = Math.max(0, (sale.grand_total || 0) - newPaid);
-
     SaleModel.updateById(sale._id, {
       paid_amount: newPaid,
       remaining_amount: newRemaining,
+      returned_quantity: newReturnedQty,
+      returned_amount: newReturnedAmount,
+      return_status: newReturnStatus,
+    });
+  } else {
+    SaleModel.updateById(sale._id, {
+      paid_amount: newPaid,
+      remaining_amount: newRemaining,
+      returned_quantity: newReturnedQty,
+      returned_amount: newReturnedAmount,
+      return_status: newReturnStatus,
     });
   }
 
@@ -681,7 +744,6 @@ export const createReturn = async (req: Request, res: Response) => {
     ? WarehouseModel.findById(returnRaw.warehouse_id)
     : null;
 
-  // ⚠️ swap in whatever model your cashier_id actually references
   const cashierPop = returnRaw.cashier_id
     ? UserModel.findById(returnRaw.cashier_id)
     : null;
@@ -694,7 +756,6 @@ export const createReturn = async (req: Request, res: Response) => {
     ? BankAccountModel.findById(returnRaw.refund_account_id)
     : null;
 
-  // ✅ manual populate — nested, inside the `items` array
   const populatedItems = (returnRaw.items || []).map((item: any) => {
     const productPop = item.product_id
       ? ProductModel.findById(item.product_id)
@@ -739,6 +800,11 @@ export const createReturn = async (req: Request, res: Response) => {
           reference: salePop.reference,
           grand_total: salePop.grand_total,
           date: salePop.date,
+          return_status: newReturnStatus,
+          returned_quantity: newReturnedQty,
+          returned_amount: newReturnedAmount,
+          paid_amount: newPaid,
+          remaining_amount: newRemaining,
         }
       : null,
     customer_id: customerPop
@@ -784,91 +850,93 @@ export const createReturn = async (req: Request, res: Response) => {
 // ═══════════════════════════════════════════════════════════
 export const getAllReturns = async (req: Request, res: Response) => {
   const jwtUser = req.user as any;
+  const cashierId = jwtUser?.id;
   const warehouseId = jwtUser?.warehouse_id;
 
-  const { page = 1, limit = 20, customer_id, from_date, to_date } = req.query;
-
-  const query: any = { warehouse_id: warehouseId };
-
-  if (customer_id) {
-    query.customer_id = customer_id;
+  if (!cashierId) {
+    throw new BadRequest("Unauthorized: user not found in token");
   }
 
-  if (from_date || to_date) {
-    query.date = {};
-    if (from_date) {
-      query.date.$gte = new Date(from_date as string);
-    }
-    if (to_date) {
-      query.date.$lte = new Date(to_date as string);
-    }
+  if (!warehouseId) {
+    throw new BadRequest("Warehouse is not assigned to this user");
   }
 
-  const skip = (Number(page) - 1) * Number(limit);
+  const openShift = CashierShift.findOne(
+    { cashierman_id: cashierId, status: "open" },
+    { sort: { start_time: -1 } }
+  );
+
+  if (!openShift) {
+    throw new BadRequest(
+      "You must open a cashier shift before viewing returns"
+    );
+  }
+
+  const query: any = {
+    warehouse_id: warehouseId,
+    shift_id: openShift._id,
+  };
 
   let returns = ReturnModel.find(query).sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
-  const start = skip;
-  const end = skip + Number(limit);
-
-  returns = returns.slice(start, end).map((item) => {
+  returns = returns.map((item) => {
     const sale = SaleModel.findById(item.sale_id);
-
     const customer = CustomerModel.findById(item.customer_id);
-
     const cashier = UserModel.findById(item.cashier_id);
+
+    const items = (item.items || []).map((line: any) => {
+      const product = ProductModel.findById(line.product_id);
+
+      return {
+        product_name: product?.name || null,
+        product_ar_name: product?.ar_name || null,
+        product_image: product?.image || null,
+        original_quantity: line.original_quantity,
+        returned_quantity: line.returned_quantity,
+        price: line.price,
+        subtotal: line.subtotal,
+      };
+    });
+
+    const financials = (item.financials || []).map((f: any) => {
+      const account = BankAccountModel.findById(f.account_id);
+      return {
+        ...f,
+        account_name: account?.name || null,
+        account_ar_name: account?.ar_name || null,
+      };
+    });
 
     return {
       ...item,
-
+      items,
+      financials,
+      note: item.note || null,
+      reason: item.reason || null,
       sale_id: sale
-        ? {
-            _id: sale._id,
-            reference: sale.reference,
-            grand_total: sale.grand_total,
-          }
+        ? { _id: sale._id, reference: sale.reference, grand_total: sale.grand_total }
         : null,
-
       customer_id: customer
-        ? {
-            _id: customer._id,
-            name: customer.name,
-            phone_number: customer.phone_number,
-          }
+        ? { _id: customer._id, name: customer.name, phone_number: customer.phone_number }
         : null,
-
-      cashier_id: cashier
-        ? {
-            _id: cashier._id,
-            name: cashier.name,
-          }
-        : null,
+      cashier_id: cashier ? { _id: cashier._id, name: cashier.name } : null,
     };
   });
 
-  const total = ReturnModel.count(query);
-
-  const returnsTot = ReturnModel.find(query);
-
-  const totalAmount = returnsTot.reduce(
-    (sum, item) => sum + (item.total_amount || 0),
+  const total = returns.length;
+  const totalAmount = returns.reduce(
+    (sum, item: any) => sum + (item.total_amount || 0),
     0
   );
 
   return SuccessResponse(res, {
     message: "Returns fetched successfully",
     returns: returns,
-    pagination: {
-      page: Number(page),
-      limit: Number(limit),
-      total: total,
-      pages: Math.ceil(total / Number(limit)),
-    },
     summary: {
       total_returns: total,
-      total_amount: totalAmount[0]?.total || 0,
+      total_amount: totalAmount,
     },
   });
 };

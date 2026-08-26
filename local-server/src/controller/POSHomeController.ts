@@ -26,7 +26,10 @@ import { Product_WarehouseModel } from "../models/productWarehouse";
 import { ServiceFeeModel } from "../models/serviceFee";
 import { CashierShift } from "../models/cashierShift";
 import { log } from "console";
-// get all category
+
+// ═══════════════════════════════════════════════════════════
+// Get All Categories
+// ═══════════════════════════════════════════════════════════
 export const getAllCategorys = async (req: Request, res: Response) => {
   const jwtUser = req.user as any;
   const warehouseId = jwtUser?.warehouse_id;
@@ -35,42 +38,14 @@ export const getAllCategorys = async (req: Request, res: Response) => {
     throw new BadRequest("Warehouse is not assigned to this user");
   }
 
-  const warehouseProducts = Product_WarehouseModel.find({
-    warehouseId: warehouseId,
-  }).map(({ productId }) => ({ productId }));
+  // Return all categories regardless of warehouse stock
+  const category = await CategoryModel.find();
 
-  const productIds = warehouseProducts.map((wp: any) => wp.productId);
-
-  // هات المنتجات مع categoryId
-  const products = ProductModel.find()
-    .filter((product) => productIds.includes(product._id))
-    .map(({ categoryId }) => ({ categoryId }));
-
-  // ✅ categoryId هو Array of ObjectIds
-  const categoryIds: string[] = [];
-
-  products.forEach((p: any) => {
-    if (p.categoryId && p.categoryId.length > 0) {
-      p.categoryId.forEach((catId: any) => {
-        if (catId) {
-          categoryIds.push(catId.toString());
-        }
-      });
-    }
-  });
-
-  const uniqueCategoryIds = [...new Set(categoryIds)];
-
-  const category = CategoryModel.find({
-    _id: { $in: uniqueCategoryIds },
-  });
-  console.log(uniqueCategoryIds);
-  
   SuccessResponse(res, { message: "Category list", category });
 };
 
 // ═══════════════════════════════════════════════════════════
-// Get All Brands (بالـ Warehouse)
+// Get All Brands
 // ═══════════════════════════════════════════════════════════
 export const getAllBrands = async (req: Request, res: Response) => {
   const jwtUser = req.user as any;
@@ -80,69 +55,57 @@ export const getAllBrands = async (req: Request, res: Response) => {
     throw new BadRequest("Warehouse is not assigned to this user");
   }
 
-  const warehouseProducts = Product_WarehouseModel.find({
-    warehouseId: warehouseId,
-  })
-    .filter((item) => item.quantity > 0)
-    .map(({ productId }) => ({ productId }));
-
-  const productIds = warehouseProducts.map((wp: any) => wp.productId);
-
-  const products = ProductModel.find()
-    .filter((product) => productIds.includes(product._id))
-    .map(({ brandId }) => ({ brandId }));
-
-  const brandIds: string[] = [];
-  products.forEach((p: any) => {
-    if (p.brandId) {
-      const id = (p.brandId as any)?._id?.toString() || p.brandId?.toString();
-      if (id) brandIds.push(id);
-    }
-  });
-
-  const uniqueBrandIds = [...new Set(brandIds)];
-
-  const brand = await BrandModel.find({
-    _id: { $in: uniqueBrandIds },
-  });
+  // Return all brands regardless of warehouse stock
+  const brand = await BrandModel.find();
 
   SuccessResponse(res, { message: "Brand list", brand });
 };
 
 // ═══════════════════════════════════════════════════════════
-// Get Products By Category (بالـ Warehouse)
+// Helper: Build Products With Warehouse Stock and Variations
 // ═══════════════════════════════════════════════════════════
-export const getProductsByCategory = async (req: Request, res: Response) => {
-  const jwtUser = req.user as any;
-  const warehouseId = jwtUser?.warehouse_id;
-  const { categoryId } = req.params;
+const buildWarehouseProductList = async (
+  productFilter: any,
+  warehouseId: any
+) => {
+  const products = ProductModel.find(productFilter);
+  if (products.length === 0) return [];
 
-  if (!warehouseId) {
-    throw new BadRequest("Warehouse is not assigned to this user");
-  }
+  const productIds = products.map((product: any) => product._id);
 
-  const category = await CategoryModel.findById(categoryId);
-  if (!category) throw new NotFound("Category not found");
-
-  // هات المنتجات الموجودة في المخزن
-  const warehouseProducts = Product_WarehouseModel.find({
+  // Get warehouse stock only for the selected products
+  const stocks = Product_WarehouseModel.find({
+    productId: { $in: productIds },
     warehouseId: warehouseId,
-  })
-    .map(({ productId, quantity }) => ({ productId, quantity }));
+  });
 
-  const productIds = warehouseProducts.map((wp) => wp.productId);
+  // Store product-level stock
+  const stockByProduct: Record<string, number> = {};
 
-  // ✅ categoryId هو Array عشان كده نستخدم $in
-  const products = ProductModel.find()
-    .filter(
-      (product) =>
-        productIds.includes(product._id) &&
-        product.categoryId.includes(categoryId)
-    )
-    .map((product) => {
+  // Store variation-level stock
+  const stockByVariant: Record<string, number> = {};
+
+  stocks.forEach((stock: any) => {
+    if (stock.productPriceId) {
+      const key = stock.productPriceId.toString();
+
+      stockByVariant[key] =
+        (stockByVariant[key] || 0) + stock.quantity;
+    } else {
+      const key = stock.productId.toString();
+
+      stockByProduct[key] =
+        (stockByProduct[key] || 0) + stock.quantity;
+    }
+  });
+
+  return Promise.all(
+    products.map(async (product: any) => {
+      // Get categories
       const categories = product.categoryId
-        .map((catId: string) => {
+        .map((catId: any) => {
           const category = CategoryModel.findById(catId);
+
           return category
             ? {
                 _id: category._id,
@@ -153,37 +116,79 @@ export const getProductsByCategory = async (req: Request, res: Response) => {
         })
         .filter(Boolean);
 
+      // Get brand
       const brand = product.brandId
         ? BrandModel.findById(product.brandId)
         : null;
+
       const brandData = brand
-        ? { _id: brand._id, name: brand.name, ar_name: brand.ar_name }
+        ? {
+            _id: brand._id,
+            name: brand.name,
+            ar_name: brand.ar_name,
+          }
         : null;
+
+      // Get product variations
+      const variations = await ProductPriceModel.find({
+        productId: product._id,
+      });
+
+      // Add warehouse quantity to every variation
+      const formattedVariations = variations.map((variation: any) => {
+        return {
+          ...variation,
+          quantity:
+            stockByVariant[variation._id.toString()] ?? 0,
+        };
+      });
+
+      // Total product quantity
+      const quantity =
+        variations.length > 0
+          ? formattedVariations.reduce(
+              (sum: number, variation: any) =>
+                sum + variation.quantity,
+              0
+            )
+          : stockByProduct[product._id.toString()] ?? 0;
 
       return {
         ...product,
         categoryId: categories,
         brandId: brandData,
-      };
-    });
-
-  // إضافة الكمية من المخزن والـ Variations
-  const result = await Promise.all(
-    products.map(async (product: any) => {
-      const warehouseStock = warehouseProducts.find(
-        (wp: any) => wp.productId.toString() === product._id.toString()
-      );
-
-      const variations = ProductPriceModel.find({
-        productId: product._id,
-      });
-
-      return {
-        ...product,
-        quantity: warehouseStock?.quantity ?? 0,
-        variations,
+        quantity,
+        variations: formattedVariations,
       };
     })
+  );
+};
+
+// ═══════════════════════════════════════════════════════════
+// Get Products By Category (بالـ Warehouse)
+// ═══════════════════════════════════════════════════════════
+export const getProductsByCategory = async (
+  req: Request,
+  res: Response
+) => {
+  const jwtUser = req.user as any;
+  const warehouseId = jwtUser?.warehouse_id;
+  const { categoryId } = req.params;
+
+  if (!warehouseId) {
+    throw new BadRequest("Warehouse is not assigned to this user");
+  }
+
+  const category = await CategoryModel.findById(categoryId);
+
+  if (!category) {
+    throw new NotFound("Category not found");
+  }
+  const result = await buildWarehouseProductList(
+    {
+      categoryId: { $contains: categoryId },
+    },
+    warehouseId
   );
 
   SuccessResponse(res, {
@@ -195,7 +200,10 @@ export const getProductsByCategory = async (req: Request, res: Response) => {
 // ═══════════════════════════════════════════════════════════
 // Get Products By Brand (بالـ Warehouse)
 // ═══════════════════════════════════════════════════════════
-export const getProductsByBrand = async (req: Request, res: Response) => {
+export const getProductsByBrand = async (
+  req: Request,
+  res: Response
+) => {
   const jwtUser = req.user as any;
   const warehouseId = jwtUser?.warehouse_id;
   const { brandId } = req.params;
@@ -205,60 +213,16 @@ export const getProductsByBrand = async (req: Request, res: Response) => {
   }
 
   const brand = await BrandModel.findById(brandId);
-  if (!brand) throw new NotFound("Brand not found");
 
-  // هات المنتجات الموجودة في المخزن
-  const warehouseProducts = Product_WarehouseModel.find({
-    warehouseId: warehouseId,
-  })
-    .map(({ productId, quantity }) => ({ productId, quantity }));
+  if (!brand) {
+    throw new NotFound("Brand not found");
+  }
 
-  const productIds = warehouseProducts.map((wp) => wp.productId);
-
-  const products = ProductModel.find({ brandId: brandId })
-    .filter((product) => productIds.includes(product._id))
-    .map((product) => {
-      const categories = product.categoryId
-        .map((catId: string) => {
-          const category = CategoryModel.findById(catId);
-          return category
-            ? {
-                _id: category._id,
-                name: category.name,
-                ar_name: category.ar_name,
-              }
-            : null;
-        })
-        .filter(Boolean);
-
-      const brand = BrandModel.findById(product.brandId);
-      const brandData = brand
-        ? { _id: brand._id, name: brand.name, ar_name: brand.ar_name }
-        : null;
-
-      return {
-        ...product,
-        categoryId: categories,
-        brandId: brandData,
-      };
-    });
-
-  const result = await Promise.all(
-    products.map(async (product: any) => {
-      const warehouseStock = warehouseProducts.find(
-        (wp: any) => wp.productId.toString() === product._id.toString()
-      );
-
-      const variations = ProductPriceModel.find({
-        productId: product._id,
-      });
-
-      return {
-        ...product,
-        quantity: warehouseStock?.quantity ?? 0,
-        variations,
-      };
-    })
+  const result = await buildWarehouseProductList(
+    {
+      brandId: brandId,
+    },
+    warehouseId
   );
 
   SuccessResponse(res, {
@@ -270,7 +234,10 @@ export const getProductsByBrand = async (req: Request, res: Response) => {
 // ═══════════════════════════════════════════════════════════
 // Get Featured Products (بالـ Warehouse)
 // ═══════════════════════════════════════════════════════════
-export const getFeaturedProducts = async (req: Request, res: Response) => {
+export const getFeaturedProducts = async (
+  req: Request,
+  res: Response
+) => {
   const jwtUser = req.user as any;
   const warehouseId = jwtUser?.warehouse_id;
 
@@ -278,61 +245,11 @@ export const getFeaturedProducts = async (req: Request, res: Response) => {
     throw new BadRequest("Warehouse is not assigned to this user");
   }
 
-  // هات المنتجات الموجودة في المخزن
-  const warehouseProducts = Product_WarehouseModel.find({
-    warehouseId: warehouseId,
-  })
-    .filter((item) => item.quantity > 0)
-    .map(({ productId, quantity }) => ({ productId, quantity }));
-
-  const productIds = warehouseProducts.map((wp) => wp.productId);
-
-  const products = ProductModel.find({ is_featured: true })
-    .filter((product) => productIds.includes(product._id))
-    .map((product) => {
-      const categories = product.categoryId
-        .map((catId: string) => {
-          const category = CategoryModel.findById(catId);
-          return category
-            ? {
-                _id: category._id,
-                name: category.name,
-                ar_name: category.ar_name,
-              }
-            : null;
-        })
-        .filter(Boolean);
-
-      const brand = product.brandId
-        ? BrandModel.findById(product.brandId)
-        : null;
-      const brandData = brand
-        ? { _id: brand._id, name: brand.name, ar_name: brand.ar_name }
-        : null;
-
-      return {
-        ...product,
-        categoryId: categories,
-        brandId: brandData,
-      };
-    });
-
-  const result = await Promise.all(
-    products.map(async (product: any) => {
-      const warehouseStock = warehouseProducts.find(
-        (wp: any) => wp.productId.toString() === product._id.toString()
-      );
-
-      const variations = ProductPriceModel.find({
-        productId: product._id,
-      });
-
-      return {
-        ...product,
-        quantity: warehouseStock?.quantity ?? 0,
-        variations,
-      };
-    })
+  const result = await buildWarehouseProductList(
+    {
+      is_featured: true,
+    },
+    warehouseId
   );
 
   SuccessResponse(res, {
@@ -722,7 +639,8 @@ export const getAccounts = async (req: Request, res: Response) => {
     ? allAccounts.filter((account) => account.warehouseId.includes(warehouseId))
     : allAccounts;
 
-  const accounts = filteredAccounts.map(({ name, balance, warehouseId }) => ({
+  const accounts = filteredAccounts.map(({ _id, name, balance, warehouseId }) => ({
+    _id,
     name,
     balance,
     warehouseId,
@@ -802,7 +720,8 @@ export const getPaymentMethods = async (req: Request, res: Response) => {
 // 8. Customers
 export const getCustomers = async (req: Request, res: Response) => {
   const customers = CustomerModel.find().map(
-    ({ name, phone_number, email, address }) => ({
+    ({ _id, name, phone_number, email, address }) => ({
+      _id,
       name,
       phone_number,
       email,
@@ -831,7 +750,8 @@ export const getDueCustomers = async (req: Request, res: Response) => {
   SuccessResponse(res, {
     message: "Due Customers list",
     data: dueCustomers.map(
-      ({ name, phone_number, email, address, amount_Due }) => ({
+      ({ _id, name, phone_number, email, address, amount_Due }) => ({
+        _id,
         name,
         phone_number,
         email,

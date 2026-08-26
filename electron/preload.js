@@ -6,4 +6,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   minimize: () => ipcRenderer.send("window-minimize"),
   maximize: () => ipcRenderer.send("window-maximize"),
   close: () => ipcRenderer.send("window-close"),
+  getPrinters: () => ipcRenderer.invoke("get-printers"),
+  printHtml: (html, printerName) => ipcRenderer.invoke("print-html", { html, printerName }),
 });

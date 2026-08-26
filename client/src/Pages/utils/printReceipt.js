@@ -463,6 +463,28 @@ export const printReceiptSilently = async (
   callback
 ) => {
   try {
+    // 1. Electron Native Printing
+    if (window.electronAPI) {
+      try {
+        const printers = await window.electronAPI.getPrinters();
+        const defaultPrinter = printers.find((p) => p.isDefault)?.name || printers[0]?.name || "";
+
+        const cashierHtml = getReceiptHTML(receiptData, {
+          design: "full",
+          type: "cashier",
+        });
+
+        await window.electronAPI.printHtml(cashierHtml, defaultPrinter);
+        toast.success("✅ تم الطباعة");
+      } catch (err) {
+        console.error("Electron print error:", err);
+        toast.error("❌ فشل الطباعة عبر النظام");
+      }
+      callback();
+      return;
+    }
+
+    // 2. Fallback to QZ Tray (Web Browser)
     if (!qz.websocket.isActive()) {
       toast.error("❌ QZ Tray is not connected.");
       callback();
@@ -471,7 +493,7 @@ export const printReceiptSilently = async (
 
     const printJobs = [];
 
-    // 1. طباعة فاتورة الكاشير (للعميل)
+    // طباعة فاتورة الكاشير (للعميل)
     try {
       const cashierPrinterName = await qz.printers.getDefault();
       if (!cashierPrinterName) throw new Error("No default printer found.");
@@ -492,9 +514,6 @@ export const printReceiptSilently = async (
       console.error(err);
       toast.error("خطأ في الطابعة الافتراضية");
     }
-
-    // 2. إلغاء جزء المطبخ (Kitchen)
-    // ...
 
     await Promise.all(printJobs);
     toast.success("✅ تم الطباعة");

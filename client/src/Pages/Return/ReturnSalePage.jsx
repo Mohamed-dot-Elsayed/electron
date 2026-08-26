@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePost } from "@/Hooks/usePost";
+import { useGet } from "@/Hooks/useGet";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Trash2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Trash2, Plus } from "lucide-react";
 
 export default function ReturnSalePage() {
   const { t, i18n } = useTranslation();
@@ -23,13 +31,29 @@ export default function ReturnSalePage() {
   const navigate = useNavigate();
   const { postData, loading } = usePost();
 
+  const {
+    data: accountsResponse,
+    isLoading: accountsLoading,
+    error: accountsError,
+  } = useGet("api/pos-home/accounts");
+
+  const financialAccounts = accountsResponse?.success ? accountsResponse.data?.data || [] : [];
+
+  useEffect(() => {
+    if (accountsError) {
+      toast.error(t("Failed to load financial accounts"));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountsError]);
+
   const [reference, setReference] = useState("");
   const [saleData, setSaleData] = useState(null);
   const [returnItems, setReturnItems] = useState([]);
   const [returnNote, setReturnNote] = useState("");
-  const [refundAccountId, setRefundAccountId] = useState("");
   const [attachedFile, setAttachedFile] = useState(null);
   const [fileName, setFileName] = useState("No file chosen");
+
+  const [financials, setFinancials] = useState([{ account_id: "", amount: "" }]);
 
   // خطوة 1: البحث عن الفاتورة بالرقم المرجعي
   const handleSearch = async (e) => {
@@ -47,16 +71,13 @@ export default function ReturnSalePage() {
       if (response.success) {
         const { sale, items } = response.data;
 
-        // تهيئة الأصناف مع دعم كلا الحالتين (product_price أو product)
         const initializedItems = items.map((item) => {
-          // اسم المنتج حسب اللغة (مع trim)
           const productName = item.product?.name || "";
           const productArName = (item.product?.ar_name || "").trim() || "";
-          const displayName = isArabic 
-            ? (productArName || productName || t("Unknown Product"))
-            : (productName || productArName || t("Unknown Product"));
+          const displayName = isArabic
+            ? productArName || productName || t("Unknown Product")
+            : productName || productArName || t("Unknown Product");
 
-          // الكود
           const code = item.product_price?.code || "-";
 
           return {
@@ -83,7 +104,6 @@ export default function ReturnSalePage() {
     }
   };
 
-  // تعديل كمية الإرجاع
   const updateQuantity = (index, qty) => {
     const maxQty = returnItems[index].max_return || 0;
     const newQty = Math.max(0, Math.min(parseInt(qty) || 0, maxQty));
@@ -92,19 +112,16 @@ export default function ReturnSalePage() {
     setReturnItems(updated);
   };
 
-  // تعديل سبب الإرجاع
   const updateReason = (index, reason) => {
     const updated = [...returnItems];
     updated[index].reason = reason;
     setReturnItems(updated);
   };
 
-  // حذف صنف من الإرجاع
   const removeItem = (index) => {
     setReturnItems(returnItems.filter((_, i) => i !== index));
   };
 
-  // حساب الإجماليات
   const calculateTotals = () => {
     let totalQuantity = 0;
     let totalAmount = 0;
@@ -126,7 +143,20 @@ export default function ReturnSalePage() {
 
   const { totalQuantity, totalAmount } = calculateTotals();
 
-  // رفع ملف
+  const addFinancialRow = () => {
+    setFinancials([...financials, { account_id: "", amount: "" }]);
+  };
+
+  const updateFinancialRow = (index, field, value) => {
+    const updated = [...financials];
+    updated[index][field] = value;
+    setFinancials(updated);
+  };
+
+  const removeFinancialRow = (index) => {
+    setFinancials(financials.filter((_, i) => i !== index));
+  };
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -138,7 +168,8 @@ export default function ReturnSalePage() {
   // Submit الإرجاع النهائي
   const handleFinalSubmit = async () => {
     const validItems = returnItems.filter(
-      (item) => (item.return_quantity || 0) > 0 && (item.reason || "").trim() !== ""
+      (item) =>
+        (item.return_quantity || 0) > 0 && (item.reason || "").trim() !== ""
     );
 
     if (validItems.length === 0) {
@@ -146,7 +177,12 @@ export default function ReturnSalePage() {
       return;
     }
 
+    const validFinancials = financials.filter((f) => f.account_id);
 
+    if (validFinancials.length === 0) {
+      toast.error(t("Please select at least one financial account"));
+      return;
+    }
 
     const payload = {
       sale_id: saleData._id,
@@ -156,6 +192,10 @@ export default function ReturnSalePage() {
         reason: item.reason.trim(),
       })),
       note: returnNote.trim(),
+      financials: validFinancials.map((f) => ({
+        account_id: f.account_id,
+        amount: Number(f.amount) || 0,
+      })),
     };
 
     let dataToSend = payload;
@@ -164,13 +204,9 @@ export default function ReturnSalePage() {
     if (isFormData) {
       const formData = new FormData();
       formData.append("sale_id", payload.sale_id);
-      formData.append("refund_account_id", payload.refund_account_id);
       formData.append("note", payload.note);
-      payload.items.forEach((item, idx) => {
-        formData.append(`items[${idx}][product_sale_id]`, item.product_sale_id);
-        formData.append(`items[${idx}][quantity]`, item.quantity);
-        formData.append(`items[${idx}][reason]`, item.reason);
-      });
+      formData.append("items", JSON.stringify(payload.items));
+      formData.append("financials", JSON.stringify(payload.financials));
       if (attachedFile) formData.append("attachment", attachedFile);
       dataToSend = formData;
     }
@@ -188,17 +224,15 @@ export default function ReturnSalePage() {
     }
   };
 
-  // استخراج أسماء الكاشير والكاشير مان حسب اللغة
   const cashierName = (() => {
     const cashier = saleData?.shift?.cashier;
     if (!cashier) return "-";
     const arName = (cashier.ar_name || "").trim();
-    return isArabic ? (arName || cashier.name || "-") : (cashier.name || arName || "-");
+    return isArabic ? arName || cashier.name || "-" : cashier.name || arName || "-";
   })();
 
   const cashiermanName = saleData?.shift?.cashierman?.username || "-";
 
-  // شاشة البحث الأولية
   if (!saleData) {
     return (
       <div className="min-h-screen bg-gray-50 py-8 px-4">
@@ -241,7 +275,6 @@ export default function ReturnSalePage() {
     );
   }
 
-  // الشاشة الرئيسية بعد العثور على الفاتورة
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-7xl mx-auto">
@@ -250,8 +283,6 @@ export default function ReturnSalePage() {
             <CardTitle className="text-2xl">{t("Return Sale")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-
-            {/* Header: Reference, Date, Customer, Warehouse, Cashier, Cashier Manager */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
               <div>
                 <Label>{t("Reference")}</Label>
@@ -259,47 +290,34 @@ export default function ReturnSalePage() {
               </div>
               <div>
                 <Label>{t("Date")}</Label>
-                <Input 
-                  value={saleData?.date ? new Date(saleData.date).toLocaleString() : "-"} 
-                  readOnly 
-                  className="bg-gray-100" 
+                <Input
+                  value={saleData?.date ? new Date(saleData.date).toLocaleString() : "-"}
+                  readOnly
+                  className="bg-gray-100"
                 />
               </div>
               <div>
                 <Label>{t("Customer")}</Label>
-                <Input 
-                  value={saleData?.customer?.name || t("Walk in Customer")} 
-                  readOnly 
-                  className="bg-gray-100" 
+                <Input
+                  value={saleData?.customer?.name || t("Walk in Customer")}
+                  readOnly
+                  className="bg-gray-100"
                 />
               </div>
               <div>
                 <Label>{t("Warehouse")}</Label>
-                <Input 
-                  value={saleData?.warehouse?.name || "-"} 
-                  readOnly 
-                  className="bg-gray-100" 
-                />
+                <Input value={saleData?.warehouse?.name || "-"} readOnly className="bg-gray-100" />
               </div>
               <div>
                 <Label>{t("Cashier")}</Label>
-                <Input 
-                  value={cashierName} 
-                  readOnly 
-                  className="bg-gray-100" 
-                />
+                <Input value={cashierName} readOnly className="bg-gray-100" />
               </div>
               <div>
                 <Label>{t("Cashier Manager") || "Cashier Man"}</Label>
-                <Input 
-                  value={cashiermanName} 
-                  readOnly 
-                  className="bg-gray-100" 
-                />
+                <Input value={cashiermanName} readOnly className="bg-gray-100" />
               </div>
             </div>
 
-            {/* Order Table */}
             <div>
               <Label className="text-base font-medium">{t("Order Table")} *</Label>
               <div className="border rounded-lg overflow-hidden mt-2">
@@ -328,12 +346,10 @@ export default function ReturnSalePage() {
                       returnItems.map((item, index) => {
                         const returnQty = item.return_quantity || 0;
                         const subtotal = (returnQty * item.unit_price).toFixed(2);
-                        
+
                         return (
                           <TableRow key={item._id || index}>
-                            <TableCell className="font-medium">
-                              {item.displayName}
-                            </TableCell>
+                            <TableCell className="font-medium">{item.displayName}</TableCell>
                             <TableCell>{item.code}</TableCell>
                             <TableCell>{item.original_quantity || 0}</TableCell>
                             <TableCell>{item.max_return || 0}</TableCell>
@@ -381,7 +397,6 @@ export default function ReturnSalePage() {
               </div>
             </div>
 
-            {/* Attach Document */}
             <div>
               <Label>{t("Attach Document")} ({t("Optional")})</Label>
               <div className="flex items-center gap-3 mt-2">
@@ -390,28 +405,79 @@ export default function ReturnSalePage() {
                     {t("Choose File")}
                   </label>
                 </Button>
-                <input
-                  id="file-upload"
-                  type="file"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
+                <input id="file-upload" type="file" className="hidden" onChange={handleFileChange} />
                 <span className="text-sm text-gray-600">{fileName}</span>
               </div>
             </div>
 
-            {/* Refund Account */}
-            {/* <div>
-              <Label>{t("Refund Account")} *</Label>
-              <Input
-                placeholder={t("e.g. 693e887d5d2abb8f0937d1f5")}
-                value={refundAccountId}
-                onChange={(e) => setRefundAccountId(e.target.value)}
-                required
-              />
-            </div> */}
+            {/* Financial Accounts */}
+            <div>
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-medium">{t("Refund Accounts")} *</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addFinancialRow}
+                  disabled={financials.length >= financialAccounts.length}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  {t("Add Account")}
+                </Button>
+              </div>
 
-            {/* Notes */}
+              <div className="space-y-3 mt-2">
+                {financials.map((row, index) => {
+                  const selectedElsewhere = financials
+                    .filter((_, i) => i !== index)
+                    .map((f) => f.account_id);
+                  const availableAccounts = financialAccounts.filter(
+                    (account) => !selectedElsewhere.includes(account._id)
+                  );
+
+                  return (
+                    <div key={index} className="flex items-center gap-3">
+                      <select
+  value={row.account_id}
+  onChange={(e) => updateFinancialRow(index, "account_id", e.target.value)}
+  disabled={accountsLoading}
+  className="flex-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
+>
+  <option value="" disabled>
+    {accountsLoading ? t("Loading...") : t("Select account")}
+  </option>
+  {availableAccounts.map((account) => (
+    <option key={account._id} value={account._id}>
+      {account.name} ({account.balance})
+    </option>
+  ))}
+</select>
+
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder={t("Amount")}
+                        value={row.amount}
+                        onChange={(e) => updateFinancialRow(index, "amount", e.target.value)}
+                        className="w-32"
+                      />
+
+                      {financials.length > 1 && (
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          onClick={() => removeFinancialRow(index)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <div>
               <Label>{t("Return Note")}</Label>
               <textarea
@@ -423,7 +489,6 @@ export default function ReturnSalePage() {
               />
             </div>
 
-            {/* Submit Buttons */}
             <div className="flex justify-end gap-3">
               <Button
                 variant="outline"
@@ -434,6 +499,7 @@ export default function ReturnSalePage() {
                   setReturnNote("");
                   setAttachedFile(null);
                   setFileName("No file chosen");
+                  setFinancials([{ account_id: "", amount: "" }]);
                 }}
                 disabled={loading}
               >

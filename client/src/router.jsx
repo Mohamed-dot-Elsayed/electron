@@ -19,6 +19,7 @@ import AllOrders from "./Pages/AllOrders/AllOrders";
 import SinglePage from "./Pages/OnlineOrders/SinglePage";
 import OnlineTabs from "./Pages/OnlineOrders/OnlineTabs";
 import ReturnSalePage from "./Pages/Return/ReturnSalePage";
+import ReturnsListPage from "./Pages/Return/returns";
 import ProductDetails from "./Pages/Details/Productdetails";
 
 const routes = [
@@ -204,6 +205,14 @@ const routes = [
         ),
       },
       { path: "/return-sale", element: <ReturnSalePage /> },
+      {
+        path: "/returns",
+        element: (
+          <ProtectedRoute>
+            <ReturnsListPage />
+          </ProtectedRoute>
+        ),
+      },
     ],
   },
 ];

@@ -213,7 +213,7 @@ export default function Navbar() {
     } else if (value === "online-order") {
       navigate("/online-orders", { replace: true });
     } else if (value === "return") {
-      navigate("/return-sale", { replace: true }); // الصفحة الجديدة
+      navigate("/returns", { replace: true }); // الصفحة الجديدة
     }
   };
 

@@ -162,6 +162,19 @@ const SaleSchema: SchemaDef = {
     type: "date",
     default: () => new Date(),
   },
+  return_status: {
+      type: "string",
+      enum: ["none", "partial", "full"],
+      default: "none",
+    },
+    returned_amount: {
+      type: "number",
+      default: 0, // sum of returned subtotal, in currency
+    },
+    returned_quantity: {
+      type: "number",
+      default: 0, // sum of returned item quantities across all returns
+    },
 };
 
 export const SaleModel = createModel("Sale", SaleSchema, {

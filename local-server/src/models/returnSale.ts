@@ -32,6 +32,10 @@ const ReturnItemSchema: SchemaDef = {
     type: "number",
     required: true,
   },
+  reason: {
+    type: "string",
+    default: "",
+  },
 };
 
 // Main Return schema

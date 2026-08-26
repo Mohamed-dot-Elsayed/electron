@@ -10,7 +10,8 @@ import {
   FaPrint,
   FaTimes,
   FaArrowDown,
-  FaArrowUp
+  FaArrowUp,
+  FaUndoAlt
 } from "react-icons/fa";
 
 // ─── ترويسة موحدة لأقسام التقرير ───
@@ -49,6 +50,9 @@ const PrintableReport = React.forwardRef(({ reportData, t, formatAmount, isArabi
   const ordersSummary = report.ordersSummary || {};
   const expensesData = report.expenses || {};
   const expensesList = expensesData.rows || [];
+  const returnsData = report.returns || {};
+  const returnsList = returnsData.rows || [];
+  const returnsCount = returnsList.length;
 
   // التواريخ
   const shiftStart = shift.start_time
@@ -93,6 +97,7 @@ const PrintableReport = React.forwardRef(({ reportData, t, formatAmount, isArabi
         <div className="row"><span>{t("From")}:</span> <span>{shiftStart}</span></div>
         <div className="row"><span>{t("To")}:</span> <span>{shiftEnd}</span></div>
         <div className="row"><span>{t("TotalOrders")}:</span> <span>{ordersSummary.totalOrders || 0}</span></div>
+        <div className="row"><span>{t("TotalReturns")}:</span> <span>{returnsCount}</span></div>
       </div>
 
       {/* تفاصيل الحسابات (Financial Breakdown) */}
@@ -101,10 +106,11 @@ const PrintableReport = React.forwardRef(({ reportData, t, formatAmount, isArabi
         <table className="table">
           <thead>
             <tr>
-              <th width="30%">{t("Method")}</th>
-              <th width="25%">{t("Sales")}</th>
-              <th width="20%">{t("Exp.")}</th>
-              <th width="25%">{t("Net")}</th>
+              <th width="25%">{t("Method")}</th>
+              <th width="20%">{t("Sales")}</th>
+              <th width="18%">{t("Exp.")}</th>
+              <th width="18%">{t("Ret.")}</th>
+              <th width="19%">{t("Net")}</th>
             </tr>
           </thead>
           <tbody>
@@ -113,6 +119,7 @@ const PrintableReport = React.forwardRef(({ reportData, t, formatAmount, isArabi
                 <td>{acc.name === "cash" ? t("Cash") : acc.name}</td>
                 <td>{formatAmount(acc.salesAmount, "")}</td>
                 <td>{acc.expensesAmount > 0 ? `-${formatAmount(acc.expensesAmount, "")}` : "0"}</td>
+                <td>{acc.returnsAmount > 0 ? `-${formatAmount(acc.returnsAmount, "")}` : "0"}</td>
                 <td className="bold">{formatAmount(acc.net, "")}</td>
               </tr>
             ))}
@@ -145,6 +152,31 @@ const PrintableReport = React.forwardRef(({ reportData, t, formatAmount, isArabi
         </div>
       )}
 
+      {/* المرتجعات التفصيلية */}
+      {returnsList.length > 0 && (
+        <div className="section">
+          <span className="section-title">{t("ReturnsList")}</span>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{t("Desc")}</th>
+                <th>{t("Acc")}</th>
+                <th>{t("Val")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {returnsList.map((ret, idx) => (
+                <tr key={idx}>
+                  <td>{ret.description || ret.order_id || `#${idx + 1}`}</td>
+                  <td>{ret.account?.name || "-"}</td>
+                  <td>{formatAmount(Math.abs(ret.amount), "")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {/* الملخص المالي النهائي */}
       <div className="section">
         <div className="row bold">
@@ -155,6 +187,16 @@ const PrintableReport = React.forwardRef(({ reportData, t, formatAmount, isArabi
           <span>{t("TotalExpenses")}:</span>
           <span>-{formatAmount(totals.totalExpenses)}</span>
         </div>
+        <div className="row bold">
+          <span>{t("TotalReturns")} ({returnsCount}):</span>
+          <span>-{formatAmount(totals.totalReturns)}</span>
+        </div>
+        {totals.unassignedReturnsAmount > 0 && (
+          <div className="row">
+            <span>{t("UnassignedReturns")}:</span>
+            <span>-{formatAmount(totals.unassignedReturnsAmount)}</span>
+          </div>
+        )}
       </div>
 
       <div className="total-box">
@@ -189,11 +231,22 @@ export default function EndShiftReportModal({ reportData, onClose, onConfirmClos
   // 2. الملخص المالي (Accounts & Totals)
   const financialSummary = report.financialSummary || {};
   const accounts = financialSummary.accounts || []; // المصفوفة التي تحتوي على cash, visa, etc.
-  const totals = financialSummary.totals || { totalSales: 0, totalExpenses: 0, netCashInDrawer: 0 };
+  const totals = financialSummary.totals || {
+    totalSales: 0,
+    totalExpenses: 0,
+    totalReturns: 0,
+    unassignedReturnsAmount: 0,
+    netCashInDrawer: 0,
+  };
 
   // 3. المصروفات
   const expensesData = report.expenses || {};
   const expensesList = expensesData.rows || [];
+
+  // 4. المرتجعات
+  const returnsData = report.returns || {};
+  const returnsList = returnsData.rows || [];
+  const returnsCount = returnsList.length;
 
   // تنسيق العملة
   const formatAmount = (amount, currency = t("EGP")) => {
@@ -260,7 +313,7 @@ export default function EndShiftReportModal({ reportData, onClose, onConfirmClos
         <div className="p-8 overflow-y-auto custom-scrollbar flex-1 space-y-8">
 
           {/* Shift Info Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <CompactStatCard
               icon={FaClock}
               title={t("ShiftDuration")}
@@ -271,6 +324,12 @@ export default function EndShiftReportModal({ reportData, onClose, onConfirmClos
               icon={FaShoppingCart}
               title={t("TotalOrders")}
               value={ordersSummary.totalOrders}
+            />
+            <CompactStatCard
+              icon={FaUndoAlt}
+              title={t("TotalReturns")}
+              value={returnsCount}
+              subValue={formatAmount(totals.totalReturns)}
             />
           </div>
 
@@ -290,6 +349,7 @@ export default function EndShiftReportModal({ reportData, onClose, onConfirmClos
                     <th className="px-6 py-4 text-start">{t("Account")}</th>
                     <th className="px-6 py-4 text-start">{t("Sales")}</th>
                     <th className="px-6 py-4 text-start">{t("Expenses")}</th>
+                    <th className="px-6 py-4 text-start">{t("Returns")}</th>
                     <th className="px-6 py-4 text-start">{t("Net")}</th>
                   </tr>
                 </thead>
@@ -305,6 +365,9 @@ export default function EndShiftReportModal({ reportData, onClose, onConfirmClos
                       <td className="px-6 py-4 text-red-400 font-bold">
                         {acc.expensesAmount > 0 ? `-${formatAmount(acc.expensesAmount)}` : "-"}
                       </td>
+                      <td className="px-6 py-4 text-orange-500 font-bold">
+                        {acc.returnsAmount > 0 ? `-${formatAmount(acc.returnsAmount)}` : "-"}
+                      </td>
                       <td className="px-6 py-4 font-black text-gray-900 bg-gray-50/50">
                         {formatAmount(acc.net)}
                       </td>
@@ -316,11 +379,19 @@ export default function EndShiftReportModal({ reportData, onClose, onConfirmClos
                     <td className="px-6 py-5 rounded-bl-[1.5rem]">{t("Total")}</td>
                     <td className="px-6 py-5 text-green-400">{formatAmount(totals.totalSales)}</td>
                     <td className="px-6 py-5 text-red-400">-{formatAmount(totals.totalExpenses)}</td>
+                    <td className="px-6 py-5 text-orange-400">-{formatAmount(totals.totalReturns)}</td>
                     <td className="px-6 py-5 text-white rounded-br-[1.5rem]">{formatAmount(totals.netCashInDrawer)}</td>
                   </tr>
                 </tbody>
               </table>
             </div>
+
+            {totals.unassignedReturnsAmount > 0 && (
+              <div className="px-6 py-3 bg-orange-50 border-t border-orange-100 text-xs font-bold text-orange-600 flex justify-between">
+                <span>{t("UnassignedReturns")}</span>
+                <span>-{formatAmount(totals.unassignedReturnsAmount)}</span>
+              </div>
+            )}
           </div>
 
           {/* Expenses Detail Section */}
@@ -351,6 +422,34 @@ export default function EndShiftReportModal({ reportData, onClose, onConfirmClos
             </div>
           )}
 
+          {/* Returns Detail Section */}
+          {returnsList.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 ml-1">
+                <FaUndoAlt className="text-orange-500" />
+                <h3 className="font-black text-[10px] uppercase tracking-widest text-gray-400">{t("ReturnsBreakdown")}</h3>
+              </div>
+              <div className="space-y-3">
+                {returnsList.map((ret, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-4 bg-gray-50 border border-gray-100 rounded-2xl hover:bg-white hover:shadow-md transition-all group">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-orange-500 font-black text-xs border border-gray-100 group-hover:bg-orange-500 group-hover:text-white transition-all">
+                        {idx + 1}
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-800 text-sm">{ret.description || ret.order_id || `${t("Return")} #${idx + 1}`}</p>
+                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight flex items-center gap-1.5 mt-0.5">
+                          <FaArrowUp size={8} /> {t("Account")}: <span className="text-gray-500">{ret.account?.name || "-"}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <span className="font-black text-orange-500 text-lg">-{formatAmount(Math.abs(ret.amount || 0))}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Final Net Cash Card */}
           <div className="bg-gradient-to-br from-gray-800 to-black rounded-[2.5rem] p-8 text-center text-white shadow-xl relative overflow-hidden group">
             <div className="relative z-10 animate-in fade-in slide-in-from-bottom duration-700">
@@ -358,7 +457,7 @@ export default function EndShiftReportModal({ reportData, onClose, onConfirmClos
               <h1 className="text-5xl font-black tracking-tighter group-hover:scale-110 transition-transform duration-500">{formatAmount(totals.netCashInDrawer)}</h1>
               <div className="w-16 h-1 bg-bg-primary mx-auto my-4 rounded-full opacity-50" />
               <p className="text-[10px] text-white/30 font-bold">
-                {t("CalculatedFrom")}: {t("TotalSales")} - {t("TotalExpenses")}
+                {t("CalculatedFrom")}: {t("TotalSales")} - {t("TotalExpenses")} - {t("TotalReturns")}
               </p>
             </div>
             {/* Background decoration */}

@@ -81,6 +81,10 @@ const CheckOut = ({
 
   // === QZ Tray Connection ===
   useEffect(() => {
+    if (window.electronAPI) {
+      // لو شغالين جوة إلكترون بنستخدم الطباعة النيتف ومش محتاجين كيو زد تراي
+      return;
+    }
     if (!shouldPrintReceipt) {
       // لو مش هنطبع → متعملش اتصال بـ QZ خالص
       return;

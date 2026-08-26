@@ -447,7 +447,7 @@ const filteredOrders = useMemo(() => {
                       {order.reference}
                     </td>
                     <td className={`border p-3 ${isArabic ? "text-right" : "text-left"}`}>
-                      {order.total}
+                      {order.grand_total}
                     </td>
                     <td className={`border p-3 ${isArabic ? "text-right" : "text-left"}`}>
                       {order.warehouse_id?.name || "—"}

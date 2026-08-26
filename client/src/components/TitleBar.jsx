@@ -35,16 +35,6 @@ function SyncIcon() {
   );
 }
 
-function MenuIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="currentColor">
-      <circle cx="8" cy="3" r="1.4" />
-      <circle cx="8" cy="8" r="1.4" />
-      <circle cx="8" cy="13" r="1.4" />
-    </svg>
-  ); 
-}
-
 function MinimizeIcon() {
   return (
     <svg
@@ -96,6 +86,12 @@ export default function TitleBar({ currentLocalData, lastSyncedData }) {
   const [pullSummary, setPullSummary] = useState(null);
   const [pushSummary, setPushSummary] = useState(null);
 
+  // Connection states
+  const [isConnected, setIsConnected] = useState(navigator.onLine);
+  const [lastSyncTime, setLastSyncTime] = useState(() => {
+    return localStorage.getItem("lastSyncTime") || null;
+  });
+
   // 1. Race Condition Guard: useRef acts as a synchronous lock
   // This prevents multiple API calls if the user double-clicks rapidly
   const isSyncingRef = useRef(false);
@@ -107,6 +103,52 @@ export default function TitleBar({ currentLocalData, lastSyncedData }) {
   const [popupPos, setPopupPos] = useState(null);
 
   const { postData } = usePost();
+
+  // Background connection status checker
+  useEffect(() => {
+    let active = true;
+    const checkConnection = async () => {
+      if (!navigator.onLine) {
+        if (active) setIsConnected(false);
+        return;
+      }
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        
+        // Mode no-cors allows us to ping the remote backend to check internet connectivity
+        await fetch("https://bcknd.systego.net", {
+          mode: "no-cors",
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        
+        if (active) setIsConnected(true);
+      } catch (err) {
+        if (active) setIsConnected(false);
+      }
+    };
+
+    checkConnection();
+    const interval = setInterval(checkConnection, 10000);
+
+    const handleOnline = () => {
+      checkConnection();
+    };
+    const handleOffline = () => {
+      if (active) setIsConnected(false);
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   // Recompute the popup's screen position any time it should be visible.
   useEffect(() => {
@@ -175,6 +217,11 @@ export default function TitleBar({ currentLocalData, lastSyncedData }) {
         pushed: pushResult?.pushed ?? 0,
       });
 
+      const syncTimeVal = pushResult?.syncTime || new Date().toISOString();
+      const formattedTime = new Date(syncTimeVal).toLocaleString();
+      setLastSyncTime(formattedTime);
+      localStorage.setItem("lastSyncTime", formattedTime);
+
       console.log("Sync payload sent:", payload, "Push result:", pushResult);
       setSyncPhase("success");
     } catch (error) {
@@ -212,11 +259,16 @@ export default function TitleBar({ currentLocalData, lastSyncedData }) {
 
         <span className="title">
           SysteGo
-          <span className="spark" />
+          <span className={`spark ${isConnected ? "online" : "offline"}`} />
         </span>
       </div>
 
       <div className="right">
+        {/* Last Sync Time */}
+        <span className="last-sync-time">
+          Last Sync: {lastSyncTime || "Not Synced"}
+        </span>
+
         {/* Sync Button */}
         <div
           ref={syncWrapRef}
@@ -276,10 +328,6 @@ export default function TitleBar({ currentLocalData, lastSyncedData }) {
             )}
         </div>
 
-        <button className="menu" aria-label="Menu">
-          <MenuIcon />
-        </button>
-
         <button
           aria-label="Minimize"
           onClick={() => window.electronAPI.minimize()}
@@ -303,5 +351,5 @@ export default function TitleBar({ currentLocalData, lastSyncedData }) {
         </button>
       </div>
     </div>
-  ); 
+  );
 }
