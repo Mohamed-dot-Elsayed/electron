@@ -62,7 +62,7 @@ export const MODULES = [
   "service_fees",
   "courier",
   "orderType",
-  
+  "wasted",
 ] as const;
 
 // أسماء بس، من غير ids
