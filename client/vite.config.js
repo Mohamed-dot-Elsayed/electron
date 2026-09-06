@@ -18,5 +18,8 @@ export default defineConfig(({ mode }) => ({
     },
   },
   base: mode === 'electron' ? './' : '/point-of-sale',
+  define: {
+    'import.meta.env.VITE_IS_ELECTRON': JSON.stringify(mode === 'electron' ? 'true' : 'false'),
+  },
   envPrefix: 'VITE_'
 }))

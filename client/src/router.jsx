@@ -217,7 +217,11 @@ const routes = [
   },
 ];
 
-const isElectron = import.meta.env.VITE_IS_ELECTRON === "true";
+const isElectron =
+  import.meta.env.VITE_IS_ELECTRON === "true" ||
+  import.meta.env.MODE === "electron" ||
+  (typeof window !== "undefined" &&
+    (window.location.protocol === "file:" || Boolean(window.electronAPI)));
 
 const router = isElectron
   ? createHashRouter(routes)

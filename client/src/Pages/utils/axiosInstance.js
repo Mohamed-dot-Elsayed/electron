@@ -3,7 +3,11 @@ import axios from "axios";
 import { toast } from "react-toastify";
 
 const baseURL = import.meta.env.VITE_API_BASE_URL;
-const isElectron = import.meta.env.VITE_IS_ELECTRON === "true";
+const isElectron =
+  import.meta.env.VITE_IS_ELECTRON === "true" ||
+  import.meta.env.MODE === "electron" ||
+  (typeof window !== "undefined" &&
+    (window.location.protocol === "file:" || Boolean(window.electronAPI)));
 
 const axiosInstance = axios.create({
   baseURL,

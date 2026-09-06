@@ -15,33 +15,101 @@ import {
   setLastSyncAt,
   isBootstrapDone,
   markBootstrapComplete,
-  getOrCreateClientId
+  getOrCreateClientId,
 } from "./appMeta";
 import { enqueuePendingImages } from "../db/imageCache";
 import { extractImageUrls } from "./imageExtract";
-import { triggerImageDownload } from "./imageDownloader";
+import { runImageDownloadPass } from "./imageDownloader";
+import { emitSyncProgress } from "../socket";
 
-const REMOTE_BASE = process.env.REMOTE_API_URL;
+const REMOTE_BASE = process.env.REMOTE_API_URL || "https://bcknd.systego.net";
+let isBootstrapRunning = false;
 
 export async function runBootstrapAll() {
-  const clientId = getOrCreateClientId();
-  console.log(`Bootstrapping with client id: ${clientId}`);
+  if (isBootstrapRunning) {
+    console.log(
+      "⚠️ Bootstrap is already running, ignoring concurrent request.",
+    );
+    return;
+  }
+
   if (isBootstrapDone()) {
     console.log("Bootstrap already completed, skipping entirely");
     return;
   }
 
-  const tables = getAllTableNames();
-  console.log(`Bootstrap will run for tables: ${tables.join(", ")}`);
+  isBootstrapRunning = true;
 
-  for (const table of tables) {
-    await bootstrapTable(table);
+  try {
+    const clientId = getOrCreateClientId();
+    console.log(`Bootstrapping with client id: ${clientId}`);
+
+    const tables = getAllTableNames();
+    const totalTables = tables.length;
+    console.log(`Bootstrap will run for tables: ${tables.join(", ")}`);
+
+    emitSyncProgress({
+      type: "bootstrap",
+      status: "started",
+      message: "Starting bootstrap for all tables...",
+      percent: 0,
+      total: totalTables,
+      current: 0,
+    });
+
+    for (let i = 0; i < totalTables; i++) {
+      const table = tables[i];
+      const percent = Math.round(((i + 1) / totalTables) * 85);
+
+      emitSyncProgress({
+        type: "bootstrap",
+        status: "progress",
+        table,
+        current: i + 1,
+        total: totalTables,
+        percent,
+        message: `Bootstrapping table ${table} (${i + 1}/${totalTables})...`,
+      });
+
+      await bootstrapTable(table);
+    }
+
+    emitSyncProgress({
+      type: "bootstrap",
+      status: "progress",
+      percent: 90,
+      message: "Downloading local product & category images...",
+    });
+
+    try {
+      await runImageDownloadPass();
+    } catch (imgErr: any) {
+      console.warn(
+        "Non-fatal image download error during bootstrap:",
+        imgErr.message,
+      );
+    }
+
+    markBootstrapComplete();
+    setLastSyncAt("_global", new Date().toISOString());
+
+    emitSyncProgress({
+      type: "bootstrap",
+      status: "completed",
+      percent: 100,
+      message: "Bootstrap complete for all tables and images!",
+    });
+  } catch (err: any) {
+    emitSyncProgress({
+      type: "bootstrap",
+      status: "error",
+      percent: 100,
+      message: `Bootstrap failed: ${err.message}`,
+    });
+    throw err;
+  } finally {
+    isBootstrapRunning = false;
   }
-
-  markBootstrapComplete();
-  setLastSyncAt("_global",new Date().toISOString())
-  triggerImageDownload();
-  console.log("Bootstrap complete for all tables");
 }
 
 async function bootstrapTable(table: string) {
@@ -51,19 +119,19 @@ async function bootstrapTable(table: string) {
   }
 
   const db = getDB();
-  dropTriggersForTable(db, table); // don't pollute change_log with server-origin rows
+  dropTriggersForTable(db, table);
 
   try {
     console.log(`Bootstrapping ${table}...`);
     const { data } = await axios.get(
-      `${REMOTE_BASE}/api/sync/bootstrap/${table}`
+      `${REMOTE_BASE}/api/sync/bootstrap/${table}`,
     );
 
     if (!data.data.rows || data.data.rows.length === 0) {
       console.log(`No rows for ${table}, marking done`);
       setLastSyncAt(
         table,
-        data.data.serverSnapshotAt ?? new Date().toISOString()
+        data.data.serverSnapshotAt ?? new Date().toISOString(),
       );
       markTableBootstrapped(table);
       return;
@@ -81,7 +149,7 @@ async function bootstrapTable(table: string) {
       db.run("COMMIT");
     } catch (err) {
       db.run("ROLLBACK");
-      throw err; // table stays unmarked -> retried next launch
+      throw err;
     }
 
     saveDB();
@@ -89,10 +157,22 @@ async function bootstrapTable(table: string) {
     markTableBootstrapped(table);
 
     console.log(
-      `Bootstrap complete for ${table}: ${data.data.rows.length} rows`
+      `Bootstrap complete for ${table}: ${data.data.rows.length} rows`,
     );
+  } catch (err: any) {
+    if (
+      err.response &&
+      (err.response.status === 500 || err.response.status === 404)
+    ) {
+      console.warn(
+        `Server returned ${err.response.status} for ${table}, skipping this table.`,
+      );
+      markTableBootstrapped(table);
+      return;
+    }
+    throw err;
   } finally {
-    installTriggersForTable(db, table); // always restore, even on failure
+    installTriggersForTable(db, table);
   }
 }
 
@@ -101,12 +181,10 @@ function insertRow(
   table: string,
   row: Record<string, any>,
   localColumns: string[],
-  pk: string
+  pk: string,
 ) {
-  // ---- 1. Determine the correct primary key value ----
-  let pkValue = row[pk]; // exact match first
+  let pkValue = row[pk];
   if (pkValue === undefined) {
-    // Common fallbacks: local pk is "id" but row has "_id", or vice versa
     if (pk === "id" && row["_id"] !== undefined) {
       pkValue = row["_id"];
     } else if (pk === "_id" && row["id"] !== undefined) {
@@ -114,25 +192,18 @@ function insertRow(
     }
   }
 
-  // ---- 2. Build the INSERT column & value arrays ----
   const columns: string[] = [];
   const bindValues: any[] = [];
 
-  // Always include the primary key column first (if we have a value)
   columns.push(pk);
   bindValues.push(pkValue);
 
-  // Process the remaining keys in the row
   for (const key of Object.keys(row)) {
-    // Skip the key that matches the local pk column (already handled)
     if (key === pk) continue;
 
-    // Skip the *alternative* primary key name that is not the local column
-    // e.g. row has "_id" but local pk is "id" → ignore "_id"
     if ((key === "_id" && pk === "id") || (key === "id" && pk === "_id"))
       continue;
 
-    // Only include columns that exist in the local schema
     if (!localColumns.includes(key)) continue;
 
     columns.push(key);
@@ -141,13 +212,11 @@ function insertRow(
     if (value === undefined) {
       value = null;
     } else if (typeof value === "object") {
-      // sql.js rejects objects/arrays – convert to JSON string
       value = JSON.stringify(value);
     }
     bindValues.push(value);
   }
 
-  // ---- 3. Execute the INSERT ----
   const placeholders = columns.map(() => "?").join(", ");
   const updates = columns
     .filter((c) => c !== pk)
@@ -157,6 +226,6 @@ function insertRow(
   db.run(
     `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders})
      ON CONFLICT(${pk}) DO UPDATE SET ${updates}`,
-    bindValues
+    bindValues,
   );
 }

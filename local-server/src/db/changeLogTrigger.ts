@@ -1,5 +1,9 @@
 import { Database } from "sql.js";
-import { getAllTableNames, getPrimaryKeyColumn, getColumnNames } from "./introspect";
+import {
+  getAllTableNames,
+  getPrimaryKeyColumn,
+  getColumnNames,
+} from "./introspect";
 
 export function installChangeLogTriggers(db: Database) {
   const tables = getAllTableNames();
@@ -11,7 +15,6 @@ export function installChangeLogTriggers(db: Database) {
 export function installTriggersForTable(db: Database, table: string) {
   const pk = getPrimaryKeyColumn(table);
   const columns = getColumnNames(table);
-
   // NEW.<col> for the "after" snapshot
   const newJsonCols = columns.map((c) => `'${c}', NEW.${c}`).join(", ");
   // OLD.<col> for the "before" snapshot

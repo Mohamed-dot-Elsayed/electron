@@ -27,9 +27,9 @@ const queryClient = new QueryClient({
 });
 
 // === Service Worker ===
-if ("serviceWorker" in navigator) {
+if ("serviceWorker" in navigator && window.location.protocol !== "file:") {
   navigator.serviceWorker
-    .register(`${import.meta.env.BASE_URL}/firebase-messaging-sw.js`)
+    .register(`${import.meta.env.BASE_URL}firebase-messaging-sw.js`)
     .then((registration) => {
       console.log("Service Worker registered with scope:", registration.scope);
     })

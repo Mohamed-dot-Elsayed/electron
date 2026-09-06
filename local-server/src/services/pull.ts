@@ -14,6 +14,7 @@ import { sanitizeBindValues } from "../db/createModel";
 import { enqueuePendingImages } from "../db/imageCache";
 import { extractImageUrls } from "./imageExtract";
 import { triggerImageDownload } from "./imageDownloader";
+import { emitSyncProgress } from "../socket";
 
 const REMOTE_BASE = process.env.REMOTE_API_URL;
 const SYNC_CURSOR_KEY = "_global";
@@ -49,13 +50,10 @@ type RemoteChange = {
  * Accepts a numeric Unix timestamp (ms) or an already valid date string.
  */
 function normalizeCursor(raw: string): string {
-  // If it's all digits, treat as milliseconds since epoch
   if (/^\d+$/.test(raw)) {
     const ms = parseInt(raw, 10);
     return new Date(ms).toISOString();
   }
-  // Otherwise assume it's already an ISO string (or fallback)
-  // You could add more validation here if needed.
   return raw;
 }
 
@@ -64,34 +62,44 @@ export async function pullAllTables(): Promise<Record<string, number>> {
   const knownTables = new Set(getAllTableNames());
   const clientId = getOrCreateClientId();
 
-  // Get the cursor, fallback to epoch start, then normalize it
+  emitSyncProgress({
+    type: "pull",
+    status: "started",
+    percent: 10,
+    message: "Connecting to server and fetching changes...",
+  });
+
   const rawSince = getLastSyncAt(SYNC_CURSOR_KEY) ?? "1970-01-01T00:00:00.000Z";
   const since = normalizeCursor(rawSince);
 
-  // If we had to convert from numeric, permanently fix the stored value
   if (rawSince !== since) {
     setLastSyncAt(SYNC_CURSOR_KEY, since);
   }
 
-  let responseData; // will hold the parsed response body
+  let responseData;
   try {
     const response = await axios.get(`${REMOTE_BASE}/api/sync/pull`, {
       params: { since, clientId },
     });
-    responseData = response.data; // { success: true, data: { changes, serverTime } }
+    responseData = response.data;
   } catch (error: any) {
-    // Log the server's error message for debugging
+    emitSyncProgress({
+      type: "pull",
+      status: "error",
+      percent: 100,
+      message: `Failed to fetch updates: ${error.response?.data?.message || error.message}`,
+    });
+
     if (error.response) {
       console.error(
         "Response data:",
-        JSON.stringify(error.response.data, null, 2)
+        JSON.stringify(error.response.data, null, 2),
       );
       console.error("Server error:", error.response.data.error);
     }
-    throw error; // rethrow to be handled by the caller
+    throw error;
   }
 
-  // The server responds with { success: true, data: { changes: [...], serverTime: "..." } }
   const payload = responseData.data;
   const changes: RemoteChange[] = payload.changes ?? [];
   const serverTime: string = payload.serverTime;
@@ -101,10 +109,15 @@ export async function pullAllTables(): Promise<Record<string, number>> {
   if (changes.length === 0) {
     setLastSyncAt(SYNC_CURSOR_KEY, serverTime);
     console.log("No changes on Server");
+    emitSyncProgress({
+      type: "pull",
+      status: "completed",
+      percent: 100,
+      message: "Data is already up to date.",
+    });
     return results;
   }
 
-  // Group remote changes by table to reduce trigger work
   const byTable = new Map<string, RemoteChange[]>();
   for (const change of changes) {
     if (!knownTables.has(change.table_name)) {
@@ -116,8 +129,24 @@ export async function pullAllTables(): Promise<Record<string, number>> {
   }
 
   let allSucceeded = true;
+  const totalTables = byTable.size;
+  let currentTableIndex = 0;
 
   for (const [table, tableChanges] of byTable) {
+    currentTableIndex++;
+    const progressPercent =
+      20 + Math.round((currentTableIndex / totalTables) * 60);
+
+    emitSyncProgress({
+      type: "pull",
+      status: "progress",
+      table,
+      current: currentTableIndex,
+      total: totalTables,
+      percent: progressPercent,
+      message: `Syncing ${table} (${tableChanges.length} changes)...`,
+    });
+
     dropTriggersForTable(db, table);
     try {
       const pk = getPrimaryKeyColumn(table);
@@ -142,13 +171,11 @@ export async function pullAllTables(): Promise<Record<string, number>> {
 
             if (Object.keys(row).length === 0) {
               console.warn(
-                `Empty insert payload for ${table}/${change.record_id}, skipping`
+                `Empty insert payload for ${table}/${change.record_id}, skipping`,
               );
               continue;
             }
 
-            // Server payload doesn't guarantee the id is under the local pk column name
-            // (e.g. sends "id" while local schema uses "_id") — normalize it.
             row[pk] = row[pk] ?? row.id ?? change.record_id;
 
             applyUpsert(db, table, row, localColumns, pk);
@@ -156,7 +183,6 @@ export async function pullAllTables(): Promise<Record<string, number>> {
             continue;
           }
 
-          // change.op === "update"
           const updatePayload = (change.data ?? {
             fields: {},
           }) as UpdatePayload;
@@ -166,7 +192,7 @@ export async function pullAllTables(): Promise<Record<string, number>> {
             change.record_id,
             updatePayload,
             localColumns,
-            pk
+            pk,
           );
           if (changedValues) {
             enqueuePendingImages(extractImageUrls(table, changedValues));
@@ -188,11 +214,25 @@ export async function pullAllTables(): Promise<Record<string, number>> {
 
   saveDB();
   triggerImageDownload();
+
   if (allSucceeded) {
     setLastSyncAt(SYNC_CURSOR_KEY, serverTime);
+    emitSyncProgress({
+      type: "pull",
+      status: "completed",
+      percent: 100,
+      message: `Successfully pulled all changes across ${totalTables} tables.`,
+    });
   } else {
+    emitSyncProgress({
+      type: "pull",
+      status: "error",
+      percent: 100,
+      message:
+        "Sync partially completed. Some tables had conflicts and will retry.",
+    });
     console.warn(
-      "Some tables failed to sync — cursor not advanced, will retry next pull"
+      "Some tables failed to sync — cursor not advanced, will retry next pull",
     );
   }
 
@@ -203,7 +243,7 @@ function getLocalUpdatedAt(
   db: any,
   table: string,
   pk: string,
-  recordId: string
+  recordId: string,
 ): string | undefined {
   const stmt = db.prepare(`SELECT updatedAt FROM ${table} WHERE ${pk} = ?`);
   stmt.bind(sanitizeBindValues([recordId]));
@@ -216,14 +256,14 @@ function getLocalUpdatedAt(
 }
 
 /**
- * Insert path only (remote sends a full flat row on insert, no diffing needed).
+ * Insert path with robust conflict fallback to prevent UNIQUE constraint failure.
  */
 function applyUpsert(
   db: any,
   table: string,
   row: Record<string, any>,
   localColumns: string[],
-  pk: string
+  pk: string,
 ) {
   const localUpdatedAt = getLocalUpdatedAt(db, table, pk, row[pk]);
 
@@ -241,30 +281,38 @@ function applyUpsert(
   if (columns.length === 0) return;
 
   const placeholders = columns.map(() => "?").join(", ");
-  const updates = columns
-    .filter((c) => c !== pk)
-    .map((c) => `${c} = excluded.${c}`)
-    .join(", ");
+  const bindValues = sanitizeBindValues(columns.map((c) => row[c]));
 
-  db.run(
-    `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders})
-     ON CONFLICT(${pk}) DO UPDATE SET ${updates}`,
-    sanitizeBindValues(columns.map((c) => row[c]))
-  );
+  try {
+    const updates = columns
+      .filter((c) => c !== pk)
+      .map((c) => `${c} = excluded.${c}`)
+      .join(", ");
+
+    db.run(
+      `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders})
+       ON CONFLICT(${pk}) DO UPDATE SET ${updates}`,
+      bindValues,
+    );
+  } catch (err: any) {
+    if (String(err.message).includes("UNIQUE constraint failed")) {
+      db.run(
+        `INSERT OR REPLACE INTO ${table} (${columns.join(", ")}) VALUES (${placeholders})`,
+        bindValues,
+      );
+    } else {
+      throw err;
+    }
+  }
 }
 
-/**
- * Update path — applies { fields: { col: {op:"set"|"inc"|"arrayPatch", value} } }
- * against the local row. Returns a flat { col: value } map of what changed
- * (for image-url extraction) or null if nothing was applied.
- */
 function applyFieldOps(
   db: any,
   table: string,
   recordId: string,
   payload: UpdatePayload,
   localColumns: string[],
-  pk: string
+  pk: string,
 ): Record<string, any> | null {
   const fields = payload.fields ?? {};
   const keys = Object.keys(fields);
@@ -273,7 +321,7 @@ function applyFieldOps(
   const localUpdatedAt = getLocalUpdatedAt(db, table, pk, recordId);
   if (!localUpdatedAt) {
     console.warn(
-      `Update target ${table}/${recordId} not found locally — skipping`
+      `Update target ${table}/${recordId} not found locally — skipping`,
     );
     return null;
   }
@@ -305,7 +353,6 @@ function applyFieldOps(
       continue;
     }
 
-    // "set"
     setClauses.push(`${key} = ?`);
     setValues.push(...sanitizeBindValues([fieldOp.value]));
     changedValues[key] = fieldOp.value;
@@ -326,10 +373,6 @@ function applyFieldOps(
   return Object.keys(changedValues).length > 0 ? changedValues : null;
 }
 
-/**
- * Mirrors remote's applyArrayPatch: applies per-item numeric deltas / field
- * sets against a JSON array column, plus whole-item add/remove.
- */
 function applyArrayPatch(
   db: any,
   table: string,
@@ -344,7 +387,7 @@ function applyArrayPatch(
     }[];
     added: any[];
     removed: any[];
-  }
+  },
 ) {
   const stmt = db.prepare(`SELECT ${column} FROM ${table} WHERE ${pk} = ?`);
   stmt.bind(sanitizeBindValues([recordId]));

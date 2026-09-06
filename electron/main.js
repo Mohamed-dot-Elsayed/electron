@@ -166,37 +166,33 @@ function createWindow() {
     width: 1200,
     height: 800,
     show: true,
+    autoHideMenuBar: true,
+    frame: false, // Remove Windows title bar
+    titleBarStyle: "hidden",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
     },
-    autoHideMenuBar: true,
-    frame: false, // Remove Windows title bar
-    titleBarStyle: "hidden",
-
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      contextIsolation: true,
-    },
   });
 
   console.log(">>> BrowserWindow created, id:", mainWindow.id);
 
-  let loadUrl;
   if (app.isPackaged) {
-    // In packaged app, load from the built files
-    loadUrl = `file://${path.join(__dirname, "../client/dist/index.html")}`;
+    // In packaged app, load from the built files using loadFile
+    const indexPath = path.join(__dirname, "../client/dist/index.html");
+    console.log(">>> Loading File:", indexPath);
+    mainWindow.loadFile(indexPath).catch((err) => {
+      console.log(">>> loadFile rejected:", err);
+    });
   } else {
     // In development, use Vite dev server
-    loadUrl = `http://localhost:${actualVitePort}`;
+    const loadUrl = `http://localhost:${actualVitePort}`;
+    console.log(">>> Loading URL:", loadUrl);
+    mainWindow.loadURL(loadUrl).catch((err) => {
+      console.log(">>> loadURL rejected:", err);
+    });
   }
-
-  console.log(">>> Loading URL:", loadUrl);
-
-  mainWindow.loadURL(loadUrl).catch((err) => {
-    console.log(">>> loadURL rejected:", err);
-  });
 
   mainWindow.webContents.once("did-finish-load", () => {
     console.log(">>> did-finish-load fired");

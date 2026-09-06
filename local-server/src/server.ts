@@ -16,6 +16,10 @@ import { startCron } from "./utils/expiry_lowstock";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { uploadsRouter } from "./routes/uploadsRoute";
+import { setSocketIO } from "./socket";
+import { startAutoSyncCron } from "./services/autoSync";
+import { isBootstrapDone } from "./services/appMeta";
+import { runBootstrapAll } from "./services/bootstrap";
 
 export function createServer() {
   const app = express();
@@ -44,9 +48,22 @@ export function createServer() {
     cors: { origin: "*" },
   });
 
+  setSocketIO(io); // Set the socket.io instance for global access
+
   // 🔌 Socket.IO connection
   io.on("connection", (socket) => {
-    console.log("✅ User connected:", socket.id);
+    console.log("✅ User connected to socket:", socket.id);
+
+    if (!isBootstrapDone()) {
+      console.log(
+        "Client connected and bootstrap needed. Starting bootstrap stream...",
+      );
+      setTimeout(() => {
+        runBootstrapAll().catch((err) => {
+          console.error("Bootstrap error via socket connection:", err);
+        });
+      }, 600);
+    }
 
     socket.on("disconnect", () => {
       console.log("❌ User disconnected:", socket.id);
@@ -55,6 +72,7 @@ export function createServer() {
 
   // 🕒 Start cron jobs
   startCron(io);
+  startAutoSyncCron(1); // Start auto-sync cron job every 30 minutes
 
   return server; // http.Server, already wired with express + socket.io
 }
@@ -62,7 +80,7 @@ export function createServer() {
 // Allows `ts-node src/server.ts` or `node dist/src/server.js` to still work standalone
 if (require.main === module) {
   const server = createServer();
-  const PORT = process.env.PORT || 3000;
+  const PORT = process.env.PORT || 3001;
   server.listen(PORT, () => {
     console.log(`🚀 Server is running on http://localhost:${PORT}`);
   });

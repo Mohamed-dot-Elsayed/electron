@@ -1,8 +1,7 @@
-import { Server } from "socket.io";
 import { ProductModel } from "../models/product";
 import { PurchaseItemModel } from "../models/purchaseItem";
-import { NotificationModel } from "../models/notification";
 import cron from "node-cron";
+import { Server } from "socket.io";
 
 export class NotificationService {
   constructor(private io: Server) {}
@@ -13,21 +12,9 @@ export class NotificationService {
 
     const qty = product.quantity ?? 0;
     if (product.low_stock && qty <= product.low_stock) {
-      const existingNotification = await NotificationModel.findOne({
-        type: "low_stock",
-        productId: product._id,
-        isRead: false,
-      });
-
-      if (existingNotification) return;
-
-      const notification = await NotificationModel.create({
-        type: "low_stock",
-        productId: product._id,
-        message: `⚠️ Product ${product.name} is low in stock (${qty}).`,
-      });
-
-      this.io.emit("notification", notification);
+      console.log(
+        `[Low Stock Info] Product ${product.name} has low stock (${qty}).`,
+      );
     }
   }
 
@@ -39,43 +26,15 @@ export class NotificationService {
     now.setHours(0, 0, 0, 0);
     soon.setHours(23, 59, 59, 999);
 
-    const expiringItems = PurchaseItemModel.find({ item_type: "product" })
-      .filter((item) => {
-        const expiryDate = new Date(item.date_of_expiery);
-        return expiryDate <= soon && expiryDate >= now && item.quantity > 0;
-      })
-      .map((item) => {
-        const product = item.product_id
-          ? ProductModel.findById(item.product_id)
-          : null;
-        return {
-          ...item,
-          product_id: product ? { _id: product._id, name: product.name } : null,
-        };
-      });
+    const expiringItems = PurchaseItemModel.find({
+      item_type: "product",
+    }).filter((item) => {
+      const expiryDate = new Date(item.date_of_expiery);
+      return expiryDate <= soon && expiryDate >= now && item.quantity > 0;
+    });
 
-    for (const item of expiringItems) {
-      const product = item.product_id as any;
-      if (!product) continue;
-
-      const existingNotification = await NotificationModel.findOne({
-        type: "expiry",
-        purchaseItemId: item._id,
-        isRead: false,
-      });
-
-      if (existingNotification) continue;
-
-      const expiryDate = item.date_of_expiery?.toDateString() || "Unknown";
-
-      const notification = await NotificationModel.create({
-        type: "expiry",
-        productId: product._id,
-        purchaseItemId: item._id,
-        message: `⏰ Product ${product.name} will expire on ${expiryDate}. Quantity: ${item.quantity}`,
-      });
-
-      this.io.emit("notification", notification);
+    if (expiringItems.length > 0) {
+      console.log(`[Expiry Info] ${expiringItems.length} items expiring soon.`);
     }
   }
 
@@ -83,43 +42,15 @@ export class NotificationService {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
 
-    const expiredItems = PurchaseItemModel.find({ item_type: "product" })
-      .filter((item) => {
-        const expiryDate = new Date(item.date_of_expiery);
-        return expiryDate < now && item.quantity > 0;
-      })
-      .map((item) => {
-        const product = item.product_id
-          ? ProductModel.findById(item.product_id)
-          : null;
-        return {
-          ...item,
-          product_id: product ? { _id: product._id, name: product.name } : null,
-        };
-      });
+    const expiredItems = PurchaseItemModel.find({
+      item_type: "product",
+    }).filter((item) => {
+      const expiryDate = new Date(item.date_of_expiery);
+      return expiryDate < now && item.quantity > 0;
+    });
 
-    for (const item of expiredItems) {
-      const product = item.product_id as any;
-      if (!product) continue;
-
-      const existingNotification = await NotificationModel.findOne({
-        type: "expired",
-        purchaseItemId: item._id,
-        isRead: false,
-      });
-
-      if (existingNotification) continue;
-
-      const expiryDate = item.date_of_expiery?.toDateString() || "Unknown";
-
-      const notification = await NotificationModel.create({
-        type: "expired",
-        productId: product._id,
-        purchaseItemId: item._id,
-        message: `🚨 Product ${product.name} has EXPIRED on ${expiryDate}. Quantity: ${item.quantity}`,
-      });
-
-      this.io.emit("notification", notification);
+    if (expiredItems.length > 0) {
+      console.log(`[Expired Info] ${expiredItems.length} items expired.`);
     }
   }
 
@@ -128,25 +59,15 @@ export class NotificationService {
       low_stock: { $exists: true, $ne: null },
     });
 
-    for (const product of products) {
-      const qty = product.quantity ?? 0;
-      if (product.low_stock && qty <= product.low_stock) {
-        const existingNotification = await NotificationModel.findOne({
-          type: "low_stock",
-          productId: product._id,
-          isRead: false,
-        });
+    const lowStockCount = products.filter(
+      (p) =>
+        p.quantity != null && p.low_stock != null && p.quantity <= p.low_stock,
+    ).length;
 
-        if (existingNotification) continue;
-
-        const notification = await NotificationModel.create({
-          type: "low_stock",
-          productId: product._id,
-          message: `⚠️ Product ${product.name} is low in stock (${qty}).`,
-        });
-
-        this.io.emit("notification", notification);
-      }
+    if (lowStockCount > 0) {
+      console.log(
+        `[Low Stock Summary] ${lowStockCount} products are low in stock.`,
+      );
     }
   }
 }
@@ -154,21 +75,18 @@ export class NotificationService {
 export function startCron(io: Server) {
   const service = new NotificationService(io);
 
-  // يتشيك كل يوم الساعة 3 العصر على المنتجات القريبة من الانتهاء
+  // فحص الصلاحية الساعة 3 عصراً
   cron.schedule("0 15 * * *", async () => {
-    console.log("🔔 Running expiry check...");
     await service.checkExpiry();
   });
 
-  // يتشيك كل يوم الساعة 3:30 على المنتجات المنتهية فعلاً
+  // فحص المنتهي الساعة 3:30 عصراً
   cron.schedule("30 15 * * *", async () => {
-    console.log("🚨 Running expired check...");
     await service.checkExpired();
   });
 
-  // يتشيك كل يوم الساعة 4 على المنتجات اللي كميتها قليلة
+  // فحص النواقص الساعة 4 عصراً
   cron.schedule("0 16 * * *", async () => {
-    console.log("⚠️ Running low stock check...");
     await service.checkAllLowStock();
   });
 

@@ -11,10 +11,6 @@ async function startServer() {
     const serverInstance = server.listen(PORT, () => {
       console.log(`Local server listening on http://localhost:${PORT}`);
       resolve(serverInstance);
-
-      runBootstrapAll().catch((err) => {
-        console.error("Bootstrap failed, will resume next launch:", err);
-      });
     });
     serverInstance.on("error", reject);
   });
