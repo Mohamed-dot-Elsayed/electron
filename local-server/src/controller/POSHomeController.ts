@@ -739,7 +739,7 @@ export const getCustomerGroups = async (req: Request, res: Response) => {
 
   SuccessResponse(res, {
     message: "Customer Groups list",
-    data: customerGroups.map(({ name }) => ({ name })),
+    data: customerGroups.map(({ _id, name }) => ({ _id, name })),
   });
 };
 

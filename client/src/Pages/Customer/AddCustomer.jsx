@@ -32,12 +32,25 @@ export default function AddCustomer({ onClose }) {
 
   const handleSubmit = async () => {
     try {
-      await postData("api/pos-home/customers", form);
+      const payload = {
+        name: form.name?.trim(),
+        email: form.email?.trim() || undefined,
+        phone_number: form.phone_number?.trim(),
+        address: form.address?.trim() || undefined,
+        country: form.country || null,
+        city: form.city || null,
+        customer_group_id: form.customer_group_id ? form.customer_group_id : null,
+      };
+      await postData("api/pos-home/customers", payload);
       toast.success("Customer Added Successfully");
       onClose();
     } catch (err) {
       console.error("Error adding customer:", err);
-      toast.error(err?.response?.data?.error?.message || "Error adding customer");
+      toast.error(
+        err?.response?.data?.error?.message ||
+        err?.response?.data?.message ||
+        "Error adding customer"
+      );
     }
   };
 
@@ -134,11 +147,14 @@ export default function AddCustomer({ onClose }) {
             className="border p-2 rounded col-span-2"
           >
             <option value="">Select Customer Group</option>
-            {customerGroups.map((g) => (
-              <option key={g._id} value={g._id}>
-                {g.name}
-              </option>
-            ))}
+            {customerGroups.map((g) => {
+              const groupId = g._id || g.id || "";
+              return (
+                <option key={groupId || g.name} value={groupId}>
+                  {g.name}
+                </option>
+              );
+            })}
           </select>
 
         </div>

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { UserModel } from "../models/user";
 import { RoleModel } from "../models/roles";
 import { CashierShift } from "../models/cashierShift";
+import { CashierModel } from "../models/cashier";
 import { generateToken } from "../utils/auth";
 import bcrypt from "bcryptjs";
 import { ConflictError, UnauthorizedError } from "../Errors";
@@ -90,6 +91,11 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     status: "open",
   });
 
+  let cashierDoc = null;
+  if (openShift && openShift.cashier_id) {
+    cashierDoc = await CashierModel.findById(openShift.cashier_id);
+  }
+
   // ✅ Token خفيف - بدون permissions
   const token = generateToken({
     _id: user._id!,
@@ -115,6 +121,8 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       permissions: mappedPermissions,
     },
     hasOpenShift: !!openShift,
+    shift: openShift || null,
+    cashier: cashierDoc || null,
   });
 };
 

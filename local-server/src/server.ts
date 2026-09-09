@@ -72,7 +72,7 @@ export function createServer() {
 
   // 🕒 Start cron jobs
   startCron(io);
-  startAutoSyncCron(1); // Start auto-sync cron job every 30 minutes
+  startAutoSyncCron(30); // Start auto-sync cron job every 30 minutes
 
   return server; // http.Server, already wired with express + socket.io
 }
