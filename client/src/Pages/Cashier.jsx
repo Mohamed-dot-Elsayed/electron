@@ -63,7 +63,7 @@ export default function Cashier() {
     }
 
     // فحص تلقائي احتياطي: لو للمستخدم شيفت مفتوح، يتم استرجاعه فوراً وتخطي شاشة الكاشير
-    const autoRestoreExistingShift = async () => {
+    const autoRestoreOrStartShift = async () => {
       try {
         const startCheck = await postData("api/cashier-shift/start", {});
         if (startCheck?.data?.isExisting && startCheck?.data?.shift) {
@@ -95,14 +95,30 @@ export default function Cashier() {
               shiftStartTime: shift.start_time,
             },
           });
+          return;
+        }
+
+        // في تطبيق Electron (Offline POS)، إذا لم يكن هناك شيفت نختار أول كاشير متاح تلقائياً
+        const cashiersList = data?.data?.cashiers || [];
+        let chosenCashierId = localStorage.getItem("offline_pos_cashier_id");
+        let chosenCashier = cashiersList.find((c) => c._id === chosenCashierId);
+
+        if (!chosenCashier && cashiersList.length > 0) {
+          chosenCashier = cashiersList[0];
+          chosenCashierId = chosenCashier._id;
+          localStorage.setItem("offline_pos_cashier_id", chosenCashierId);
+        }
+
+        if (chosenCashierId) {
+          await handleCashierSelection(chosenCashierId);
         }
       } catch (e) {
-        // لا يوجد شيفت مفتوح، يظل المستخدم في صفحة اختيار الكاشير
+        navigate("/", { replace: true });
       }
     };
 
-    autoRestoreExistingShift();
-  }, [navigate, openShift]);
+    autoRestoreOrStartShift();
+  }, [navigate, openShift, data]);
 
   const handleCashierSelection = async (_id) => {
     setSelectedCashierId(_id);

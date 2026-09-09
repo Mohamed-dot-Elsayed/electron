@@ -247,20 +247,21 @@ const handleSaveAsPending = async (amountToPay, order_tax) => {
 
   const productsToSend = orderItems.map(buildProductPayload);
 
+  const customerId =
+    sessionStorage.getItem("selected_customer_id") ||
+    sessionStorage.getItem("customer_id") ||
+    undefined;
+
   const payload = {
-    customer_id: sessionStorage.getItem("customer_id") || null, // أو خديه من state
-    order_pending: 1, // أو 0 حسب اللي عايزاه
-    grand_total: amountToPay.toString(),
+    customer_id: customerId || undefined,
+    order_pending: 1,
+    grand_total: parseFloat(amountToPay || 0).toFixed(2),
     products: productsToSend,
     bundles: [],
-    account_id: [],
-    order_tax: order_tax > 0 ? "68e618dcdfe31bffaf5299d0" : null, // أو الـ id الفعلي بتاع الـ tax
-    order_discount: null,        // أو الـ id لو فيه خصم
-    coupon_id: null,             // أو الـ id لو فيه كوبون
-    gift_card_id: null,          // أو الـ id لو فيه كارت هدايا
+    financials: [],
   };
 
-  // إزالة أي key قيمتها null (اختياري حسب الـ API)
+  // إزالة أي key قيمتها null أو undefined
   Object.keys(payload).forEach(key => {
     if (payload[key] === null || payload[key] === undefined) {
       delete payload[key];

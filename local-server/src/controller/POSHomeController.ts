@@ -536,10 +536,10 @@ export const getCashiers = async (req: Request, res: Response) => {
     throw new NotFound("Warehouse ID is required");
   }
 
+  // ✅ في تطبيق الديسكتوب (Offline POS)، نجلب الكاشيرات النشطة للمخزن
   const cashiers = CashierModel.find({
     warehouse_id: warehouseId,
     status: true,
-    cashier_active: false, // ✅ المتاحين فقط
   }).map(({ _id, name, ar_name, cashier_active }) => ({
     _id,
     name,
@@ -565,12 +565,15 @@ export const selectCashier = async (req: Request, res: Response) => {
   }
 
   // ✅ check من الـ shift (source of truth)
-  const busyShift = CashierShift.findOne({
-    cashier_id,
-    status: "open",
-  });
+  const busyShift = CashierShift.findOne(
+    {
+      cashier_id,
+      status: "open",
+    },
+    { sort: { start_time: -1 } }
+  );
 
-  if (busyShift) {
+  if (busyShift && String(busyShift.cashierman_id) !== String(req.user?.id)) {
     throw new BadRequest("Cashier already in use");
   }
 
@@ -592,17 +595,26 @@ export const selectCashier = async (req: Request, res: Response) => {
     cashier_active: cashier.cashier_active,
   };
 
-  // Get financial accounts (filter by warehouseId array membership)
-  const financialAccounts = BankAccountModel.find({
+  // Get financial accounts (filter by warehouseId array membership or global)
+  const allAccountsForCashier = BankAccountModel.find({
     status: true,
     in_POS: true,
-  })
-    .filter((account) => account.warehouseId.includes(warehouseId))
-    .map(({ _id, name, image, balance }) => ({
+  });
+
+  const financialAccounts = allAccountsForCashier
+    .filter((account) => {
+      const warehouses = Array.isArray(account.warehouseId)
+        ? account.warehouseId.map((w: any) => String(w))
+        : [];
+      if (warehouses.length === 0) return true; // Global account available everywhere
+      return warehouseId ? warehouses.includes(String(warehouseId)) : true;
+    })
+    .map(({ _id, name, image, balance, description_status }) => ({
       _id,
       name,
       image,
       balance,
+      description_status,
     }));
 
   return SuccessResponse(res, {
@@ -634,17 +646,25 @@ export const getAccounts = async (req: Request, res: Response) => {
     status: true,
   });
 
-  // Filter by warehouseId if provided (since warehouseId is an array)
-  const filteredAccounts = warehouseId
-    ? allAccounts.filter((account) => account.warehouseId.includes(warehouseId))
-    : allAccounts;
+  // Filter by warehouseId if provided, allowing global accounts
+  const filteredAccounts = allAccounts.filter((account) => {
+    const warehouses = Array.isArray(account.warehouseId)
+      ? account.warehouseId.map((w: any) => String(w))
+      : [];
+    if (warehouses.length === 0) return true; // Global account
+    return warehouseId ? warehouses.includes(String(warehouseId)) : true;
+  });
 
-  const accounts = filteredAccounts.map(({ _id, name, balance, warehouseId }) => ({
-    _id,
-    name,
-    balance,
-    warehouseId,
-  }));
+  const accounts = filteredAccounts.map(
+    ({ _id, name, balance, warehouseId, description_status, image }) => ({
+      _id,
+      name,
+      balance,
+      warehouseId,
+      description_status,
+      image,
+    })
+  );
 
   SuccessResponse(res, { message: "Accounts list", data: accounts });
 };

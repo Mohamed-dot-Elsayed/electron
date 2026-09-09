@@ -24,19 +24,57 @@ export const startcashierShift = async (req: Request, res: Response) => {
   if (!warehouseId) throw new NotFound("Warehouse ID is required");
 
   // ✅ هل اليوزر عنده شيفت مفتوح؟
-  const existingShift = await CashierShift.findOne({
-    cashierman_id,
-    status: "open",
-  });
+  const openShifts = await CashierShift.find(
+    {
+      cashierman_id,
+      status: "open",
+    },
+    { sort: { start_time: -1 } }
+  );
+
+  // إذا وجد أكثر من شيفت مفتوح بالخطأ، نقفل القديم ونحتفظ بأحدث واحد
+  if (openShifts.length > 1) {
+    for (let i = 1; i < openShifts.length; i++) {
+      CashierShift.updateById(openShifts[i]._id, {
+        end_time: new Date(),
+        status: "closed",
+      });
+    }
+  }
+
+  const existingShift = openShifts[0] || null;
+
+  const getPosFinancialAccounts = () => {
+    return BankAccountModel.find({
+      status: true,
+      in_POS: true,
+    })
+      .filter((account) => {
+        const warehouses = Array.isArray(account.warehouseId)
+          ? account.warehouseId.map((w: any) => String(w))
+          : [];
+        if (warehouses.length === 0) return true;
+        return warehouseId ? warehouses.includes(String(warehouseId)) : true;
+      })
+      .map(({ _id, name, image, balance, description_status }) => ({
+        _id,
+        name,
+        image,
+        balance,
+        description_status,
+      }));
+  };
 
   if (existingShift) {
     const cashierDoc = await CashierModel.findById(existingShift.cashier_id);
+    const financialAccounts = getPosFinancialAccounts();
 
     return SuccessResponse(res, {
       message: "You already have an open shift",
       isExisting: true,
       shift: existingShift,
       cashier: cashierDoc,
+      financialAccounts,
     });
   }
 
@@ -44,13 +82,16 @@ export const startcashierShift = async (req: Request, res: Response) => {
     throw new BadRequest("Cashier ID is required");
   }
 
-  // 🔥 check من الـ shift
-  const busyShift = await CashierShift.findOne({
-    cashier_id,
-    status: "open",
-  });
+  // 🔥 check من الـ shift للكاشير (الترمينال)
+  const busyShift = await CashierShift.findOne(
+    {
+      cashier_id,
+      status: "open",
+    },
+    { sort: { start_time: -1 } }
+  );
 
-  if (busyShift) {
+  if (busyShift && String(busyShift.cashierman_id) !== String(cashierman_id)) {
     throw new BadRequest("Cashier already has an open shift");
   }
 
@@ -72,12 +113,14 @@ export const startcashierShift = async (req: Request, res: Response) => {
     status: "open",
   });
 
-  CashierModel.updateById(cashier_id,{ cashier_active: true})
+  CashierModel.updateById(cashier_id, { cashier_active: true });
+  const financialAccounts = getPosFinancialAccounts();
 
   SuccessResponse(res, {
     message: "Cashier shift started successfully",
     shift: cashierShift,
     cashier: cashierDoc,
+    financialAccounts,
   });
 };
 
@@ -102,22 +145,27 @@ export const endShiftWithReport = async (req: Request, res: Response) => {
         throw new BadRequest("Wrong password");
     }
 
-    // 2) Get opened shift
-    const shift = await CashierShift.findOne({
+    // 2) Get opened shift (fallback to most recent shift)
+    let shift = await CashierShift.findOne({
         cashierman_id: user._id,
         status: "open",
-    })
+    }, { sort: { start_time: -1 } });
 
     if (!shift) {
-        throw new NotFound("No open cashier shift found");
+        const pastShifts = await CashierShift.find(
+            { cashierman_id: user._id },
+            { sort: { start_time: -1, createdAt: -1 }, limit: 1 }
+        );
+        shift = pastShifts[0] ?? null;
+    }
+
+    if (!shift) {
+        throw new NotFound("No cashier shift found");
     }
 
     // 3) Filter date
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-
     const shiftStartTime = new Date(shift.start_time || Date.now());
-    const filterFromDate = new Date(Math.max(shiftStartTime.getTime(), todayStart.getTime()));
+    const filterFromDate = shiftStartTime;
 
     // 4) Sales
     const allSales = SaleModel.find({
@@ -291,40 +339,94 @@ export const endShiftWithReport = async (req: Request, res: Response) => {
 
 export const endshiftcashier = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const { shift_id, cashier_id } = req.body || {};
   const jwtUser = req.user as any;
   if (!jwtUser) throw new UnauthorizedError("Unauthorized");
 
   const cashierman_id = jwtUser.id;
 
-  console.log("id :",id);
-  console.log(cashierman_id);
-  const shift = await CashierShift.findOne({
-    cashierman_id,
-    cashier_id:id,
-    status: "open",
-  });
-  
-  
+  let shift: any = null;
+
+  // 1) البحث بـ shift_id المباشر إذا تم إرساله
+  const targetShiftId =
+    shift_id ||
+    (id && id !== "undefined" && id !== "null" && id.includes("-") ? id : null);
+  if (targetShiftId) {
+    shift = await CashierShift.findById(targetShiftId);
+  }
+
+  // 2) البحث بـ cashier_id إذا تم إرساله
+  const targetCashierId =
+    cashier_id ||
+    (id && id !== "undefined" && id !== "null" && id !== targetShiftId ? id : null);
+  if (!shift && targetCashierId) {
+    shift = await CashierShift.findOne(
+      {
+        cashierman_id,
+        cashier_id: targetCashierId,
+        status: "open",
+      },
+      { sort: { start_time: -1 } }
+    );
+  }
+
+  // 3) البحث عن أحدث شيفت مفتوح لليوزر
+  if (!shift) {
+    shift = await CashierShift.findOne(
+      {
+        cashierman_id,
+        status: "open",
+      },
+      { sort: { start_time: -1 } }
+    );
+  }
+
+  // 4) احتياطي عام: أي شيفت مفتوح لهذا الكاشير
+  if (!shift && targetCashierId) {
+    shift = await CashierShift.findOne(
+      {
+        cashier_id: targetCashierId,
+        status: "open",
+      },
+      { sort: { start_time: -1 } }
+    );
+  }
 
   if (!shift) {
     throw new NotFound("Cashier shift not found");
   }
 
-  if (shift.end_time) {
-    throw new BadRequest("Shift already ended");
-  }
-  console.log("like ",shift._id);
-  
-  // ✅ اقفل الشيفت
-  CashierShift.updateById(shift._id,{end_time : new Date(), status:"closed"})
-  // ✅ رجّع الكاشير متاح (بدون شروط تقفل التحديث)
+  const now = new Date();
+
+  // ✅ اقفل الشيفت المستهدف
+  CashierShift.updateById(shift._id, { end_time: now, status: "closed" });
+
+  // ✅ رجّع الكاشير متاح
   if (shift.cashier_id) {
-    CashierModel.updateById(shift.cashier_id,{cashier_active: false})
+    CashierModel.updateById(shift.cashier_id, { cashier_active: false });
   }
+
+  // ✅ تنظيف حاسم: إغلاق أي شيفتات قديمة أخرى عالقة كـ open لهذا اليوزر والكاشير
+  const otherOpenShifts = await CashierShift.find({
+    cashierman_id,
+    status: "open",
+  });
+  for (const s of otherOpenShifts) {
+    CashierShift.updateById(s._id, { end_time: now, status: "closed" });
+    if (s.cashier_id) {
+      CashierModel.updateById(s.cashier_id, { cashier_active: false });
+    }
+  }
+
+  const updatedShift = CashierShift.findById(shift._id) || {
+    ...shift,
+    end_time: now,
+    status: "closed",
+  };
 
   SuccessResponse(res, {
     message: "Cashier shift ended successfully",
-    shift,
+    shift: updatedShift,
   });
 };
 

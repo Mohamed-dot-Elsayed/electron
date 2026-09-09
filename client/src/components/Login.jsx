@@ -130,6 +130,9 @@ export default function LoginPage() {
           // ✅ تحديث حالة الشيفت في الـ Context
           openShift(activeShift.start_time);
 
+          // ✅ حفظ كاشير الجهاز المحلي
+          localStorage.setItem("offline_pos_cashier_id", cashierId);
+
           // ✅ الانتقال مباشرة لشاشة الـ POS متجاوزاً شاشة اختيار الكاشير بالكامل
           navigate("/", {
             replace: true,
@@ -140,7 +143,8 @@ export default function LoginPage() {
             },
           });
         } else {
-          // ✅ لا يوجد شيفت مفتوح - تنظيف أي بيانات شيفت سابقة والانتقال لاختيار الكاشير
+          // ✅ لا يوجد شيفت مفتوح - في تطبيق Electron (Offline POS) لا نطلب اختيار الـ POS يدويًا
+          // بل يتم اختيار كاشير هذا الجهاز تلقائيًا وبدء الشيفت والدخول مباشرة للشاشة الرئيسية
           localStorage.removeItem("shiftStatus");
           localStorage.removeItem("shiftStartTime");
           sessionStorage.removeItem("cashier_id");
@@ -150,7 +154,101 @@ export default function LoginPage() {
           sessionStorage.removeItem("shift_data");
           sessionStorage.removeItem("financial_accounts");
 
-          navigate("/cashier", { replace: true });
+          try {
+            // 1. جلب قائمة الكاشيرات التابعة للمخزن
+            const cashiersRes = await axios.get(
+              `${baseUrl}${baseUrl.endsWith("/") ? "" : "/"}api/pos-home/cashiers`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  Accept: "application/json",
+                },
+              }
+            );
+
+            const cashiersList = cashiersRes?.data?.data?.cashiers || [];
+
+            // 2. تحديد الكاشير الخاص بهذا الجهاز (المحفوظ سابقاً أو أول كاشير متاح)
+            let chosenCashierId = localStorage.getItem("offline_pos_cashier_id");
+            let chosenCashier = cashiersList.find((c) => c._id === chosenCashierId);
+
+            if (!chosenCashier && cashiersList.length > 0) {
+              chosenCashier = cashiersList[0];
+              chosenCashierId = chosenCashier._id;
+              localStorage.setItem("offline_pos_cashier_id", chosenCashierId);
+            }
+
+            if (chosenCashierId) {
+              // 3. اختيار الكاشير وجلب الحسابات المالية
+              let financialAccounts = [];
+              try {
+                const selRes = await axios.post(
+                  `${baseUrl}${baseUrl.endsWith("/") ? "" : "/"}api/pos-home/cashiers/select`,
+                  { cashier_id: chosenCashierId },
+                  {
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                      Accept: "application/json",
+                    },
+                  }
+                );
+                financialAccounts = selRes?.data?.data?.financialAccounts || [];
+              } catch (selErr) {
+                console.warn("Auto select cashier warning:", selErr);
+              }
+
+              // 4. فتح الشيفت الجديد تلقائيًا
+              const startRes = await axios.post(
+                `${baseUrl}${baseUrl.endsWith("/") ? "" : "/"}api/cashier-shift/start`,
+                { cashier_id: chosenCashierId },
+                {
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    Accept: "application/json",
+                  },
+                }
+              );
+
+              const newShift = startRes?.data?.data?.shift;
+              const shiftStartTime = newShift?.start_time || new Date().toISOString();
+              const cashierName =
+                chosenCashier?.name || chosenCashier?.ar_name || `POS ${chosenCashierId}`;
+
+              if (startRes?.data?.data?.financialAccounts?.length > 0) {
+                financialAccounts = startRes.data.data.financialAccounts;
+              }
+
+              sessionStorage.setItem("cashier_id", chosenCashierId);
+              sessionStorage.setItem("cashier_name", cashierName);
+              if (newShift) {
+                sessionStorage.setItem("shift_id", newShift._id);
+                sessionStorage.setItem("shift_start_time", shiftStartTime);
+                sessionStorage.setItem("shift_data", JSON.stringify(newShift));
+              }
+              if (financialAccounts.length > 0) {
+                sessionStorage.setItem("financial_accounts", JSON.stringify(financialAccounts));
+              }
+
+              // ✅ تحديث حالة الشيفت في الـ Context
+              openShift(shiftStartTime);
+
+              // ✅ الانتقال مباشرة للشاشة الرئيسية ببدء شيفت جديد
+              navigate("/", {
+                replace: true,
+                state: {
+                  showShiftStartedModal: true,
+                  cashierName,
+                  shiftStartTime,
+                },
+              });
+              return;
+            }
+          } catch (autoShiftErr) {
+            console.error("Auto start shift error:", autoShiftErr);
+          }
+
+          // في حال عدم توفر كاشير، نتوجه للشاشة الرئيسية مباشرة
+          navigate("/", { replace: true });
         }
       }
     } catch (err) {

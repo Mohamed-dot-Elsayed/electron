@@ -275,43 +275,51 @@ const CheckOut = ({
 
   const isTotalMet = totalScheduled >= requiredTotal;
 
+  const { accounts: fetchedAccounts } = usePosSelections();
+
+  useEffect(() => {
+    if (fetchedAccounts?.length > 0 && !sessionStorage.getItem("financial_accounts")) {
+      sessionStorage.setItem("financial_accounts", JSON.stringify(fetchedAccounts));
+    }
+  }, [fetchedAccounts]);
+
   const financialAccounts = useMemo(() => {
     const item = sessionStorage.getItem("financial_accounts");
 
-    if (!item) {
-      console.warn("No financial_accounts in sessionStorage");
-      return [];
-    }
+    if (item) {
+      try {
+        const parsed = JSON.parse(item);
 
-    try {
-      const parsed = JSON.parse(item);
-
-      // الحالة 1: لو array (الطبيعي)
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
-
-      // الحالة 2: لو object واحد بس (اللي حصل عندك)
-      if (parsed && parsed._id && parsed.name) {
-        console.log("Single financial account detected, wrapping in array");
-        return [parsed]; // نلفه في array عشان الكود يشتغل
-      }
-
-      // الحالة 3: لو كان object فيه مفتاح واحد بس (مثل { main: [...] })
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        const values = Object.values(parsed);
-        const flat = values.flat();
-        if (flat.length > 0 && flat[0]._id) {
-          return flat;
+        // الحالة 1: لو array (الطبيعي)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
         }
-      }
 
-      return [];
-    } catch (e) {
-      console.error("Failed to parse financial_accounts:", e);
-      return [];
+        // الحالة 2: لو object واحد بس
+        if (parsed && parsed._id && parsed.name) {
+          return [parsed];
+        }
+
+        // الحالة 3: لو كان object فيه مفتاح واحد بس
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          const values = Object.values(parsed);
+          const flat = values.flat();
+          if (flat.length > 0 && flat[0]._id) {
+            return flat;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to parse financial_accounts:", e);
+      }
     }
-  }, []);
+
+    // Fallback إذا لم تكن مخزنة بعد في sessionStorage
+    if (Array.isArray(fetchedAccounts) && fetchedAccounts.length > 0) {
+      return fetchedAccounts;
+    }
+
+    return [];
+  }, [fetchedAccounts]);
 
   // Initialize default payment split
   useEffect(() => {
@@ -573,6 +581,8 @@ const CheckOut = ({
 
         // دالة التنظيف والإغلاق (مشتركة)
         const completeOrder = () => {
+          sessionStorage.removeItem("selected_customer_id");
+          window.dispatchEvent(new CustomEvent("reset_selected_customer"));
           onClearCart?.();
           onClose();
         };

@@ -264,11 +264,35 @@ export default function EndShiftReportModal({ reportData, onClose, onConfirmClos
     ? new Date(shift.end_time).toLocaleTimeString(isArabic ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit' })
     : t("Now");
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     const printContent = printRef.current;
     if (!printContent) return;
 
+    if (window.electronAPI?.printHtml) {
+      try {
+        const printers = await window.electronAPI.getPrinters();
+        const defaultPrinter = printers.find((p) => p.isDefault)?.name || printers[0]?.name || "";
+        const html = `
+          <!DOCTYPE html>
+          <html dir="${isArabic ? 'rtl' : 'ltr'}">
+          <head>
+            <meta charset="UTF-8">
+            <title>${t("EndShiftReport")}</title>
+          </head>
+          <body>
+            ${printContent.innerHTML}
+          </body>
+          </html>
+        `;
+        await window.electronAPI.printHtml(html, defaultPrinter);
+        return;
+      } catch (err) {
+        console.error("Electron print error:", err);
+      }
+    }
+
     const printWindow = window.open('', '_blank', 'width=400,height=600');
+    if (!printWindow) return;
     printWindow.document.write(`
       <!DOCTYPE html>
       <html dir="${isArabic ? 'rtl' : 'ltr'}">

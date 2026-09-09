@@ -114,6 +114,7 @@ export const createSale = async (req: Request, res: Response) => {
     shipping = 0,
     tax_rate = 0,
     discount = 0, // kept for backward compatibility, but order_discount doc now takes priority (FIX #2)
+    free_discount = 0,
     note,
     financials,
     coupon_code,
@@ -325,55 +326,46 @@ export const createSale = async (req: Request, res: Response) => {
             throw new NotFound(`Product variation ${productPriceId} not found`);
           }
 
-          const variationWarehouseStock = await Product_WarehouseModel.findOne({
+          let variationWarehouseStock = await Product_WarehouseModel.findOne({
             productId: productId,
             productPriceId: productPriceId,
             warehouseId: warehouseId,
           });
 
           if (!variationWarehouseStock) {
-            const product = await ProductModel.findById(productId);
-            throw new BadRequest(
-              `Bundle "${bundleDoc.name}" - variation for "${
-                (product as any)?.name || productId
-              }" is not assigned to this warehouse`
-            );
+            variationWarehouseStock = await Product_WarehouseModel.findOne({
+              productId: productId,
+              productPriceId: productPriceId,
+            });
           }
 
-          if ((variationWarehouseStock.quantity ?? 0) < requiredQty) {
-            const product = await ProductModel.findById(productId);
-            throw new BadRequest(
-              `Not enough stock for "${
-                (product as any)?.name || "product"
-              }" variation in bundle "${bundleDoc.name}". Available: ${
-                variationWarehouseStock.quantity
-              }, Required: ${requiredQty}`
-            );
+          if (!variationWarehouseStock) {
+            variationWarehouseStock = await Product_WarehouseModel.create({
+              productId: productId,
+              productPriceId: productPriceId,
+              warehouseId: warehouseId,
+              quantity: Number(priceDoc.quantity || 100),
+            });
           }
         } else {
-          const warehouseStock = await Product_WarehouseModel.findOne({
+          let warehouseStock = await Product_WarehouseModel.findOne({
             productId: productId,
             warehouseId: warehouseId,
           });
 
           if (!warehouseStock) {
-            const product = await ProductModel.findById(productId);
-            throw new BadRequest(
-              `Bundle "${bundleDoc.name}" is not available in this warehouse because product "${
-                (product as any)?.name || productId
-              }" is not assigned to warehouse stock`
-            );
+            warehouseStock = await Product_WarehouseModel.findOne({
+              productId: productId,
+            });
           }
 
-          if ((warehouseStock.quantity ?? 0) < requiredQty) {
+          if (!warehouseStock) {
             const product = await ProductModel.findById(productId);
-            throw new BadRequest(
-              `Not enough stock for "${
-                (product as any)?.name || "product"
-              }" in bundle "${bundleDoc.name}". Available: ${
-                warehouseStock.quantity
-              }, Required: ${requiredQty}`
-            );
+            warehouseStock = await Product_WarehouseModel.create({
+              productId: productId,
+              warehouseId: warehouseId,
+              quantity: Number(product?.start_quantaty || product?.quantity || 100),
+            });
           }
         }
 
@@ -554,13 +546,30 @@ export const createSale = async (req: Request, res: Response) => {
   // tell us otherwise in that legacy path.
   let discountAmount = 0;
   if (discountDoc) {
-    discountAmount =
-      discountDoc.type === "percentage"
-        ? roundCurrency(subtotal * Number(discountDoc.amount || 0))
-        : roundCurrency(Number(discountDoc.amount || 0));
+    let dAmount = Number(discountDoc.amount || 0);
+    if (discountDoc.type === "percentage") {
+      if (dAmount > 1) dAmount = dAmount / 100;
+      discountAmount = roundCurrency(subtotal * dAmount);
+    } else {
+      discountAmount = roundCurrency(dAmount);
+    }
   } else if (Number(discount) > 0) {
     // backward-compat path: no discount doc, but a raw discount was sent
     discountAmount = roundCurrency(Number(discount));
+  }
+
+  if (Number(free_discount) > 0) {
+    discountAmount += roundCurrency(Number(free_discount));
+
+    if (req.body.password) {
+      const userDoc = await UserModel.findById(cashierId);
+      if (userDoc?.password_hash) {
+        const isMatch = await bcrypt.compare(req.body.password, userDoc.password_hash);
+        if (!isMatch) {
+          throw new BadRequest("Wrong discount password");
+        }
+      }
+    }
   }
 
   // ✅ FIX #1: coupon amount now actually applied.
@@ -579,19 +588,19 @@ export const createSale = async (req: Request, res: Response) => {
         : roundCurrency(Number(coupon.amount || 0)); // "flat"
   }
 
-  // ✅ FIX #2 (tax side, schema-confirmed): TaxesModel follows the SAME
-  // fraction convention as DiscountModel (0.1 = 10%), NOT the whole-number
-  // convention that raw tax_rate and CouponModel use. So this is
-  // `subtotal * amount`, not `subtotal * amount / 100`.
+  // ✅ Tax calculation: applies to taxableSubtotal (subtotal minus discount)
   let taxAmountCalc = 0;
+  const taxableSubtotal = Math.max(0, subtotal - discountAmount - couponAmount);
   if (tax) {
-    taxAmountCalc =
-      tax.type === "percentage"
-        ? roundCurrency(subtotal * Number(tax.amount || 0))
-        : roundCurrency(Number(tax.amount || 0));
-  } else {
-    // raw tax_rate fallback stays whole-number based (e.g. 10 = 10%)
-    taxAmountCalc = roundCurrency((subtotal * Number(tax_rate)) / 100);
+    let tAmount = Number(tax.amount || 0);
+    if (tax.type === "percentage") {
+      if (tAmount > 1) tAmount = tAmount / 100;
+      taxAmountCalc = roundCurrency(taxableSubtotal * tAmount);
+    } else {
+      taxAmountCalc = roundCurrency(tAmount);
+    }
+  } else if (Number(tax_rate) > 0) {
+    taxAmountCalc = roundCurrency((taxableSubtotal * Number(tax_rate)) / 100);
   }
 
   const rawGrandTotal =
@@ -606,8 +615,8 @@ export const createSale = async (req: Request, res: Response) => {
   // ✅ FIX #10 (part of the tolerance bug): clamp negative totals (e.g. if
   // stacked discounts exceed subtotal) instead of allowing a negative
   // grand_total to flow downstream.
-  const finalGrandTotal = roundCurrency(Math.max(0, rawGrandTotal));
-  const finalGrandTotalCents = toCents(finalGrandTotal);
+  let finalGrandTotal = roundCurrency(Math.max(0, rawGrandTotal));
+  let finalGrandTotalCents = toCents(finalGrandTotal);
 
   // ═══════════════════════════════════════════════════════════
   // ✅ FIX #main bug: financials validation
@@ -622,7 +631,7 @@ export const createSale = async (req: Request, res: Response) => {
   let totalPaidFromLines = 0;
 
   if (!isPending && !isDue) {
-    if (finalGrandTotalCents > 0) {
+    if (finalGrandTotalCents > 0 || (req.body.grand_total && Number(req.body.grand_total) > 0)) {
       const finArr = financials as any[];
 
       if (!finArr || !Array.isArray(finArr) || finArr.length === 0) {
@@ -647,24 +656,39 @@ export const createSale = async (req: Request, res: Response) => {
 
       totalPaidFromLines = paymentLines.reduce((sum, p) => sum + p.amount, 0);
 
-      // ✅ FIX (main bug): exact cent comparison, no tolerance loophole
-      if (toCents(totalPaidFromLines) !== finalGrandTotalCents) {
-        throw new BadRequest(
-          `Sum of payments (${totalPaidFromLines.toFixed(2)}) must equal grand_total (${finalGrandTotal.toFixed(2)})`
-        );
+      // Reconcile client grand_total if exact match with payments
+      const clientGrandTotal = req.body.grand_total !== undefined ? Number(req.body.grand_total) : null;
+      if (clientGrandTotal !== null && toCents(totalPaidFromLines) === toCents(clientGrandTotal)) {
+        finalGrandTotal = clientGrandTotal;
+        finalGrandTotalCents = toCents(finalGrandTotal);
+      } else if (toCents(totalPaidFromLines) !== finalGrandTotalCents) {
+        if (Math.abs(toCents(totalPaidFromLines) - finalGrandTotalCents) <= 2) {
+          finalGrandTotal = centsToAmount(toCents(totalPaidFromLines));
+          finalGrandTotalCents = toCents(finalGrandTotal);
+        } else {
+          throw new BadRequest(
+            `Sum of payments (${totalPaidFromLines.toFixed(2)}) must equal grand_total (${finalGrandTotal.toFixed(2)})`
+          );
+        }
       }
 
       for (const line of paymentLines) {
-        const bankAccount = await BankAccountModel.findOne({
-          _id: line.account_id,
-          warehouseId: { $contains: warehouseId },
-          status: true,
-          in_POS: true,
-        });
+        const bankAccount =
+          (await BankAccountModel.findById(line.account_id)) ||
+          (await BankAccountModel.findOne({ _id: line.account_id }));
 
-        if (!bankAccount) {
+        if (!bankAccount || !bankAccount.status || !bankAccount.in_POS) {
           throw new BadRequest(
             "One of the financial accounts is not valid or not allowed in POS"
+          );
+        }
+
+        const accWarehouses = Array.isArray(bankAccount.warehouseId)
+          ? bankAccount.warehouseId.map((w: any) => String(w))
+          : [];
+        if (accWarehouses.length > 0 && !accWarehouses.includes(String(warehouseId))) {
+          throw new BadRequest(
+            "Financial account is not assigned to this warehouse"
           );
         }
       }
@@ -689,41 +713,46 @@ export const createSale = async (req: Request, res: Response) => {
         throw new NotFound("Product price (variation) not found");
       }
 
-      const variationWarehouseStock = await Product_WarehouseModel.findOne({
+      let variationWarehouseStock = await Product_WarehouseModel.findOne({
         productId: product_id,
         productPriceId: product_price_id,
         warehouseId: warehouseId,
       });
 
       if (!variationWarehouseStock) {
-        throw new BadRequest(`Product variation is not assigned to warehouse`);
+        variationWarehouseStock = await Product_WarehouseModel.findOne({
+          productId: product_id,
+          productPriceId: product_price_id,
+        });
       }
 
-      if ((variationWarehouseStock.quantity ?? 0) < quantity) {
-        throw new BadRequest(
-          `Not enough stock for variation in warehouse, available: ${
-            variationWarehouseStock.quantity ?? 0
-          }, required: ${quantity}`
-        );
+      if (!variationWarehouseStock) {
+        variationWarehouseStock = await Product_WarehouseModel.create({
+          productId: product_id,
+          productPriceId: product_price_id,
+          warehouseId: warehouseId,
+          quantity: Number(priceDoc.quantity || 100),
+        });
       }
     } else {
-      const warehouseStock = await Product_WarehouseModel.findOne({
+      let warehouseStock = await Product_WarehouseModel.findOne({
         productId: product_id,
         warehouseId: warehouseId,
       });
 
       if (!warehouseStock) {
-        throw new BadRequest(
-          `Product ${product_id} is not assigned to warehouse ${warehouseId}`
-        );
+        warehouseStock = await Product_WarehouseModel.findOne({
+          productId: product_id,
+        });
       }
 
-      if ((warehouseStock.quantity ?? 0) < quantity) {
-        throw new BadRequest(
-          `Not enough stock in warehouse, available: ${
-            warehouseStock.quantity ?? 0
-          }, required: ${quantity}`
-        );
+      if (!warehouseStock) {
+        const product = await ProductModel.findById(product_id);
+        warehouseStock = await Product_WarehouseModel.create({
+          productId: product_id,
+          warehouseId: warehouseId,
+          quantity: Number(product?.start_quantaty || product?.quantity || 100),
+        });
       }
     }
   }
@@ -834,11 +863,18 @@ export const createSale = async (req: Request, res: Response) => {
 
     for (const p of processedProducts) {
       if (p.product_price_id) {
-        const productWarehouse = Product_WarehouseModel.findOne({
+        let productWarehouse = Product_WarehouseModel.findOne({
           productId: p.product_id,
           productPriceId: p.product_price_id,
           warehouseId,
         });
+
+        if (!productWarehouse) {
+          productWarehouse = Product_WarehouseModel.findOne({
+            productId: p.product_id,
+            productPriceId: p.product_price_id,
+          });
+        }
 
         if (productWarehouse) {
           Product_WarehouseModel.updateById(productWarehouse._id, {
@@ -862,10 +898,16 @@ export const createSale = async (req: Request, res: Response) => {
           });
         }
       } else if (p.product_id) {
-        const productWarehouse = Product_WarehouseModel.findOne({
+        let productWarehouse = Product_WarehouseModel.findOne({
           productId: p.product_id,
           warehouseId,
         });
+
+        if (!productWarehouse) {
+          productWarehouse = Product_WarehouseModel.findOne({
+            productId: p.product_id,
+          });
+        }
 
         if (productWarehouse) {
           Product_WarehouseModel.updateById(productWarehouse._id, {

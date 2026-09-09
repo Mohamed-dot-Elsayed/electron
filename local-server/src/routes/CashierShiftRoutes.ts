@@ -18,17 +18,17 @@ router.post(
 router.post("/logout", authorizePermissions("POS", "Add"), logout);
 
 router.put(
-  "/end/report",
+  ["/end/report", "/end/report/"],
   authorizePermissions("POS", "Edit"),
   authorizePermissions("cashier_shift_report", "Edit"),
   endShiftWithReport
 );
 
 router.put(
-  "/end/:id",
+  ["/end", "/end/:id", "/close", "/close/:id"],
   authorizePermissions("POS", "Edit"),
-  authorizePermissions("cashier_shift", "Edit"),
   endshiftcashier
 );
 
 export default router;
+

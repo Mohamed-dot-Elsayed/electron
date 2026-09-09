@@ -33,7 +33,7 @@ export function createServer() {
   app.set("headersTimeout", 2000);
 
   // 🚀 Routes
-  app.use("/api", ApiRoute);
+  app.use(["/api", "/api/admin"], ApiRoute);
   app.use(uploadsRouter);
 
   app.use((req, res, next) => {
