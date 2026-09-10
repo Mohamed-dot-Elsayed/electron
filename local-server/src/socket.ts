@@ -18,6 +18,7 @@ export interface SyncProgressPayload {
   current?: number;
   total?: number;
   percent: number;
+  completedAt?: string;
   summary?: {
     pull: string;
     push: string;

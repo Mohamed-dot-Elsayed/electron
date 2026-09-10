@@ -13,15 +13,16 @@ import "./i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
-// إنشاء QueryClient (يمكنك تخصيص الإعدادات هنا)
+// إنشاء QueryClient مضبوط لنظام نقطة البيع (POS) لتحديث المخزون والبيانات فوراً بدون ريفريش
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000, // 5 دقائق افتراضيًا
-      cacheTime: 30 * 60 * 1000, // 30 دقيقة
+      staleTime: 0, // بيانات حية فورية ومحدثة دائماً
+      gcTime: 10 * 60 * 1000, // الاحتفاظ بالذاكرة للعرض السريع الفوري
       retry: 1,
       refetchOnWindowFocus: false,
       refetchOnReconnect: true,
+      refetchOnMount: true,
     },
   },
 });

@@ -35,6 +35,15 @@ export function setLastSyncAt(scope: string, isoTime: string) {
   setMeta(`last_sync_at:${scope}`, isoTime);
 }
 
+export function getLastSyncCompletedAt(): string | null {
+  return getMeta("last_sync_completed_at") || getLastSyncAt("_global");
+}
+
+export function setLastSyncCompletedAt(isoTime: string) {
+  setMeta("last_sync_completed_at", isoTime);
+  setLastSyncAt("_global", isoTime);
+}
+
 export function getOrCreateClientId(): string {
   let id = getMeta("client_id");
   if (!id) {

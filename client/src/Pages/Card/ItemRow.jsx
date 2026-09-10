@@ -120,6 +120,15 @@ const ItemRow = ({
               {item.name}
             </span>
 
+            {/* Variant Badge / Name */}
+            {(item.variant_name || item.variant_code) && (
+              <div className="flex items-center gap-1 mt-0.5">
+                <span className="text-[11px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.2 rounded w-fit">
+                  {item.variant_name || item.variant_code}
+                </span>
+              </div>
+            )}
+
             {/* Variations */}
             {item.variations?.map((group, i) => {
               const selected = Array.isArray(group.selected_option_id)

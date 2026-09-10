@@ -18,7 +18,7 @@ import cookieParser from "cookie-parser";
 import { uploadsRouter } from "./routes/uploadsRoute";
 import { setSocketIO } from "./socket";
 import { startAutoSyncCron } from "./services/autoSync";
-import { isBootstrapDone } from "./services/appMeta";
+import { isBootstrapDone, getLastSyncCompletedAt } from "./services/appMeta";
 import { runBootstrapAll } from "./services/bootstrap";
 
 export function createServer() {
@@ -53,6 +53,12 @@ export function createServer() {
   // 🔌 Socket.IO connection
   io.on("connection", (socket) => {
     console.log("✅ User connected to socket:", socket.id);
+
+    // Send latest sync timestamp immediately on connection
+    const lastSyncAt = getLastSyncCompletedAt();
+    if (lastSyncAt) {
+      socket.emit("sync-status", { lastSyncAt });
+    }
 
     if (!isBootstrapDone()) {
       console.log(

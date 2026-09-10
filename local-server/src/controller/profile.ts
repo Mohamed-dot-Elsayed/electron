@@ -60,7 +60,8 @@ export const updateMyProfile = async (req: Request, res: Response) => {
     throw new BadRequest("User ID not found in request");
   }
 
-  const { username, email, password, company_name, phone, image_base64 } =
+  const username = req.body.username || req.body.user_name;
+  const { email, password, company_name, phone, image_base64, image_url } =
     req.body;
 
   const user = UserModel.findById(userId);
@@ -105,6 +106,8 @@ export const updateMyProfile = async (req: Request, res: Response) => {
       req,
       "users"
     );
+  } else if (image_url !== undefined) {
+    patch.image_url = image_url;
   }
 
   const updatedRaw = UserModel.updateById(userId, patch);

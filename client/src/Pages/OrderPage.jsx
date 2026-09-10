@@ -206,53 +206,74 @@ export default function OrderPage({
       ? ordersByUser[currentUserId] || []
       : takeAwayItems;
 
-  const updateOrderItems = (newItems) => {
-    const safeNewItems = Array.isArray(newItems) ? newItems : [];
+  const updateOrderItems = (newItemsOrUpdater) => {
     if (isDineIn) {
-      setOrdersByTable((prev) => ({ ...prev, [currentTableId]: safeNewItems }));
+      setOrdersByTable((prev) => {
+        const currentList = prev[currentTableId] || [];
+        const safeNew = typeof newItemsOrUpdater === "function" ? newItemsOrUpdater(currentList) : newItemsOrUpdater;
+        return { ...prev, [currentTableId]: Array.isArray(safeNew) ? safeNew : [] };
+      });
     } else if (isDelivery) {
-      setOrdersByUser((prev) => ({ ...prev, [currentUserId]: safeNewItems }));
+      setOrdersByUser((prev) => {
+        const currentList = prev[currentUserId] || [];
+        const safeNew = typeof newItemsOrUpdater === "function" ? newItemsOrUpdater(currentList) : newItemsOrUpdater;
+        return { ...prev, [currentUserId]: Array.isArray(safeNew) ? safeNew : [] };
+      });
     } else {
-      setTakeAwayItems(safeNewItems);
-      sessionStorage.setItem("cart", JSON.stringify(safeNewItems));
-      console.log("💾 Updated cart in sessionStorage:", safeNewItems);
+      setTakeAwayItems((prev) => {
+        const currentList = Array.isArray(prev) ? prev : [];
+        const safeNew = typeof newItemsOrUpdater === "function" ? newItemsOrUpdater(currentList) : newItemsOrUpdater;
+        const validArray = Array.isArray(safeNew) ? safeNew : [];
+        sessionStorage.setItem("cart", JSON.stringify(validArray));
+        console.log("💾 Updated cart in sessionStorage:", validArray);
+        return validArray;
+      });
     }
   };
 
-  const handleAddItem = (product, options = {}) => {
-    const safeCurrentItems = Array.isArray(currentOrderItems)
-      ? currentOrderItems
-      : [];
+  const handleAddItem = (productOrProducts, options = {}) => {
+    const productsToAdd = Array.isArray(productOrProducts) ? productOrProducts : [productOrProducts];
+    if (productsToAdd.length === 0) return;
 
     if (options.updateExisting && options.index !== undefined) {
-      const updatedItems = [...safeCurrentItems];
-      updatedItems[options.index] = product;
-      updateOrderItems(updatedItems);
+      updateOrderItems((prevItems) => {
+        const safeCurrentItems = Array.isArray(prevItems) ? [...prevItems] : [];
+        safeCurrentItems[options.index] = productsToAdd[0];
+        return safeCurrentItems;
+      });
       return;
     }
 
-    const existingItemIndex = safeCurrentItems.findIndex((item) =>
-      areProductsEqual(item, product),
-    );
-    let updatedItems = [...safeCurrentItems];
+    updateOrderItems((prevItems) => {
+      let updatedItems = Array.isArray(prevItems) ? [...prevItems] : [];
 
-    if (existingItemIndex !== -1) {
-      const existingItem = updatedItems[existingItemIndex];
-      const newCount = existingItem.count + (product.count || 1);
-      updatedItems[existingItemIndex] = {
-        ...existingItem,
-        count: newCount,
-        totalPrice: existingItem.price * newCount,
-      };
-    } else {
-      updatedItems.push({
-        ...product,
-        count: product.count || 1,
-        preparation_status: product.preparation_status || "pending",
-      });
-    }
+      for (const product of productsToAdd) {
+        const existingItemIndex = updatedItems.findIndex((item) => areProductsEqual(item, product));
+        const pCount = Number(product.count || product.quantity || 1);
+        const pPrice = parseFloat(product.price || 0);
 
-    updateOrderItems(updatedItems);
+        if (existingItemIndex !== -1) {
+          const existingItem = updatedItems[existingItemIndex];
+          const newCount = Number(existingItem.count || existingItem.quantity || 1) + pCount;
+          updatedItems[existingItemIndex] = {
+            ...existingItem,
+            count: newCount,
+            quantity: newCount,
+            totalPrice: existingItem.price * newCount,
+          };
+        } else {
+          updatedItems.push({
+            ...product,
+            count: pCount,
+            quantity: pCount,
+            totalPrice: pPrice * pCount,
+            preparation_status: product.preparation_status || "pending",
+          });
+        }
+      }
+
+      return updatedItems;
+    });
   };
 
   const handleClose = () => {

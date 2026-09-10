@@ -47,8 +47,13 @@ export const processProductItem = (item) => {
   };
 
   // معالجة الـ Variations (إن وجدت)
-  if (item.different_price && item.selectedVariation?.price_variation) {
-    payload.product_price_id = String(item.selectedVariation.price_variation);
+  const rawPriceId =
+    item.product_price_id ||
+    item.selectedVariation?.price_variation ||
+    item.selectedVariant?._id;
+
+  if (rawPriceId) {
+    payload.product_price_id = String(rawPriceId);
   }
 
   // معالجة الـ Addons / Options

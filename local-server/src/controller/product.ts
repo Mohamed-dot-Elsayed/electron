@@ -7,7 +7,7 @@ import { SuccessResponse } from "../utils/response";
 import { ProductPriceModel, ProductPriceOptionModel } from "../models/productPrice";
 import { OptionModel, VariationModel } from "../models/variation";
 
-// Get product info + quantity per warehouse, broken down per variation
+// Get product info + quantity per warehouse, broken down per variation (including out of stock)
 export const getProductWarehouseStock = async (req: Request, res: Response) => {
   const { productId } = req.params;
 
@@ -20,47 +20,21 @@ export const getProductWarehouseStock = async (req: Request, res: Response) => {
     throw new BadRequest("Product not found");
   }
 
-  const stockRows = Product_WarehouseModel.find({ productId });
+  // ── All Warehouses ──────────────────────────────────────────
+  const warehouses = await WarehouseModel.find();
 
-  // ── Warehouses ──────────────────────────────────────────────
-  const warehouseIds = [
-    ...new Set(stockRows.map((row: any) => String(row.warehouseId))),
-  ];
+  // ── All ProductPrice (variant) details for this product ──────
+  const allProductPrices = await ProductPriceModel.find({ productId });
+  const hasVariants = allProductPrices.length > 0;
+  const productPriceIds = allProductPrices.map((pp: any) => String(pp._id));
 
-  const warehouses = warehouseIds.length
-    ? await WarehouseModel.find({ _id: { $in: warehouseIds } })
-    : [];
-
-  const warehouseMap = new Map(
-    warehouses.map((w: any) => [String(w._id), w]),
-  );
-
-  // ── ProductPrice (variant) details ─────────────────────────
-  const productPriceIds = [
-    ...new Set(
-      stockRows
-        .filter((row: any) => row.productPriceId)
-        .map((row: any) => String(row.productPriceId)),
-    ),
-  ];
-
-  const productPrices = productPriceIds.length
-    ? await ProductPriceModel.find({ _id: { $in: productPriceIds } })
-    : [];
-
-  const productPriceMap = new Map(
-    productPrices.map((pp: any) => [String(pp._id), pp]),
-  );
-
-  // ── Options for those variants (manual join, no populate) ──
-  // Step 1: get the raw option mapping rows for these variants.
+  // ── Options for all variants (manual join, no populate) ────
   const priceOptions = productPriceIds.length
     ? await ProductPriceOptionModel.find({
         product_price_id: { $in: productPriceIds },
       })
     : [];
 
-  // Step 2: fetch the actual Option docs referenced by those mappings.
   const optionIds = [
     ...new Set(priceOptions.map((po: any) => String(po.option_id))),
   ];
@@ -71,8 +45,6 @@ export const getProductWarehouseStock = async (req: Request, res: Response) => {
 
   const optionMap = new Map(options.map((o: any) => [String(o._id), o]));
 
-  // Step 3: fetch the Variation docs (Color, Size, etc.) referenced by
-  // those Options.
   const variationIds = [
     ...new Set(
       options
@@ -89,7 +61,6 @@ export const getProductWarehouseStock = async (req: Request, res: Response) => {
     variationDocs.map((v: any) => [String(v._id), v]),
   );
 
-  // Step 4: stitch it all together — group option labels by productPriceId.
   const variantLabelsMap = new Map<
     string,
     { variationName: string; optionName: string }[]
@@ -113,52 +84,78 @@ export const getProductWarehouseStock = async (req: Request, res: Response) => {
     variantLabelsMap.get(ppKey)!.push(entry);
   }
 
-  // ── Group stock rows by warehouse, splitting base product vs. variants ──
-  const byWarehouse = new Map<string, any>();
-
+  // ── Existing stock rows in Product_Warehouse ─────────────────
+  const stockRows = Product_WarehouseModel.find({ productId });
+  const stockMap = new Map<string, any>();
   for (const row of stockRows as any[]) {
-    const whKey = String(row.warehouseId);
-    const wh = warehouseMap.get(whKey);
-
-    if (!byWarehouse.has(whKey)) {
-      byWarehouse.set(whKey, {
-        warehouseId: row.warehouseId,
-        warehouseName: wh?.name ?? null,
-        warehouseAddress: wh?.address ?? null,
-        totalQuantity: 0,
-        base: null,
-        variations: [] as any[],
-      });
-    }
-
-    const entry = byWarehouse.get(whKey);
-    entry.totalQuantity += row.quantity ?? 0;
-
-    if (!row.productPriceId) {
-      entry.base = {
-        quantity: row.quantity ?? 0,
-        low_stock: row.low_stock ?? null,
-      };
-    } else {
-      const ppKey = String(row.productPriceId);
-      const priceDoc = productPriceMap.get(ppKey);
-
-      entry.variations.push({
-        productPriceId: row.productPriceId,
-        code: priceDoc?.code ?? null,
-        price: priceDoc?.price ?? null,
-        quantity: row.quantity ?? 0,
-        low_stock: row.low_stock ?? null,
-        options: variantLabelsMap.get(ppKey) ?? [],
-      });
-    }
+    const key = row.productPriceId
+      ? `${String(row.warehouseId)}:${String(row.productPriceId)}`
+      : String(row.warehouseId);
+    stockMap.set(key, row);
   }
 
-  const warehouseStock = Array.from(byWarehouse.values());
+  // ── Build complete warehouseStock list (including out-of-stock) ─
+  const warehouseStock = warehouses.map((wh: any) => {
+    const whId = String(wh._id);
+    let totalQuantity = 0;
+
+    if (!hasVariants) {
+      const row = stockMap.get(whId);
+      const qty = Number(row?.quantity ?? 0);
+      totalQuantity = qty;
+
+      return {
+        warehouseId: wh._id,
+        warehouseName: wh.name ?? "Warehouse",
+        warehouseAddress: wh.address ?? "",
+        totalQuantity,
+        base: {
+          quantity: qty,
+          low_stock: row?.low_stock ?? product.low_stock ?? null,
+        },
+        variations: [],
+      };
+    } else {
+      const variations = allProductPrices.map((pp: any) => {
+        const ppKey = String(pp._id);
+        const row = stockMap.get(`${whId}:${ppKey}`);
+        const qty = Number(row?.quantity ?? 0);
+        totalQuantity += qty;
+
+        return {
+          productPriceId: pp._id,
+          code: pp.code ?? null,
+          price: pp.price ?? null,
+          quantity: qty,
+          low_stock: row?.low_stock ?? product.low_stock ?? null,
+          options: variantLabelsMap.get(ppKey) ?? [],
+        };
+      });
+
+      return {
+        warehouseId: wh._id,
+        warehouseName: wh.name ?? "Warehouse",
+        warehouseAddress: wh.address ?? "",
+        totalQuantity,
+        base: null,
+        variations,
+      };
+    }
+  });
+
+  const totalQtyAcrossWh = warehouseStock.reduce(
+    (sum: number, w: any) => sum + (w.totalQuantity || 0),
+    0
+  );
+
+  const enrichedProduct = {
+    ...product,
+    quantity: hasVariants ? totalQtyAcrossWh : (product.quantity ?? totalQtyAcrossWh),
+  };
 
   SuccessResponse(res, {
     message: "Product warehouse stock fetched successfully",
-    product,
+    product: enrichedProduct,
     warehouseStock,
   });
 };

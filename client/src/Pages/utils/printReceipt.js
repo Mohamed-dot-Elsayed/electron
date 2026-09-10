@@ -408,35 +408,42 @@ export const prepareReceiptData = (
     address: saleData.address || null,
 
     // المنتجات
-    items: itemsList.map((item) => {
-        const productOptions = item.product_price_id?.options || [];
-        return {
+    items: (itemsList && itemsList.length > 0)
+      ? itemsList.map((item, idx) => {
+          const matchedOrderItem = orderItems?.find((oi) =>
+            (oi.product_price_id && String(oi.product_price_id) === String(item.product_price_id?._id || item.product_price_id)) ||
+            (String(oi._id || oi.product_id) === String(item.product_id?._id || item.product_id))
+          ) || orderItems?.[idx];
+
+          const varName = matchedOrderItem?.variant_name || (() => {
+            if (!item.product_price_id?.code) return "";
+            const parts = item.product_price_id.code.split('_');
+            return parts.length > 1 ? parts.slice(1).join(' ') : "";
+          })();
+
+          return {
             qty: item.quantity,
-            name: item.product_id?.name || "منتج غير معروف",
-            nameAr: item.product_id?.ar_name || "",
-            price: Number(item.price || 0),
-            total: Number(item.subtotal || 0),
-            notes: "", 
-            addons: [], 
+            name: item.product_id?.name || matchedOrderItem?.name || "منتج غير معروف",
+            nameAr: item.product_id?.ar_name || matchedOrderItem?.ar_name || "",
+            price: Number(item.price || matchedOrderItem?.price || 0),
+            total: Number(item.subtotal || (Number(item.price || matchedOrderItem?.price || 0) * Number(item.quantity || 1))),
+            notes: matchedOrderItem?.notes || "",
+            addons: [],
             extras: [],
-variations: (() => {
-    if (!item.product_price_id?.code) return [];
-
-    const code = item.product_price_id.code;
-    const parts = code.split('_');
-
-    // لو في أكتر من جزء، نعتبر اللي بعد الأول هو الـ variation
-    if (parts.length > 1) {
-        const variationPart = parts.slice(1).join(' '); // لو في أكتر من underscore
-        // نحولها لكابيتال أول حرف
-        return [{
-            name: variationPart.charAt(0).toUpperCase() + variationPart.slice(1).replace(/_/g, ' ')
-        }];
-    }
-
-    return [];
-})(),        };
-    }),
+            variations: varName ? [{ name: varName }] : [],
+          };
+        })
+      : (orderItems || []).map((item) => ({
+          qty: item.count || item.quantity || 1,
+          name: item.name || "منتج",
+          nameAr: item.ar_name || "",
+          price: Number(item.price || 0),
+          total: Number(item.totalPrice || (item.price * (item.count || 1))),
+          notes: item.notes || "",
+          addons: [],
+          extras: [],
+          variations: item.variant_name ? [{ name: item.variant_name }] : [],
+        })),
 
     // الحسابات المالية (محدثة)
     subtotal: calculatedSubtotal.toFixed(2), // المجموع المحسوب من العناصر

@@ -29,6 +29,7 @@ import {
   printReceiptSilently,
 } from "../utils/printReceipt";
 import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
 import FreeDiscountPasswordModal from "./FreeDiscountPasswordModal";
 import { useDiscountCalculation } from "@/Hooks/useDiscountCalculation";
 
@@ -49,6 +50,7 @@ const CheckOut = ({
   const cashierId = sessionStorage.getItem("cashier_id");
   const baseUrl = import.meta.env.VITE_API_BASE_URL;
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
 
   const lastSelectedGroup = sessionStorage.getItem("last_selected_group");
 
@@ -579,10 +581,15 @@ const CheckOut = ({
         toast.success(Due === 1 ? t("DueOrderCreated") : t("OrderPlaced"));
         setPendingFreeDiscountPassword("");
 
-        // دالة التنظيف والإغلاق (مشتركة)
+        // دالة التنظيف والإغلاق (مشتركة) مع تحديث الكاش والمنتجات فوراً
         const completeOrder = () => {
           sessionStorage.removeItem("selected_customer_id");
           window.dispatchEvent(new CustomEvent("reset_selected_customer"));
+          window.dispatchEvent(new CustomEvent("refresh_pos_products"));
+          queryClient.invalidateQueries({ queryKey: ["categoryProducts"] });
+          queryClient.invalidateQueries({ queryKey: ["featured"] });
+          queryClient.invalidateQueries({ queryKey: ["brandProducts"] });
+          queryClient.invalidateQueries({ queryKey: ["categories"] });
           onClearCart?.();
           onClose();
         };

@@ -78,15 +78,53 @@ export default function TitleBar({ currentLocalData, lastSyncedData }) {
   const [liveProgress, setLiveProgress] = useState(null);
   const [isConnected, setIsConnected] = useState(navigator.onLine);
 
-  // يبدأ دائماً بـ null حتى يعرض "Not Synced" في أول فتح للتطبيق
-  const [lastSyncTime, setLastSyncTime] = useState(null);
+  // استعادة آخر وقت مزامنة من التخزين المحلي حتى لا يضيع عند عمل Refresh
+  const [lastSyncTime, setLastSyncTime] = useState(() => {
+    const cached = localStorage.getItem("last_sync_time");
+    if (!cached) return null;
+    try {
+      const d = new Date(cached);
+      return !isNaN(d.getTime()) ? d.toLocaleString() : cached;
+    } catch {
+      return cached;
+    }
+  });
 
   const isSyncingRef = useRef(false);
   const hideTimerRef = useRef(null);
   const { postData } = usePost();
 
   useEffect(() => {
+    let active = true;
+
+    // جلب آخر وقت مزامنة مسجل في السيرفر المحلي فور فتح التطبيق أو عمل ريفرش
+    fetch("http://localhost:3001/api/sync/last-sync")
+      .then((res) => res.json())
+      .then((data) => {
+        if (active && data?.lastSyncAt) {
+          const d = new Date(data.lastSyncAt);
+          if (!isNaN(d.getTime())) {
+            setLastSyncTime(d.toLocaleString());
+            localStorage.setItem("last_sync_time", data.lastSyncAt);
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not fetch last sync time:", err);
+      });
+
     const socket = io("http://localhost:3001");
+
+    // استلام آخر وقت سينك فور الاتصال بالسوكت
+    socket.on("sync-status", (data) => {
+      if (data?.lastSyncAt) {
+        const d = new Date(data.lastSyncAt);
+        if (!isNaN(d.getTime())) {
+          setLastSyncTime(d.toLocaleString());
+          localStorage.setItem("last_sync_time", data.lastSyncAt);
+        }
+      }
+    });
 
     socket.on("sync-progress", (data) => {
       if (data.type === "bootstrap") return;
@@ -94,8 +132,11 @@ export default function TitleBar({ currentLocalData, lastSyncedData }) {
       // عند اكتمال أول مزامنة تلقائية (Summary) يتم تحديث الوقت فوراً
       if (data.type === "summary") {
         setLiveProgress(data);
-        const formatted = new Date().toLocaleString();
+        const iso = data.completedAt || new Date().toISOString();
+        const d = new Date(iso);
+        const formatted = !isNaN(d.getTime()) ? d.toLocaleString() : iso;
         setLastSyncTime(formatted);
+        localStorage.setItem("last_sync_time", iso);
 
         if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
         hideTimerRef.current = setTimeout(() => {
@@ -122,8 +163,11 @@ export default function TitleBar({ currentLocalData, lastSyncedData }) {
       setLiveProgress(data);
 
       if (data.status === "completed") {
-        const formatted = new Date().toLocaleString();
+        const iso = data.completedAt || new Date().toISOString();
+        const d = new Date(iso);
+        const formatted = !isNaN(d.getTime()) ? d.toLocaleString() : iso;
         setLastSyncTime(formatted);
+        localStorage.setItem("last_sync_time", iso);
 
         if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
         hideTimerRef.current = setTimeout(() => {
@@ -138,6 +182,7 @@ export default function TitleBar({ currentLocalData, lastSyncedData }) {
     });
 
     return () => {
+      active = false;
       socket.disconnect();
     };
   }, []);
@@ -229,10 +274,12 @@ export default function TitleBar({ currentLocalData, lastSyncedData }) {
 
       const pushResult = await postData("api/sync/push", payload);
       const pushedCount = pushResult?.pushed ?? 0;
-
-      // ضبط الوقت على توقيت الجهاز المحلي الحالي فور اكتمال أول سينك
-      const formattedTime = new Date().toLocaleString();
+      // ضبط الوقت على توقيت الجهاز المحلي الحالي فور اكتمال السينك وتخزينه
+      const isoTime = pushResult?.syncTime || pulledData?.syncTime || new Date().toISOString();
+      const d = new Date(isoTime);
+      const formattedTime = !isNaN(d.getTime()) ? d.toLocaleString() : isoTime;
       setLastSyncTime(formattedTime);
+      localStorage.setItem("last_sync_time", isoTime);
 
       setLiveProgress({
         type: "summary",

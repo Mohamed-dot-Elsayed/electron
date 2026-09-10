@@ -16,6 +16,7 @@ import {
   isBootstrapDone,
   markBootstrapComplete,
   getOrCreateClientId,
+  setLastSyncCompletedAt,
 } from "./appMeta";
 import { enqueuePendingImages } from "../db/imageCache";
 import { extractImageUrls } from "./imageExtract";
@@ -91,13 +92,15 @@ export async function runBootstrapAll() {
     }
 
     markBootstrapComplete();
-    setLastSyncAt("_global", new Date().toISOString());
+    const completedAt = new Date().toISOString();
+    setLastSyncCompletedAt(completedAt);
 
     emitSyncProgress({
       type: "bootstrap",
       status: "completed",
       percent: 100,
       message: "Bootstrap complete for all tables and images!",
+      completedAt,
     });
   } catch (err: any) {
     emitSyncProgress({

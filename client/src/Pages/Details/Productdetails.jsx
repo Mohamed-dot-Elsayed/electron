@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Package,
   MapPin,
@@ -10,36 +10,7 @@ import {
   Tag,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useGet } from "../../Hooks/useGet"; // ⚠️ adjust this path to wherever useGet.js actually lives in your project
-
-/**
- * ProductDetails
- * ---------------------------------------------------------------------------
- * GET /pos-home/products/:productId/warehouse-stock
- *
- * Real response shape:
- * {
- *   success: true,
- *   data: {
- *     message: string,
- *     product: { name, ar_name, image, price, quantity, code, description,
- *                low_stock, cost, whole_price, minimum_quantity_sale,
- *                free_shipping, Is_Online, different_price, ... },
- *     warehouseStock: [
- *       {
- *         warehouseId, warehouseName, warehouseAddress,
- *         totalQuantity: number,
- *         base: null | { code, price, quantity, low_stock },   // used when product has NO variations
- *         variations: [                                        // used when product HAS variations
- *           { productPriceId, code, price, quantity, low_stock,
- *             options: [{ variationName, optionName }] }
- *         ]
- *       }
- *     ]
- *   }
- * }
- * ---------------------------------------------------------------------------
- */
+import { useGet } from "../../Hooks/useGet";
 
 const COLORS = {
   page: "#F3F4F7",
@@ -365,12 +336,26 @@ export default function ProductDetails({ productId: productIdProp }) {
   const navigate = useNavigate();
   const { id: routeProductId } = useParams();
   const productId = productIdProp || routeProductId;
-  const { data, isLoading, error, refetch } = useGet(
-    productId ? `api/pos-home/products/${productId}/warehouse-stock` : null,
+  const [endpoint, setEndpoint] = useState(
+    productId ? `api/admin/pos-home/products/${productId}/warehouse-stock` : null
   );
 
-  const product = data?.data?.product;
-  const warehouseStock = data?.data?.warehouseStock || [];
+  useEffect(() => {
+    if (productId) {
+      setEndpoint(`api/admin/pos-home/products/${productId}/warehouse-stock`);
+    }
+  }, [productId]);
+
+  const { data, isLoading, error, refetch } = useGet(endpoint);
+
+  useEffect(() => {
+    if (error && endpoint?.startsWith("api/admin/")) {
+      setEndpoint(`api/pos-home/products/${productId}/warehouse-stock`);
+    }
+  }, [error, endpoint, productId]);
+
+  const product = data?.data?.product || data?.product;
+  const warehouseStock = data?.data?.warehouseStock || data?.warehouseStock || [];
 
   const totals = useMemo(() => {
     const totalStock = warehouseStock.reduce(

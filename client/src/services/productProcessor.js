@@ -4,10 +4,15 @@ export const buildProductPayload = (item) => {
   const price = parseFloat(item.price || item.finalPrice || item.total || 0);
   const subtotal = (price * quantity).toFixed(2);
 
-  // 1. Different Price → product_price_id
+  // 1. Different Price / Variation → product_price_id
   let product_price_id = null;
-  if (item.different_price && item.selectedVariation?.price_variation) {
-    product_price_id = item.selectedVariation.price_variation.toString();
+  const rawPriceId =
+    item.product_price_id ||
+    item.selectedVariation?.price_variation ||
+    item.selectedVariant?._id;
+
+  if (rawPriceId) {
+    product_price_id = rawPriceId.toString();
   }
 
   // 2. Variations → لسه الباك إند بياخد variation كـ array من objects

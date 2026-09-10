@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { usePost } from "@/Hooks/usePost";
 import { useGet } from "@/Hooks/useGet";
-import { useQuery, useQueries } from "@tanstack/react-query";
+import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import Loading from "@/components/Loading";
 import { toast } from "react-toastify";
@@ -43,6 +43,7 @@ export default function Item({ onAddToOrder }) {
   const [visibleProductCount, setVisibleProductCount] = useState(PRODUCTS_TO_SHOW_INITIALLY);
   const [selectedBundle, setSelectedBundle] = useState(null); // for bundle detail modal
   const { t, i18n } = useTranslation();
+  const queryClient = useQueryClient();
   const orderType = sessionStorage.getItem("order_type") || "dine_in";
   const { postData: postOrder, loading: orderLoading } = usePost();
 
@@ -75,18 +76,37 @@ export default function Item({ onAddToOrder }) {
   const { data: categoriesData, isLoading: categoriesLoading } = useQuery({
     queryKey: ["categories"],
     queryFn: () => apiFetcher("api/pos-home/categories"),
-    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+    staleTime: 30 * 1000,
   });
 
   const categories = useMemo(() => {
     return categoriesData?.data?.category || [];
   }, [categoriesData]);
 
+  // مزامنة واختيار أول تصنيف تلقائياً لسرعة العرض وبدون شاشة فارغة
+  useEffect(() => {
+    if (activeTab === "category" && selectedCategory === "all" && categories.length > 0 && !searchQuery) {
+      setSelectedCategory(categories[0]._id);
+    }
+  }, [categories, activeTab, selectedCategory, searchQuery]);
+
+  // الاستماع لحدث تحديث المنتجات الفوري بعد الدفع أو انتهاء الطلب
+  useEffect(() => {
+    const handleRefresh = () => {
+      queryClient.invalidateQueries({ queryKey: ["categoryProducts"] });
+      queryClient.invalidateQueries({ queryKey: ["featured"] });
+      queryClient.invalidateQueries({ queryKey: ["brandProducts"] });
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    };
+    window.addEventListener("refresh_pos_products", handleRefresh);
+    return () => window.removeEventListener("refresh_pos_products", handleRefresh);
+  }, [queryClient]);
+
   // ✅ 2. جلب Brands
   const { data: brandsData, isLoading: brandsLoading } = useQuery({
     queryKey: ["brands"],
     queryFn: () => apiFetcher("api/pos-home/brands"),
-    staleTime: 10 * 60 * 1000,
+    staleTime: 30 * 1000,
   });
 
   const brands = useMemo(() => {
@@ -98,7 +118,8 @@ export default function Item({ onAddToOrder }) {
     queryKey: ["featured"],
     queryFn: () => apiFetcher("api/pos-home/featured"),
     enabled: activeTab === "feature",
-    staleTime: 10 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const featuredProducts = useMemo(() => {
@@ -110,7 +131,8 @@ export default function Item({ onAddToOrder }) {
     queryKey: ["categoryProducts", selectedCategory],
     queryFn: () => apiFetcher(`api/pos-home/categories/${selectedCategory}/products`),
     enabled: activeTab === "category" && selectedCategory !== "all",
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const categoryProducts = useMemo(() => {
@@ -126,7 +148,7 @@ export default function Item({ onAddToOrder }) {
     queries: categories.map((cat) => ({
       queryKey: ["categoryProducts", cat._id],
       queryFn: () => apiFetcher(`api/pos-home/categories/${cat._id}/products`),
-      staleTime: 10 * 60 * 1000, // cache 10 دقايق
+      staleTime: 10 * 1000,
       enabled: globalSearchActive && categories.length > 0,
     })),
   });
@@ -151,7 +173,8 @@ export default function Item({ onAddToOrder }) {
     queryKey: ["brandProducts", selectedBrand],
     queryFn: () => apiFetcher(`api/pos-home/brands/${selectedBrand}/products`),
     enabled: activeTab === "brand" && selectedBrand !== "all",
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const brandProducts = useMemo(() => {
@@ -161,7 +184,7 @@ export default function Item({ onAddToOrder }) {
   // ✅ 6. Bundles
   const { data: bundlesData, isLoading: bundlesLoading } = useGet(
     "api/pos-home/bundles",
-    { useCache: true }
+    { useCache: false }
   );
   const bundles = useMemo(() => bundlesData?.data?.bundles || [], [bundlesData]);
 
@@ -234,13 +257,42 @@ export default function Item({ onAddToOrder }) {
     `${productId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   const handleAddToOrder = useCallback(async (product, customQuantity = 1) => {
+    // فحص نفاذ الكمية (سواء للفاريشن أو للمنتج العادي)
+    if (
+      product.selectedVariant &&
+      product.selectedVariant.quantity !== null &&
+      product.selectedVariant.quantity !== undefined &&
+      product.selectedVariant.quantity <= 0
+    ) {
+      toast.error(t("VariationOutOfStock") || "هذا الفاريشن غير متوفر بالمخزن حالياً");
+      return;
+    }
+
+    if (
+      !product.selectedVariant &&
+      product.quantity !== null &&
+      product.quantity !== undefined &&
+      product.quantity <= 0
+    ) {
+      toast.error(t("ProductOutOfStock") || "هذا المنتج غير متوفر بالمخزن حالياً");
+      return;
+    }
+
     const orderedQty = Number(customQuantity);
     const startQty = Number(product.start_quantaty);
     const isWholesale = startQty > 0 && orderedQty >= startQty && product.whole_price;
+
+    const isFromModalWithVariant = Boolean(
+      product.product_price_id ||
+      product.selectedVariant ||
+      product.selectedVariation?.price_variation
+    );
+
     const basePrice = isWholesale
       ? parseFloat(product.whole_price)
+      : isFromModalWithVariant
+      ? parseFloat(product.originalPrice || product.price || 0)
       : parseFloat(product.price_after_discount || product.price || product.originalPrice || 0);
-    // ------------------
 
     let addonsTotal = 0;
     if (product.selectedExtras && product.selectedExtras.length > 0) {
@@ -279,7 +331,11 @@ export default function Item({ onAddToOrder }) {
       });
     }
 
-    const itemPrice = basePrice + addonsTotal + variationsTotal;
+    // إذا كان المنتج قادماً من المودال، فإن product.price يحسب بالفعل السعر الإجمالي للوحدة
+    const itemPrice = isFromModalWithVariant && product.price
+      ? parseFloat(product.price)
+      : basePrice + addonsTotal + variationsTotal;
+
     if (itemPrice <= 0) {
       toast.error(t("InvalidProductPrice"));
       return;
@@ -291,13 +347,23 @@ export default function Item({ onAddToOrder }) {
 
     const itemTotal = itemPrice * quantity;
 
+    const resolvedProductPriceId =
+      product.product_price_id ||
+      product.selectedVariation?.price_variation ||
+      (product.selectedVariant?._id ? String(product.selectedVariant._id) : null);
+
     if (orderType === "take_away" || orderType === "delivery") {
       const newItem = {
         ...product,
         temp_id: createTempId(product._id),
+        product_price_id: resolvedProductPriceId,
+        different_price: product.different_price || Boolean(resolvedProductPriceId),
+        selectedVariant: product.selectedVariant || null,
+        variant_name: product.variant_name || (product.selectedVariant ? (product.selectedVariant.name || product.selectedVariant.code) : ""),
+        variant_code: product.variant_code || product.selectedVariant?.code || "",
         count: quantity,
         price: itemPrice,
-        originalPrice: basePrice,
+        originalPrice: product.originalPrice || basePrice,
         totalPrice: itemTotal,
         quantity: product.weight_status === 1 ? quantity : product.quantity,
         preparation_status: "pending",
@@ -321,6 +387,8 @@ export default function Item({ onAddToOrder }) {
 
       const processedItem = buildProductPayload({
         ...product,
+        product_price_id: resolvedProductPriceId,
+        different_price: product.different_price || Boolean(resolvedProductPriceId),
         price: itemPrice,
         count: quantity,
       });
@@ -353,9 +421,14 @@ export default function Item({ onAddToOrder }) {
         const newItem = {
           ...product,
           temp_id: createTempId(product._id),
+          product_price_id: resolvedProductPriceId,
+          different_price: product.different_price || Boolean(resolvedProductPriceId),
+          selectedVariant: product.selectedVariant || null,
+          variant_name: product.variant_name || (product.selectedVariant ? (product.selectedVariant.name || product.selectedVariant.code) : ""),
+          variant_code: product.variant_code || product.selectedVariant?.code || "",
           count: quantity,
           price: itemPrice,
-          originalPrice: basePrice,
+          originalPrice: product.originalPrice || basePrice,
           totalPrice: itemTotal,
           cart_id: cartId ? cartId.toString() : null,
           preparation_status: "pending",
@@ -394,8 +467,64 @@ export default function Item({ onAddToOrder }) {
     toast.success(t("BundleAddedToCart"));
   }, [onAddToOrder, t]);
 
-  const handleAddFromModal = (enhancedProduct, options = {}) => {
-    handleAddToOrder(enhancedProduct, enhancedProduct.quantity, options);
+  const handleAddFromModal = async (enhancedProductOrProducts, options = {}) => {
+    if (Array.isArray(enhancedProductOrProducts)) {
+      if (orderType === "take_away" || orderType === "delivery") {
+        const newItems = [];
+        for (const product of enhancedProductOrProducts) {
+          if (
+            product.selectedVariant &&
+            product.selectedVariant.quantity !== null &&
+            product.selectedVariant.quantity !== undefined &&
+            product.selectedVariant.quantity <= 0
+          ) {
+            toast.error(t("VariationOutOfStock") || "هذا الفاريشن غير متوفر بالمخزن حالياً");
+            continue;
+          }
+
+          const resolvedProductPriceId =
+            product.product_price_id ||
+            product.selectedVariation?.price_variation ||
+            (product.selectedVariant?._id ? String(product.selectedVariant._id) : null);
+
+          const quantity = Number(product.quantity || product.count || 1);
+          const itemPrice = parseFloat(product.price || 0);
+
+          newItems.push({
+            ...product,
+            temp_id: createTempId(product._id),
+            product_price_id: resolvedProductPriceId,
+            different_price: product.different_price || Boolean(resolvedProductPriceId),
+            selectedVariant: product.selectedVariant || null,
+            variant_name: product.variant_name || (product.selectedVariant ? product.selectedVariant.name : "") || "",
+            variant_code: product.variant_code || product.selectedVariant?.code || "",
+            count: quantity,
+            quantity: quantity,
+            price: itemPrice,
+            originalPrice: product.originalPrice || itemPrice,
+            totalPrice: itemPrice * quantity,
+            preparation_status: "pending",
+            notes: product.notes || "",
+            allSelectedVariations: product.allSelectedVariations || [],
+            selectedExtras: product.selectedExtras || [],
+            selectedExcludes: product.selectedExcludes || [],
+            selectedAddons: product.selectedAddons || [],
+          });
+        }
+
+        if (newItems.length > 0) {
+          onAddToOrder(newItems);
+          toast.success(t("ProductAddedToCart"));
+        }
+        return;
+      }
+
+      for (const item of enhancedProductOrProducts) {
+        await handleAddToOrder(item, item.quantity, options);
+      }
+    } else {
+      await handleAddToOrder(enhancedProductOrProducts, enhancedProductOrProducts.quantity, options);
+    }
   };
 
   const isAnyLoading = categoriesLoading || brandsLoading || categoryProductsLoading || brandProductsLoading || featuredLoading || allProductsLoading;

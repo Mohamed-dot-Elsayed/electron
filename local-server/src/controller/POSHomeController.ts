@@ -11,6 +11,7 @@ import {
   ProductPriceModel,
   ProductPriceOptionModel,
 } from "../models/productPrice";
+import { VariationModel, OptionModel } from "../models/variation";
 import { CityModel } from "../models/city";
 import { CustomerModel, CustomerGroupModel } from "../models/customer";
 import { NotFound } from "../Errors";
@@ -134,10 +135,34 @@ const buildWarehouseProductList = async (
         productId: product._id,
       });
 
-      // Add warehouse quantity to every variation
+      // Add warehouse quantity and options to every variation
       const formattedVariations = variations.map((variation: any) => {
+        const priceOptions = ProductPriceOptionModel.find({
+          product_price_id: variation._id.toString(),
+        });
+
+        const options = priceOptions
+          .map((po: any) => {
+            const opt = OptionModel.findById(po.option_id);
+            if (!opt) return null;
+            const vr = opt.variationId
+              ? VariationModel.findById(opt.variationId)
+              : null;
+            return {
+              _id: opt._id,
+              name: opt.name,
+              option_name: opt.name,
+              variation_name: vr?.name || "",
+              variation: vr
+                ? { _id: vr._id, name: vr.name, ar_name: vr.ar_name }
+                : undefined,
+            };
+          })
+          .filter(Boolean);
+
         return {
           ...variation,
+          options,
           quantity:
             stockByVariant[variation._id.toString()] ?? 0,
         };
