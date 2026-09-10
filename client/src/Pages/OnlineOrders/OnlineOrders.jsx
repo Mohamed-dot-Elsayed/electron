@@ -19,6 +19,7 @@ import {
   Truck,
   Store,
   Tag,
+  Wifi,
 } from "lucide-react";
 import { useGet } from "@/Hooks/useGet";
 import { usePut } from "@/Hooks/usePut"; // Imported custom usePut hook[cite: 10]
@@ -177,14 +178,33 @@ export default function OnlineOrders() {
       dir={isArabic ? "rtl" : "ltr"}
     >
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">
-          {t("OnlineOrders") || "Online Orders"}
-        </h1>
-        <p className="text-gray-600">
-          {t("TotalOrders") || "Total"}:{" "}
-          <span className="font-semibold">{safeList.length}</span>
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-1">
+            {t("OnlineOrders") || "Online Orders"}
+          </h1>
+          <p className="text-gray-600">
+            {t("TotalOrders") || "Total"}:{" "}
+            <span className="font-semibold">{safeList.length}</span>
+          </p>
+        </div>
+
+        {/* Internet Connection Notice */}
+        <div className="flex items-center gap-3 bg-amber-50/90 border border-amber-200/90 text-amber-900 px-4 py-2.5 rounded-xl shadow-xs max-w-md">
+          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600">
+            <Wifi className="w-4 h-4" />
+          </div>
+          <div className="text-xs sm:text-sm leading-snug">
+            <span className="font-bold text-amber-950 block">
+              {isArabic ? "تنبيه اتصال الإنترنت:" : "Internet Connection Notice:"}
+            </span>
+            <span className="text-amber-800">
+              {isArabic
+                ? "يُفضل إبقاء الإنترنت متصلاً لتحديث واستقبال الطلبات بدقة لحظية."
+                : "Please stay connected to the internet for real-time, accurate order sync."}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Filters */}

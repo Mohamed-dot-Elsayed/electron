@@ -165,7 +165,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    show: true,
+    show: false,
     autoHideMenuBar: true,
     frame: false, // Remove Windows title bar
     titleBarStyle: "hidden",
@@ -178,16 +178,27 @@ function createWindow() {
 
   console.log(">>> BrowserWindow created, id:", mainWindow.id);
 
+  mainWindow.once("ready-to-show", () => {
+    if (mainWindow) mainWindow.show();
+  });
+
+  // Safety fallback in case ready-to-show doesn't fire
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isVisible()) {
+      mainWindow.show();
+    }
+  }, 2500);
+
   if (app.isPackaged) {
-    // In packaged app, load from the built files using loadFile
+    // In packaged app, load from the built files using loadFile directly on login
     const indexPath = path.join(__dirname, "../client/dist/index.html");
     console.log(">>> Loading File:", indexPath);
-    mainWindow.loadFile(indexPath).catch((err) => {
+    mainWindow.loadFile(indexPath, { hash: "/login" }).catch((err) => {
       console.log(">>> loadFile rejected:", err);
     });
   } else {
-    // In development, use Vite dev server
-    const loadUrl = `http://localhost:${actualVitePort}`;
+    // In development, use Vite dev server directly on login
+    const loadUrl = `http://localhost:${actualVitePort}/#/login`;
     console.log(">>> Loading URL:", loadUrl);
     mainWindow.loadURL(loadUrl).catch((err) => {
       console.log(">>> loadURL rejected:", err);

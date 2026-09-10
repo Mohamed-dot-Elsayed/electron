@@ -38,7 +38,11 @@ const routes = [
   },
 
   {
-    element: <MainLayouts />,
+    element: (
+      <ProtectedRoute>
+        <MainLayouts />
+      </ProtectedRoute>
+    ),
     children: [
       // for take away
       {
