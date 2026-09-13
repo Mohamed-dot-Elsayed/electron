@@ -249,7 +249,7 @@ ${showCustomerInfo ? `
             </thead>
             <tbody>
             ${receiptData.items.map((item) => {
-                const productName = isArabic && item.nameAr ? item.nameAr : item.name;
+                const productName = item.name || item.nameAr;
                 const unitPrice = (item.total / item.qty).toFixed(2); // سعر القطعة = الإجمالي ÷ الكمية
                 
                 // تنسيق الـ Variations
@@ -388,7 +388,7 @@ export const prepareReceiptData = (
 
   return {
     // البيانات الأساسية
-    invoiceNumber: saleData.reference || saleData._id || "---",
+    invoiceNumber: saleData.daily_order_number || saleData.reference || saleData._id || "---",
     dateFormatted: dateFormatted,
     timeFormatted: timeFormatted,
     orderType: detectedType,

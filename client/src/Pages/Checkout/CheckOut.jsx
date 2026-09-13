@@ -74,6 +74,9 @@ const CheckOut = ({
   })();
 
   const { data: taxesData } = useGet("api/taxes");
+  const { data: nextInvoiceRes } = useGet("api/admin/pos/sales/next-invoice-number");
+  const nextInvoiceNumber = nextInvoiceRes?.data?.dailyOrderNumber || nextInvoiceRes?.dailyOrderNumber;
+
   const [selectedDiscountId, setSelectedDiscountId] = useState(initialDiscountId);
   const [selectedTaxId, setSelectedTaxId] = useState(null);
   const [freeDiscount, setFreeDiscount] = useState(initialFreeDiscount);
@@ -745,7 +748,14 @@ const CheckOut = ({
       <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[95vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-3">
-          <h2 className="text-2xl font-semibold text-gray-800">{t("Checkout") || "Checkout"}</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-semibold text-gray-800">{t("Checkout") || "Checkout"}</h2>
+            {nextInvoiceNumber && (
+              <span className="px-2.5 py-1 text-xs sm:text-sm font-bold bg-[#8B2635]/10 text-[#8B2635] rounded-lg border border-[#8B2635]/20">
+                #{nextInvoiceNumber}
+              </span>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 text-lg transition-all"
