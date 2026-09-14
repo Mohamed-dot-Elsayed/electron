@@ -13,6 +13,20 @@ const axiosInstance = axios.create({
   baseURL,
 });
 
+// ✅ Interceptor يرسل المنطقة الزمنية للمتصفح تلقائياً
+axiosInstance.interceptors.request.use((config) => {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz) {
+      config.headers = config.headers || {};
+      config.headers["x-timezone"] = tz;
+    }
+  } catch (e) {
+    // Ignore if timezone resolution fails
+  }
+  return config;
+});
+
 axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
