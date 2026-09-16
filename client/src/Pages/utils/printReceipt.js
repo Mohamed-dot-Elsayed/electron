@@ -304,21 +304,19 @@ ${showCustomerInfo ? `
 
         </div>
 
-<div style="text-align: center; margin-top: 15px; font-size: 11px;">
-  <p style="margin: 5px 0 0 0;">
-    *** ${isArabic ? "شكرًا لزيارتكم" : "Thank you for your visit"} ***
-  </p>
+        <div class="receipt-footer" style="text-align: center; margin-top: 14px; padding-bottom: 25px; color: #000;">
+          <p style="margin: 4px 0 0 0; font-size: 12px; font-weight: bold; color: #000;">
+            *** ${isArabic ? "شكرًا لزيارتكم" : "Thank you for your visit"} ***
+          </p>
 
-  <p style="margin-top: 4px; font-size: 9px; opacity: 0.7;">
-    ${isArabic ? "بدعم من" : "Powered by"} <strong>Systego POS</strong>
-  </p>
+          <p style="margin-top: 5px; font-size: 11px; font-weight: bold; color: #000;">
+            ${isArabic ? "بدعم من" : "Powered by"} <strong>Systego POS</strong>
+          </p>
 
-  <p style="margin-top: 2px; font-size: 9px; opacity: 0.6;">
-    www.systego.net
-  </p>
-</div>
-
-
+          <p style="margin-top: 3px; font-size: 12px; font-weight: 900; color: #000; letter-spacing: 0.5px;">
+            www.systego.net
+          </p>
+        </div>
 
       </div>
     </body>
