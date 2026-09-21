@@ -522,35 +522,9 @@ export const printReceiptSilently = async (
       return;
     }
 
-    // 2. Fallback to QZ Tray (Web Browser)
-    if (!qz.websocket.isActive()) {
-      fallbackToBrowserPrint();
-      return;
-    }
+    // 2. Standard Browser Print (Fallback if not in Electron)
+    fallbackToBrowserPrint();
 
-    const printJobs = [];
-
-    // طباعة فاتورة الكاشير (للعميل)
-    try {
-      const cashierPrinterName = await qz.printers.getDefault();
-      if (!cashierPrinterName) throw new Error("No default printer found.");
-
-      const cashierConfig = qz.configs.create(cashierPrinterName);
-
-      printJobs.push(
-        qz.print(cashierConfig, [
-          { type: "html", format: "plain", data: cashierHtml },
-        ])
-      );
-    } catch (err) {
-      console.error(err);
-      fallbackToBrowserPrint();
-      return;
-    }
-
-    await Promise.all(printJobs);
-    toast.success("✅ تم الطباعة");
-    callback();
   } catch (err) {
     console.error(err);
     toast.error("❌ فشل الطباعة");
