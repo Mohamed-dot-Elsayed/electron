@@ -392,22 +392,49 @@ ipcMain.handle("print-html", async (event, { html, printerName }) => {
   workerWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
   return new Promise((resolve, reject) => {
-    workerWindow.webContents.on("did-finish-load", () => {
-      workerWindow.webContents.print(
-        {
-          silent: true,
-          printBackground: true,
-          printerName: printerName,
-        },
-        (success, errorType) => {
-          workerWindow.close();
-          if (success) {
-            resolve({ success: true });
+    workerWindow.webContents.on("did-finish-load", async () => {
+      const fallbackToPdf = async () => {
+        try {
+          const pdfData = await workerWindow.webContents.printToPDF({
+            printBackground: true,
+          });
+          const { filePath } = await dialog.showSaveDialog({
+            title: "Save Receipt",
+            defaultPath: "receipt.pdf",
+            filters: [{ name: "PDF", extensions: ["pdf"] }],
+          });
+          if (filePath) {
+            fs.writeFileSync(filePath, pdfData);
+            resolve({ success: true, savedToPdf: true });
           } else {
-            reject(new Error(`Failed to print: ${errorType}`));
+            resolve({ success: false, reason: "canceled" });
           }
+        } catch (err) {
+          reject(new Error(`PDF generation failed: ${err.message}`));
+        } finally {
+          workerWindow.close();
         }
-      );
+      };
+
+      if (!printerName) {
+        await fallbackToPdf();
+      } else {
+        workerWindow.webContents.print(
+          {
+            silent: true,
+            printBackground: true,
+            printerName: printerName,
+          },
+          (success, errorType) => {
+            if (success) {
+              workerWindow.close();
+              resolve({ success: true });
+            } else {
+              fallbackToPdf();
+            }
+          }
+        );
+      }
     });
 
     workerWindow.webContents.on("did-fail-load", (e, errorCode, errorDescription) => {
