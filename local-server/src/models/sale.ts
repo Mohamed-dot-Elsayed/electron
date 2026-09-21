@@ -3,6 +3,9 @@ import {SchemaDef} from "../db/types"
 
 // ==================== Sale Schema ====================
 const SaleSchema: SchemaDef = {
+  daily_order_number: {
+    type: "number",
+  },
   reference: {
     type: "string",
     unique: true,

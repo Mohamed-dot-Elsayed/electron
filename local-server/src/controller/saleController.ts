@@ -21,6 +21,7 @@ import { Product_WarehouseModel } from "../models/productWarehouse";
 import { ServiceFeeModel } from "../models/serviceFee";
 import { CashierModel } from "../models/cashier";
 import { CategoryModel } from "../models/category";
+import { getDB } from "../db/db";
 
 // ✅ Dynamic store info - بيجيب اسم البراند من السوبر أدمن (صاحب البزنس)
 const getStoreInfo = async (userId: string) => {
@@ -2299,5 +2300,141 @@ export const applyCoupon = async (req: Request, res: Response) => {
   return SuccessResponse(res, {
     message: "Coupon applied successfully",
     coupon,
+  });
+};
+
+export const getTimezoneDayBounds = (
+  tz: string = process.env.TIMEZONE || process.env.TZ || "Africa/Cairo",
+  date: Date = new Date()
+): {
+  startOfDay: Date;
+  endOfDay: Date;
+  year: string;
+  month: string;
+  day: string;
+} => {
+  try {
+    const dtf = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    const dateStr = dtf.format(date);
+    const [year, month, day] = dateStr.split("-");
+
+    const utcMidnight = Date.UTC(+year, +month - 1, +day, 0, 0, 0);
+    const utcDate = new Date(
+      new Date(utcMidnight).toLocaleString("en-US", { timeZone: "UTC" })
+    );
+    const tzDate = new Date(
+      new Date(utcMidnight).toLocaleString("en-US", { timeZone: tz })
+    );
+    const offsetMs = tzDate.getTime() - utcDate.getTime();
+
+    const startOfDay = new Date(utcMidnight - offsetMs);
+    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1);
+
+    return { startOfDay, endOfDay, year, month, day };
+  } catch (error) {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const year = String(date.getFullYear());
+    return { startOfDay, endOfDay, year, month, day };
+  }
+};
+
+// ✅ Helper to get the next sequential daily order number (sql.js version)
+export const getNextDailyOrderNumber = async (
+  timeZone?: string
+): Promise<{
+  dailyOrderNumber: number;
+  reference: string;
+}> => {
+  const db = getDB();
+  const targetTimeZone =
+    timeZone || process.env.TIMEZONE || process.env.TZ || "Africa/Cairo";
+
+  const { startOfDay, endOfDay, month, day } =
+    getTimezoneDayBounds(targetTimeZone);
+
+  const startStr = startOfDay.toISOString();
+  const endStr = endOfDay.toISOString();
+
+  // 1. البحث عن آخر عملية بيع تم إنشاؤها اليوم من جدول Sale
+  const lastSaleStmt = db.prepare(`
+    SELECT daily_order_number, reference 
+    FROM Sale 
+    WHERE (createdAt >= ? AND createdAt <= ?)
+       OR (date >= ? AND date <= ?)
+    ORDER BY createdAt DESC, date DESC
+    LIMIT 1
+  `);
+  lastSaleStmt.bind([startStr, endStr, startStr, endStr]);
+
+  let lastSale: { daily_order_number?: number; reference?: string } | null = null;
+  if (lastSaleStmt.step()) {
+    lastSale = lastSaleStmt.getAsObject() as { daily_order_number?: number; reference?: string };
+  }
+  lastSaleStmt.free();
+
+  let nextNumber = 1;
+
+  if (lastSale && lastSale.daily_order_number != null) {
+    nextNumber = Number(lastSale.daily_order_number) + 1;
+  } else {
+    // 2. حساب عدد الفواتير اليوم في حالة عدم وجود daily_order_number سابق
+    const countStmt = db.prepare(`
+      SELECT COUNT(*) as count 
+      FROM Sale 
+      WHERE (createdAt >= ? AND createdAt <= ?)
+         OR (date >= ? AND date <= ?)
+    `);
+    countStmt.bind([startStr, endStr, startStr, endStr]);
+
+    let todayCount = 0;
+    if (countStmt.step()) {
+      const row = countStmt.getAsObject();
+      todayCount = Number(row.count || 0);
+    }
+    countStmt.free();
+
+    nextNumber = todayCount + 1;
+  }
+
+  // 3. إنشاء الـ Reference والتأكد من عدم تكراره
+  let candidateRef = `${month}${day}${String(nextNumber).padStart(4, "0")}`;
+
+  while (true) {
+    const checkStmt = db.prepare(`SELECT 1 FROM Sale WHERE reference = ? LIMIT 1`);
+    checkStmt.bind([candidateRef]);
+    const exists = checkStmt.step();
+    checkStmt.free();
+
+    if (!exists) break;
+
+    nextNumber++;
+    candidateRef = `${month}${day}${String(nextNumber).padStart(4, "0")}`;
+  }
+
+  return { dailyOrderNumber: nextNumber, reference: candidateRef };
+};
+
+export const getNextInvoiceNumber = async (req: Request, res: Response) => {
+  const clientTz =
+    (req.headers["x-timezone"] as string) ||
+    (req.query?.timeZone as string) ||
+    undefined;
+
+  const { dailyOrderNumber, reference } = await getNextDailyOrderNumber(clientTz);
+
+  return SuccessResponse(res, {
+    dailyOrderNumber,
+    reference,
+    formattedInvoiceNumber: `#${dailyOrderNumber}`,
   });
 };

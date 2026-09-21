@@ -9,6 +9,7 @@ import {
   payDue,
   getAllSales,
   applyCoupon,
+  getNextInvoiceNumber,
 } from "../controller/saleController";
 import { catchAsync } from "../utils/catchAsync";
 import { authorizePermissions } from "../middlewares/haspremission";
@@ -55,6 +56,8 @@ router.get(
   authorizePermissions("POS", "View"),
   catchAsync(getSalePendingById)
 );
+router.get('/sales/next-invoice-number', authorizePermissions("POS", "View"), catchAsync(getNextInvoiceNumber));
+
 router.get(
   "/sales/:id",
   authorizePermissions("POS", "View"),

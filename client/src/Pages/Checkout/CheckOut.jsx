@@ -609,7 +609,7 @@ const CheckOut = ({
             null,
             requiredTotal,
             response.success,
-            response
+            { ...response, nextInvoiceNumber}
           );
 
           if (shouldPrintReceipt) {

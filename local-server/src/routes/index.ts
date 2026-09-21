@@ -24,7 +24,8 @@ route.use(authenticated, authorizeRoles("admin", "superadmin"));
 route.use(enforceWarehouseScope);
 route.use("/pos-home", PosHomeRouter)
 route.use("/online-order",OnlineOrdersRouter)
-route.use("/pos", SaleRouter)   
+route.use("/pos", SaleRouter)
+route.use("/admin/pos",SaleRouter)   
 route.use("/expense", ExpensesRouter)
 route.use("/discount", DiscountRouter)
 route.use("/return-sale", ReturnRouter)

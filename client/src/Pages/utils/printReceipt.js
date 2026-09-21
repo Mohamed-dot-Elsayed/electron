@@ -1,4 +1,3 @@
-import qz from "qz-tray";
 import { toast } from "react-toastify";
 
 // ===================================================================
@@ -15,35 +14,35 @@ const PRINTER_CONFIG = {
 };
 
 // ===================================================================
-// 4. تصميم إيصال الكاشير (مُعدَّل لإضافة الـ Variations)
+// 2. تصميم إيصال الكاشير
 // ===================================================================
-
 const formatCashierReceipt = (receiptData) => {
   const isArabic = localStorage.getItem("language") === "ar";
-  
+
   // دالة مساعدة لتنسيق وعرض الـ Variations (الحجم واللون)
   const formatVariationsHTML = (variationsArray) => {
     if (!Array.isArray(variationsArray) || variationsArray.length === 0) {
       return "";
     }
-    
+
     // سحب أسماء الخيارات وضمها في سطر واحد
     const variationsText = variationsArray
-      .map(v => v.name)
+      .map((v) => v.name)
       .filter(Boolean)
       .join(", ");
-      
+
     if (!variationsText) return "";
 
-    return `<div class="addon-row" style="font-weight:normal;"> ${variationsText}</div>`;
+    return `<div class="addon-row" style="font-weight:normal;">${variationsText}</div>`;
   };
 
+  const showCustomerInfo =
+    receiptData.customer &&
+    ((receiptData.customer.name &&
+      receiptData.customer.name.trim() !== "" &&
+      receiptData.customer.name !== "عميل نقدي") ||
+      (receiptData.customer.phone && receiptData.customer.phone.trim() !== ""));
 
-const showCustomerInfo = receiptData.customer && 
-  (
-    (receiptData.customer.name && receiptData.customer.name.trim() !== "" && receiptData.customer.name !== "عميل نقدي") ||
-    (receiptData.customer.phone && receiptData.customer.phone.trim() !== "")
-  );
   return `
   <!DOCTYPE html>
   <html>
@@ -182,38 +181,37 @@ const showCustomerInfo = receiptData.customer &&
             white-space: nowrap;
         }
 
-.cust-info {
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.5;
-  padding: 6px 8px;
-  margin-bottom: 6px;
-}
+        .cust-info {
+          font-size: 11px;
+          font-weight: 500;
+          line-height: 1.5;
+          padding: 6px 8px;
+          margin-bottom: 6px;
+        }
 
-.cust-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 6px;
-}
+        .cust-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 6px;
+        }
 
-.cust-row:not(:last-child) {
-  margin-bottom: 2px;
-}
+        .cust-row:not(:last-child) {
+          margin-bottom: 2px;
+        }
 
-.cust-label {
-  opacity: 0.7;
-  white-space: nowrap;
-}
+        .cust-label {
+          opacity: 0.7;
+          white-space: nowrap;
+        }
 
-.cust-value {
-  font-weight: 600;
-}
+        .cust-value {
+          font-weight: 600;
+        }
 
-.cust-value.phone {
-  text-align: ${isArabic ? "right" : "left"};
-}
-
+        .cust-value.phone {
+          text-align: ${isArabic ? "right" : "left"};
+        }
       </style>
     </head>
     <body>
@@ -223,14 +221,17 @@ const showCustomerInfo = receiptData.customer &&
           <h1>${receiptData.restaurantName}</h1>
           ${receiptData.restaurantAddress ? `<p>${receiptData.restaurantAddress}</p>` : ""}
           ${receiptData.restaurantPhone ? `<div class="phone">${receiptData.restaurantPhone}</div>` : ""}
-          ${receiptData.referenceNumber ? `
+          ${
+            receiptData.referenceNumber
+              ? `
             <div class="ref-number">
               ${isArabic ? "الرقم المرجعي (Reference):" : "Reference No:"} ${receiptData.referenceNumber}
             </div>
-          ` : ""}
+          `
+              : ""
+          }
         </div>
 
-        
         <table class="meta-grid">
             <tr>
                 <td style="width: 50%; border-${isArabic ? "left" : "right"}: 1px dashed #000; padding: 4px 2px;">
@@ -245,73 +246,80 @@ const showCustomerInfo = receiptData.customer &&
             </tr>
         </table>
 
-${showCustomerInfo ? `
-  <div class="section-header">
-    ${isArabic ? "بيانات العميل" : "CUSTOMER INFO"}
-  </div>
+        ${
+          showCustomerInfo
+            ? `
+          <div class="section-header">
+            ${isArabic ? "بيانات العميل" : "CUSTOMER INFO"}
+          </div>
 
-  <div class="cust-info">
-    <div class="cust-row">
-      <span class="cust-label">
-        ${isArabic ? "الاسم:" : "Name:"}
-      </span>
-      <span class="cust-value">
-        ${receiptData.customer.name}
-      </span>
-    </div>
+          <div class="cust-info">
+            <div class="cust-row">
+              <span class="cust-label">
+                ${isArabic ? "الاسم:" : "Name:"}
+              </span>
+              <span class="cust-value">
+                ${receiptData.customer.name}
+              </span>
+            </div>
 
-    ${receiptData.customer.phone ? `
-      <div class="cust-row">
-        <span class="cust-label">
-          ${isArabic ? "الهاتف:" : "Phone:"}
-        </span>
-        <span
-          class="cust-value phone"
-          style="direction:ltr;"
-        >
-          ${receiptData.customer.phone}
-        </span>
-      </div>
-    ` : ""}
-  </div>
-` : ""}
+            ${
+              receiptData.customer.phone
+                ? `
+              <div class="cust-row">
+                <span class="cust-label">
+                  ${isArabic ? "الهاتف:" : "Phone:"}
+                </span>
+                <span
+                  class="cust-value phone"
+                  style="direction:ltr;"
+                >
+                  ${receiptData.customer.phone}
+                </span>
+              </div>
+            `
+                : ""
+            }
+          </div>
+        `
+            : ""
+        }
 
         <table class="items-table">
             <thead>
                 <tr>
-                    <th style="width: 42%; text-align: ${isArabic ? "right" : "left"};">${
-isArabic ? "الصنف" : "Item"}</th>
+                    <th style="width: 42%; text-align: ${isArabic ? "right" : "left"};">${isArabic ? "الصنف" : "Item"}</th>
                     <th style="width: 22%; text-align: center;">${isArabic ? "سعر" : "Price"}</th>
                     <th style="width: 12%; text-align: center;">${isArabic ? "ع" : "Qty"}</th>
-                    <th style="width: 24%; text-align: ${isArabic ? "left" : "right"};">${
-isArabic ? "إجمالي" : "Total"}</th>
+                    <th style="width: 24%; text-align: ${isArabic ? "left" : "right"};">${isArabic ? "إجمالي" : "Total"}</th>
                 </tr>
             </thead>
             <tbody>
-            ${receiptData.items.map((item) => {
-                // اسم المنتج باللغة الإنجليزية دائمًا حتى لو واجهة المستخدم باللغة العربية
-                const productName = item.name || item.nameAr;
-                const unitPrice = (item.total / item.qty).toFixed(2); // سعر القطعة = الإجمالي ÷ الكمية
-                
-                // تنسيق الـ Variations
+            ${receiptData.items
+              .map((item) => {
+                const productName = item.name || item.nameAr || "منتج";
+                const qty = Number(item.qty || 1);
+                const itemTotal = Number(item.total || 0);
+                const unitPrice = (qty > 0 ? itemTotal / qty : Number(item.price || 0)).toFixed(2);
                 const variationsHTML = formatVariationsHTML(item.variations);
 
                 return `
                   <tr>
-                    <td class="item-name" style="text-align: ${isArabic ? "right" : "left"};">${
-                      productName}
-                      ${variationsHTML}
-                      ${item.notes ? `<div class="notes-row">(${item.notes})</div>` : ""}
+                    <td class="item-name" style="text-align: ${isArabic ? "right" : "left"};">
+                      ${productName}
+                      ${variationsHTML}${item.notes ? `<div class="notes-row">(${item.notes})</div>` : ""}
                     </td>
                     <td class="item-price">
                       ${unitPrice}
                     </td>
-                    <td class="item-qty">${item.qty}</td>
-                    <td class="item-total" style="text-align: ${isArabic ? "left" : "right"};">${
-item.total.toFixed(2)}</td>
+                    <td class="item-qty">${qty}</td>
+                    <td class="item-total" style="text-align: ${isArabic ? "left" : "right"};">
+                      ${itemTotal.toFixed(2)}
+                    </td>
                   </tr>
                 `;
-            }).join("")}
+              })
+              .join("")}
             </tbody>
         </table>
 
@@ -319,30 +327,42 @@ item.total.toFixed(2)}</td>
 
             <div class="totals-row">
                 <span>${isArabic ? "المجموع الفرعي" : "Subtotal"}</span>
-                <span>${Number(receiptData.subtotal).toFixed(2)}</span>
+                <span>${Number(receiptData.subtotal || 0).toFixed(2)}</span>
             </div>
 
-            ${Number(receiptData.discount) > 0 ? `
+            ${
+              Number(receiptData.discount) > 0
+                ? `
             <div class="totals-row" style="color: #000;">
                 <span>${isArabic ? "الخصم" : "Discount"}</span>
-                <span>-${receiptData.discount}</span>
-            </div>` : ""}
+                <span>-${Number(receiptData.discount).toFixed(2)}</span>
+            </div>`
+                : ""
+            }
 
-            ${Number(receiptData.tax) > 0 ? `
+            ${
+              Number(receiptData.tax) > 0
+                ? `
             <div class="totals-row">
                 <span>${isArabic ? "الضريبة" : "Tax"}</span>
-                <span>${receiptData.tax}</span>
-            </div>` : ""}
+                <span>${Number(receiptData.tax).toFixed(2)}</span>
+            </div>`
+                : ""
+            }
 
-            ${Number(receiptData.deliveryFees) > 0 ? `
+            ${
+              Number(receiptData.deliveryFees) > 0
+                ? `
             <div class="totals-row">
                 <span>${isArabic ? "الشحن" : "Shipping"}</span>
-                <span>${receiptData.deliveryFees}</span>
-            </div>` : ""}
+                <span>${Number(receiptData.deliveryFees).toFixed(2)}</span>
+            </div>`
+                : ""
+            }
 
             <div class="grand-total">
                 <span class="grand-total-label">${isArabic ? "الإجمالي الكلي" : "GRAND TOTAL"}</span>
-                <span class="grand-total-value">${Number(receiptData.total).toFixed(2)}</span>
+                <span class="grand-total-value">${Number(receiptData.total || 0).toFixed(2)}</span>
             </div>
 
         </div>
@@ -368,16 +388,15 @@ item.total.toFixed(2)}</td>
 };
 
 // ===================================================================
-// 7. اختيار التصميم
+// 3. اختيار التصميم
 // ===================================================================
 const getReceiptHTML = (receiptData, printerConfig) => {
   return formatCashierReceipt(receiptData);
 };
 
 // ===================================================================
-// 8. تهيئة البيانات (مُعدَّلة لسحب الـ Variations)
+// 4. تهيئة البيانات (prepareReceiptData)
 // ===================================================================
-
 export const prepareReceiptData = (
   orderItems,
   amountToPay,
@@ -388,14 +407,15 @@ export const prepareReceiptData = (
   orderType,
   requiredTotal,
   responseSuccess,
-  response,
+  response
 ) => {
-  // 1. استخراج البيانات من الهيكل
-  const rootData = response?.data || response || {};
-  const saleData = rootData.sale || {};
-  const storeData = rootData.store || {};
-  const itemsList = rootData.items || [];
-  const customerData = saleData.customer_id || rootData.customer || {};
+  // 1. استخراج البيانات مع الحفاظ على الكائن الممرر الرئيسي (rawResponse)
+  const rawResponse = response || {};
+  const rootData = rawResponse?.data || rawResponse;
+  const saleData = rootData.sale || rawResponse.sale || {};
+  const storeData = rootData.store || rawResponse.store || {};
+  const itemsList = rootData.items || rawResponse.items || [];
+  const customerData = saleData.customer_id || rootData.customer || rawResponse.customer || {};
 
   // 2. معالجة التواريخ
   const dateObj = saleData.date ? new Date(saleData.date) : new Date();
@@ -411,33 +431,93 @@ export const prepareReceiptData = (
   });
 
   // 3. تحديد نوع الطلب
-  let detectedType = "sale";
+  let detectedType = orderType || "sale";
   if (Number(saleData.shipping) > 0) {
     detectedType = "delivery";
   }
 
-  // 4. استخراج قيم الضريبة والخصم من الهيكل الجديد
-  const taxValue = saleData.order_tax?.amount || saleData.tax_amount || 0;
-  const discountValue = saleData.order_discount?.amount || saleData.discount || 0;
+  // 4. استخراج قيم الضريبة والخصم
+  const taxValue = saleData.order_tax?.amount ?? saleData.tax_amount ?? order_tax ?? 0;
+  const discountValue =
+    saleData.order_discount?.amount ??
+    saleData.discount ??
+    totalDiscount ??
+    appliedDiscount ??
+    0;
 
-  // 5. حساب المجموع الفرعي (Subtotal) يدوياً من المنتجات
-  const calculatedSubtotal = itemsList.reduce((acc, item) => {
-    return acc + (Number(item.subtotal) || (Number(item.price) * Number(item.quantity)) || 0);
-  }, 0);
+  // 5. تجهيز قائمة المنتجات
+  const formattedItems =
+    itemsList && itemsList.length > 0
+      ? itemsList.map((item, idx) => {
+          const matchedOrderItem =
+            orderItems?.find(
+              (oi) =>
+                (oi.product_price_id &&
+                  String(oi.product_price_id) ===
+                    String(item.product_price_id?._id || item.product_price_id)) ||
+                String(oi._id || oi.product_id) ===
+                  String(item.product_id?._id || item.product_id)
+            ) || orderItems?.[idx];
 
-  // 6. استخراج رقم الفاتورة اليومي بدقة والرقم المرجعي
-  const dailyNum = (saleData.daily_order_number !== undefined && saleData.daily_order_number !== null)
-    ? saleData.daily_order_number
-    : (saleData.dailyOrderNumber !== undefined && saleData.dailyOrderNumber !== null)
-      ? saleData.dailyOrderNumber
-      : (saleData.daily_count !== undefined && saleData.daily_count !== null)
-        ? saleData.daily_count
-        : (saleData.reference || saleData._id || "1");
+          const varName =
+            matchedOrderItem?.variant_name ||
+            (() => {
+              if (!item.product_price_id?.code) return "";
+              const parts = item.product_price_id.code.split("_");
+              return parts.length > 1 ? parts.slice(1).join(" ") : "";
+            })();
+
+          const qty = Number(item.quantity || 1);
+          const price = Number(item.price || matchedOrderItem?.price || 0);
+          const total = Number(item.subtotal || price * qty);
+
+          return {
+            qty: qty,
+            name: item.product_id?.name || matchedOrderItem?.name || "منتج غير معروف",
+            nameAr: item.product_id?.ar_name || matchedOrderItem?.ar_name || "",
+            price: price,
+            total: total,
+            notes: matchedOrderItem?.notes || "",
+            addons: [],
+            extras: [],
+            variations: varName ? [{ name: varName }] : [],
+          };
+        })
+      : (orderItems || []).map((item) => {
+          const qty = Number(item.count || item.quantity || 1);
+          const price = Number(item.price || 0);
+          const total = Number(item.totalPrice || price * qty);
+
+          return {
+            qty: qty,
+            name: item.name || "منتج",
+            nameAr: item.ar_name || "",
+            price: price,
+            total: total,
+            notes: item.notes || "",
+            addons: [],
+            extras: [],
+            variations: item.variant_name ? [{ name: item.variant_name }] : [],
+          };
+        });
+
+  // 6. حساب المجموع الفرعي من المنتجات
+  const calculatedSubtotal = formattedItems.reduce((acc, item) => acc + Number(item.total || 0), 0);
+
+  // 7. استخراج رقم الفاتورة اليومي (يفحص nextInvoiceNumber الممرر من الفرونت إند أولاً)
+  const dailyNum =
+    saleData.daily_order_number ??
+    saleData.dailyOrderNumber ??
+    saleData.daily_count ??
+    rawResponse.nextInvoiceNumber ??
+    rootData.nextInvoiceNumber ??
+    saleData._id ??
+    "1";
 
   const refNum = saleData.reference || saleData.reference_number || saleData.referenceNo || "";
 
   return {
-    // البيانات الأساسية (رقم الفاتورة اليومي المتسلسل)
+    // البيانات الأساسية
     invoiceNumber: dailyNum,
     referenceNumber: refNum,
     dateFormatted: dateFormatted,
@@ -453,57 +533,22 @@ export const prepareReceiptData = (
     // بيانات العميل
     customer: {
       name: customerData.name || "عميل نقدي",
-      phone: customerData.phone_number || "",
-      email: customerData.email || ""
+      phone: customerData.phone_number || customerData.phone || "",
+      email: customerData.email || "",
     },
     address: saleData.address || null,
 
     // المنتجات
-    items: (itemsList && itemsList.length > 0)
-      ? itemsList.map((item, idx) => {
-          const matchedOrderItem = orderItems?.find((oi) =>
-            (oi.product_price_id && String(oi.product_price_id) === String(item.product_price_id?._id || item.product_price_id)) ||
-            (String(oi._id || oi.product_id) === String(item.product_id?._id || item.product_id))
-          ) || orderItems?.[idx];
-
-          const varName = matchedOrderItem?.variant_name || (() => {
-            if (!item.product_price_id?.code) return "";
-            const parts = item.product_price_id.code.split('_');
-            return parts.length > 1 ? parts.slice(1).join(' ') : "";
-          })();
-
-          return {
-            qty: item.quantity,
-            name: item.product_id?.name || matchedOrderItem?.name || "منتج غير معروف",
-            nameAr: item.product_id?.ar_name || matchedOrderItem?.ar_name || "",
-            price: Number(item.price || matchedOrderItem?.price || 0),
-            total: Number(item.subtotal || (Number(item.price || matchedOrderItem?.price || 0) * Number(item.quantity || 1))),
-            notes: matchedOrderItem?.notes || "",
-            addons: [],
-            extras: [],
-            variations: varName ? [{ name: varName }] : [],
-          };
-        })
-      : (orderItems || []).map((item) => ({
-          qty: item.count || item.quantity || 1,
-          name: item.name || "منتج",
-          nameAr: item.ar_name || "",
-          price: Number(item.price || 0),
-          total: Number(item.totalPrice || (item.price * (item.count || 1))),
-          notes: item.notes || "",
-          addons: [],
-          extras: [],
-          variations: item.variant_name ? [{ name: item.variant_name }] : [],
-        })),
+    items: formattedItems,
 
     // الحسابات المالية
     subtotal: calculatedSubtotal.toFixed(2),
     discount: Number(discountValue).toFixed(2),
     tax: Number(taxValue).toFixed(2),
     deliveryFees: Number(saleData.shipping || 0).toFixed(2),
-    
+
     // الإجمالي النهائي
-    total: Number(saleData.grand_total || saleData.total || 0).toFixed(2),
+    total: Number(saleData.grand_total || saleData.total || requiredTotal || amountToPay || 0).toFixed(2),
 
     // حقول إضافية
     serviceFees: 0,
@@ -513,7 +558,7 @@ export const prepareReceiptData = (
 };
 
 // ===================================================================
-// 9. دالة الطباعة
+// 5. دالة الطباعة (printReceiptSilently)
 // ===================================================================
 export const printReceiptSilently = async (
   receiptData,
@@ -530,7 +575,7 @@ export const printReceiptSilently = async (
       const printWindow = window.open("", "_blank", "width=400,height=600");
       if (!printWindow) {
         toast.error("برجاء تفعيل النوافذ المنبثقة (Pop-ups) للطباعة");
-        callback();
+        callback?.();
         return;
       }
       printWindow.document.write(`
@@ -556,7 +601,7 @@ export const printReceiptSilently = async (
         </html>
       `);
       printWindow.document.close();
-      callback();
+      callback?.();
     };
 
     // 1. Electron Native Printing
@@ -577,7 +622,10 @@ export const printReceiptSilently = async (
           const defaultPrinter =
             printers.find((p) => p.isDefault)?.name || printers[0]?.name;
 
-          const result = await window.electronAPI.printHtml(cashierHtml, defaultPrinter);
+          const result = await window.electronAPI.printHtml(
+            cashierHtml,
+            defaultPrinter
+          );
           if (result?.success) {
             toast.success("✅ تم الطباعة");
           } else if (result?.savedToPdf) {
@@ -589,26 +637,30 @@ export const printReceiptSilently = async (
         console.error("Electron print error:", err);
         toast.error("❌ فشل الطباعة عبر النظام");
       }
-      callback();
+      callback?.();
       return;
     }
 
     // 2. Standard Browser Print (Fallback if not in Electron)
     fallbackToBrowserPrint();
-
   } catch (err) {
     console.error(err);
     toast.error("❌ فشل الطباعة");
-    callback();
+    callback?.();
   }
 };
 
+// ===================================================================
+// 6. دوال إعدادات الطابعة
+// ===================================================================
 export const addPrinterConfig = (key, config) => {
   PRINTER_CONFIG[key] = config;
 };
+
 export const getActivePrinters = () => {
   return Object.keys(PRINTER_CONFIG);
 };
+
 export const updatePrinterConfig = (key, updates) => {
   if (PRINTER_CONFIG[key])
     PRINTER_CONFIG[key] = { ...PRINTER_CONFIG[key], ...updates };
