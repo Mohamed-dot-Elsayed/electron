@@ -468,16 +468,49 @@ export const printReceiptSilently = async (
   callback
 ) => {
   try {
+    const cashierHtml = getReceiptHTML(receiptData, {
+      design: "full",
+      type: "cashier",
+    });
+
+    const fallbackToBrowserPrint = () => {
+      const printWindow = window.open("", "_blank", "width=400,height=600");
+      if (!printWindow) {
+        toast.error("برجاء تفعيل النوافذ المنبثقة (Pop-ups) للطباعة");
+        callback();
+        return;
+      }
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Receipt</title>
+            <style>
+              @media print {
+                @page { margin: 0; }
+                body { margin: 0; }
+              }
+            </style>
+          </head>
+          <body>
+            ${cashierHtml}
+            <script>
+              setTimeout(() => {
+                window.print();
+                window.close();
+              }, 500);
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      callback();
+    };
+
     // 1. Electron Native Printing
     if (window.electronAPI) {
       try {
         const printers = await window.electronAPI.getPrinters();
         const defaultPrinter = printers.find((p) => p.isDefault)?.name || printers[0]?.name || "";
-
-        const cashierHtml = getReceiptHTML(receiptData, {
-          design: "full",
-          type: "cashier",
-        });
 
         await window.electronAPI.printHtml(cashierHtml, defaultPrinter);
         toast.success("✅ تم الطباعة");
@@ -491,8 +524,7 @@ export const printReceiptSilently = async (
 
     // 2. Fallback to QZ Tray (Web Browser)
     if (!qz.websocket.isActive()) {
-      toast.error("❌ QZ Tray is not connected.");
-      callback();
+      fallbackToBrowserPrint();
       return;
     }
 
@@ -503,11 +535,6 @@ export const printReceiptSilently = async (
       const cashierPrinterName = await qz.printers.getDefault();
       if (!cashierPrinterName) throw new Error("No default printer found.");
 
-      const cashierHtml = getReceiptHTML(receiptData, {
-        design: "full",
-        type: "cashier",
-      });
-      
       const cashierConfig = qz.configs.create(cashierPrinterName);
 
       printJobs.push(
@@ -517,7 +544,8 @@ export const printReceiptSilently = async (
       );
     } catch (err) {
       console.error(err);
-      toast.error("خطأ في الطابعة الافتراضية");
+      fallbackToBrowserPrint();
+      return;
     }
 
     await Promise.all(printJobs);
