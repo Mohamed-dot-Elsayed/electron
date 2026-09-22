@@ -348,7 +348,7 @@ if (gotSingleInstanceLock) {
     }
     console.log(">>> About to call createWindow()");
     createWindow();
-    setupAutoUpdates();
+    // setupAutoUpdates();
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
