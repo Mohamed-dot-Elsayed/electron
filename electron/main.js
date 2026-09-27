@@ -54,6 +54,17 @@ const { startServer } = require("../local-server/dist/src/index");
 
 const PORT = 3001;
 const VITE_PORT = 5173;
+
+// ============================================
+// RECEIPT CONFIG
+// ============================================
+// 512px = 72mm (مظبوط على الطابعة XP-80C)
+const RECEIPT_WIDTH_PX = 512;
+const RECEIPT_WIDTH_MM = 72;
+
+// 1 CSS px = 25400 micron / 96 = 264.583 micron
+const MICRON_PER_PX = 264.583;
+
 let mainWindow;
 let serverInstance;
 let viteProcess;
@@ -116,14 +127,13 @@ function startVite() {
         resolved = true;
         resolve();
       }
-    }, 15000); // give it more headroom
+    }, 15000);
 
     viteProcess.stdout.on("data", (data) => {
       const output = data.toString();
       console.log(`[vite] ${output}`);
 
       buffer += output;
-      // strip ANSI codes before matching
       const clean = buffer.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
       const match = clean.match(/localhost:(\d+)\//);
 
@@ -167,7 +177,7 @@ function createWindow() {
     height: 800,
     show: false,
     autoHideMenuBar: true,
-    frame: false, // Remove Windows title bar
+    frame: false,
     titleBarStyle: "hidden",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -182,7 +192,6 @@ function createWindow() {
     if (mainWindow) mainWindow.show();
   });
 
-  // Safety fallback in case ready-to-show doesn't fire
   setTimeout(() => {
     if (mainWindow && !mainWindow.isVisible()) {
       mainWindow.show();
@@ -190,14 +199,12 @@ function createWindow() {
   }, 2500);
 
   if (app.isPackaged) {
-    // In packaged app, load from the built files using loadFile directly on login
     const indexPath = path.join(__dirname, "../client/dist/index.html");
     console.log(">>> Loading File:", indexPath);
     mainWindow.loadFile(indexPath, { hash: "/login" }).catch((err) => {
       console.log(">>> loadFile rejected:", err);
     });
   } else {
-    // In development, use Vite dev server directly on login
     const loadUrl = `http://localhost:${actualVitePort}/#/login`;
     console.log(">>> Loading URL:", loadUrl);
     mainWindow.loadURL(loadUrl).catch((err) => {
@@ -226,7 +233,7 @@ function createWindow() {
     "did-fail-load",
     (_e, errorCode, errorDescription) => {
       console.log(">>> did-fail-load:", errorCode, errorDescription);
-    }
+    },
   );
 }
 
@@ -247,7 +254,7 @@ function setupAutoUpdates() {
   log(
     `App starting. Current version: ${app.getVersion()}. isPackaged: ${
       app.isPackaged
-    }`
+    }`,
   );
 
   if (!app.isPackaged) {
@@ -261,7 +268,7 @@ function setupAutoUpdates() {
     log(`Update available: v${info.version}. Downloading...`);
     notify(
       "Update found",
-      `Version ${info.version} is downloading in the background.`
+      `Version ${info.version} is downloading in the background.`,
     );
   });
 
@@ -269,7 +276,7 @@ function setupAutoUpdates() {
     log(
       `No update available. Latest published version is v${
         info.version
-      }, this is v${app.getVersion()}.`
+      }, this is v${app.getVersion()}.`,
     );
   });
 
@@ -316,7 +323,7 @@ function setupAutoUpdates() {
     log(`ERROR: ${err && err.stack ? err.stack : err}`);
     dialog.showErrorBox(
       "Update check failed",
-      String(err && err.message ? err.message : err)
+      String(err && err.message ? err.message : err),
     );
   });
 
@@ -355,93 +362,205 @@ if (gotSingleInstanceLock) {
   });
 }
 
+// ============================================
+// WINDOW CONTROLS
+// ============================================
 ipcMain.on("window-minimize", () => {
-    BrowserWindow.getFocusedWindow()?.minimize();
+  BrowserWindow.getFocusedWindow()?.minimize();
 });
 
 ipcMain.on("window-maximize", () => {
-    const win = BrowserWindow.getFocusedWindow();
-
-    if (!win) return;
-
-    if (win.isMaximized())
-        win.unmaximize();
-    else
-        win.maximize();
+  const win = BrowserWindow.getFocusedWindow();
+  if (!win) return;
+  if (win.isMaximized()) win.unmaximize();
+  else win.maximize();
 });
 
 ipcMain.on("window-close", () => {
-    BrowserWindow.getFocusedWindow()?.close();
+  BrowserWindow.getFocusedWindow()?.close();
 });
+
+// ============================================
+// PRINTING
+// ============================================
+ipcMain.handle("get-receipt-width-px", () => RECEIPT_WIDTH_PX);
 
 ipcMain.handle("get-printers", async () => {
   const win = BrowserWindow.getFocusedWindow() || mainWindow;
   if (!win) return [];
-  return await win.webContents.getPrintersAsync();
+  try {
+    return await win.webContents.getPrintersAsync();
+  } catch (err) {
+    console.error("getPrinters error:", err);
+    return [];
+  }
 });
 
 ipcMain.handle("print-html", async (event, { html, printerName }) => {
-  let workerWindow = new BrowserWindow({
-    show: false,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  });
+  let workerWindow = null;
 
-  workerWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+  try {
+    workerWindow = new BrowserWindow({
+      show: false,
+      width: RECEIPT_WIDTH_PX,
+      height: 1200,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        zoomFactor: 1,
+      },
+    });
 
-  return new Promise((resolve, reject) => {
-    workerWindow.webContents.on("did-finish-load", async () => {
-      const fallbackToPdf = async () => {
-        try {
-          const pdfData = await workerWindow.webContents.printToPDF({
-            printBackground: true,
-          });
-          const { filePath } = await dialog.showSaveDialog({
-            title: "Save Receipt",
-            defaultPath: "receipt.pdf",
-            filters: [{ name: "PDF", extensions: ["pdf"] }],
-          });
-          if (filePath) {
-            fs.writeFileSync(filePath, pdfData);
-            resolve({ success: true, savedToPdf: true });
-          } else {
-            resolve({ success: false, reason: "canceled" });
-          }
-        } catch (err) {
-          reject(new Error(`PDF generation failed: ${err.message}`));
-        } finally {
-          workerWindow.close();
-        }
-      };
-
-      if (!printerName) {
-        await fallbackToPdf();
-      } else {
-        workerWindow.webContents.print(
-          {
-            silent: true,
-            printBackground: true,
-            printerName: printerName,
-          },
-          (success, errorType) => {
-            if (success) {
-              workerWindow.close();
-              resolve({ success: true });
-            } else {
-              fallbackToPdf();
+    // نلفّ الـ HTML بمستند كامل، ونثبّت العرض على RECEIPT_WIDTH_PX
+    const wrappedHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=${RECEIPT_WIDTH_PX}, initial-scale=1">
+          <style>
+            @page { margin: 0; size: ${RECEIPT_WIDTH_MM}mm auto; }
+            *, *::before, *::after { box-sizing: border-box; }
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              background: #fff;
+              width: ${RECEIPT_WIDTH_PX}px !important;
+              max-width: ${RECEIPT_WIDTH_PX}px !important;
+              overflow-x: hidden !important;
             }
-          }
-        );
-      }
-    });
+            body > * {
+              max-width: 100% !important;
+            }
+            img, table {
+              max-width: 100% !important;
+            }
+          </style>
+        </head>
+        <body>${html}</body>
+      </html>
+    `;
 
-    workerWindow.webContents.on("did-fail-load", (e, errorCode, errorDescription) => {
-      workerWindow.close();
-      reject(new Error(`Failed to load HTML into print worker: ${errorDescription} (${errorCode})`));
+    await workerWindow.loadURL(
+      `data:text/html;charset=utf-8,${encodeURIComponent(wrappedHtml)}`,
+    );
+
+    // نتأكد إن الـ zoom = 1
+    workerWindow.webContents.setZoomFactor(1);
+
+    // نستنى شوية للتأكد إن الخطوط والصور اتحمّلت
+    await new Promise((r) => setTimeout(r, 400));
+
+    // ============================================
+    // PDF FALLBACK — الصفحة على قد المحتوى بالظبط
+    // ============================================
+    const fallbackToPdf = async () => {
+      try {
+        // نقيس أبعاد المحتوى الحقيقي
+        const dims = await workerWindow.webContents.executeJavaScript(`
+      (() => {
+        const el =
+          document.querySelector('.container') ||
+          document.body.firstElementChild ||
+          document.body;
+        const rect = el.getBoundingClientRect();
+        return {
+          width: Math.ceil(rect.width),
+          height: Math.ceil(rect.height),
+        };
+      })()
+    `);
+
+        console.log(">>> Content actual size (px):", dims);
+
+        // ✅ نحوّل البكسل لمليمتر، وندّي المقاس للـ CSS
+        // 1px = 0.264583mm
+        const PX_TO_MM = 0.264583;
+
+        const contentWidthMm = (
+          Math.min(dims.width, RECEIPT_WIDTH_PX) * PX_TO_MM
+        ).toFixed(2);
+        const contentHeightMm = (dims.height * PX_TO_MM).toFixed(2);
+
+        console.log(">>> Page size (mm):", {
+          widthMm: contentWidthMm,
+          heightMm: contentHeightMm,
+        });
+
+        // ✅ نحط المقاس في CSS، ونخلي printToPDF يستخدمه
+        await workerWindow.webContents.insertCSS(`
+      @page {
+        size: ${contentWidthMm}mm ${contentHeightMm}mm !important;
+        margin: 0 !important;
+      }
+    `);
+
+        const pdfData = await workerWindow.webContents.printToPDF({
+          printBackground: true,
+          preferCSSPageSize: true, // ✅ مهم جدًا: نستخدم مقاس الـ CSS
+          margins: { top: 0, bottom: 0, left: 0, right: 0 },
+        });
+
+        const { filePath } = await dialog.showSaveDialog({
+          title: "Save Receipt",
+          defaultPath: "receipt.pdf",
+          filters: [{ name: "PDF", extensions: ["pdf"] }],
+        });
+
+        if (filePath) {
+          fs.writeFileSync(filePath, pdfData);
+          return { success: true, savedToPdf: true };
+        }
+        return { success: false, reason: "canceled" };
+      } catch (err) {
+        console.error("PDF generation error:", err);
+        return { success: false, error: `PDF failed: ${err.message}` };
+      }
+    };
+
+    // مفيش طابعة → احفظ PDF
+    if (!printerName) {
+      const res = await fallbackToPdf();
+      if (workerWindow && !workerWindow.isDestroyed()) workerWindow.close();
+      return res;
+    }
+
+    // اطبع على الطابعة
+    return await new Promise((resolve) => {
+      workerWindow.webContents.print(
+        {
+          silent: true,
+          printBackground: true,
+          deviceName: printerName,
+          margins: { marginType: "none" },
+          pageSize: {
+            width: Math.round(RECEIPT_WIDTH_MM * 1000),
+            height: 297000,
+          },
+        },
+        async (success, errorType) => {
+          if (success) {
+            if (workerWindow && !workerWindow.isDestroyed())
+              workerWindow.close();
+            resolve({ success: true });
+          } else {
+            console.warn("print failed:", errorType);
+            const res = await fallbackToPdf();
+            if (workerWindow && !workerWindow.isDestroyed())
+              workerWindow.close();
+            resolve({
+              ...res,
+              escposError: String(errorType || "print-failed"),
+            });
+          }
+        },
+      );
     });
-  });
+  } catch (err) {
+    console.error("print-html error:", err);
+    if (workerWindow && !workerWindow.isDestroyed()) workerWindow.close();
+    return { success: false, error: err.message };
+  }
 });
 
 app.on("before-quit", async (event) => {
