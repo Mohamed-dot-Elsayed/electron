@@ -14,7 +14,7 @@ const dotenv = require("dotenv");
 app.setName("SysteGo");
 
 // ============================================
-// SERVER ENV — must load BEFORE requiring local-server
+// SERVER ENV
 // ============================================
 const serverEnvPath = app.isPackaged
   ? path.join(process.resourcesPath, "server.env")
@@ -28,7 +28,7 @@ try {
 }
 
 // ============================================
-// CLIENT ENV — parsed only, exposed via IPC
+// CLIENT ENV
 // ============================================
 const clientEnvPath = app.isPackaged
   ? path.join(process.resourcesPath, "client.env")
@@ -58,7 +58,7 @@ const VITE_PORT = 5173;
 // ============================================
 // RECEIPT CONFIG
 // ============================================
-// 512px = 72mm (مظبوط على الطابعة XP-80C)
+// 512px = 72mm (الافتراضي للأوردر العادي)
 const RECEIPT_WIDTH_PX = 512;
 const RECEIPT_WIDTH_MM = 72;
 
@@ -103,7 +103,7 @@ function stopServer() {
 }
 
 // ============================================
-// VITE DEV SERVER — dev only, never in packaged builds
+// VITE DEV SERVER
 // ============================================
 function startVite() {
   if (app.isPackaged) {
@@ -396,38 +396,56 @@ ipcMain.handle("get-printers", async () => {
   }
 });
 
-ipcMain.handle("print-html", async (event, { html, printerName }) => {
-  let workerWindow = null;
+ipcMain.handle(
+  "print-html",
+  async (event, { html, printerName, pageHeight, pageWidth }) => {
+    let workerWindow = null;
 
-  try {
-    workerWindow = new BrowserWindow({
-      show: false,
-      width: RECEIPT_WIDTH_PX,
-      height: 1200,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        zoomFactor: 1,
-      },
-    });
+    try {
+      // ============================================
+      // ✅ الإعدادات الديناميكية
+      // ============================================
+      const finalWidthPx = pageWidth || RECEIPT_WIDTH_PX;
+      const finalWidthMm = pageWidth
+        ? Math.round((pageWidth / RECEIPT_WIDTH_PX) * RECEIPT_WIDTH_MM)
+        : RECEIPT_WIDTH_MM;
 
-    // نلفّ الـ HTML بمستند كامل، ونثبّت العرض على RECEIPT_WIDTH_PX
-    const wrappedHtml = `
+      console.log("=== PRINT-HTML CONFIG ===", {
+        pageWidth,
+        pageHeight,
+        finalWidthPx,
+        finalWidthMm,
+        isDefaultWidth: !pageWidth,
+        printerName,
+      });
+
+      workerWindow = new BrowserWindow({
+        show: false,
+        width: finalWidthPx,
+        height: 1200,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          zoomFactor: 1,
+        },
+      });
+
+      const wrappedHtml = `
       <!DOCTYPE html>
       <html>
         <head>
           <meta charset="UTF-8">
-          <meta name="viewport" content="width=${RECEIPT_WIDTH_PX}, initial-scale=1">
+          <meta name="viewport" content="width=${finalWidthPx}, initial-scale=1">
           <style>
-            @page { margin: 0; size: ${RECEIPT_WIDTH_MM}mm auto; }
+            @page { margin: 0; size: ${finalWidthMm}mm auto; }
             *, *::before, *::after { box-sizing: border-box; }
             html, body {
               margin: 0 !important;
               padding: 0 !important;
               background: #fff;
-              width: ${RECEIPT_WIDTH_PX}px !important;
-              max-width: ${RECEIPT_WIDTH_PX}px !important;
-              overflow-x: hidden !important;
+              width: ${finalWidthPx}px !important;
+              max-width: ${finalWidthPx}px !important;
+              overflow: visible !important;
             }
             body > * {
               max-width: 100% !important;
@@ -441,127 +459,158 @@ ipcMain.handle("print-html", async (event, { html, printerName }) => {
       </html>
     `;
 
-    await workerWindow.loadURL(
-      `data:text/html;charset=utf-8,${encodeURIComponent(wrappedHtml)}`,
-    );
-
-    // نتأكد إن الـ zoom = 1
-    workerWindow.webContents.setZoomFactor(1);
-
-    // نستنى شوية للتأكد إن الخطوط والصور اتحمّلت
-    await new Promise((r) => setTimeout(r, 400));
-
-    // ============================================
-    // PDF FALLBACK — الصفحة على قد المحتوى بالظبط
-    // ============================================
-    const fallbackToPdf = async () => {
-      try {
-        // نقيس أبعاد المحتوى الحقيقي
-        const dims = await workerWindow.webContents.executeJavaScript(`
-      (() => {
-        const el =
-          document.querySelector('.container') ||
-          document.body.firstElementChild ||
-          document.body;
-        const rect = el.getBoundingClientRect();
-        return {
-          width: Math.ceil(rect.width),
-          height: Math.ceil(rect.height),
-        };
-      })()
-    `);
-
-        console.log(">>> Content actual size (px):", dims);
-
-        // ✅ نحوّل البكسل لمليمتر، وندّي المقاس للـ CSS
-        // 1px = 0.264583mm
-        const PX_TO_MM = 0.264583;
-
-        const contentWidthMm = (
-          Math.min(dims.width, RECEIPT_WIDTH_PX) * PX_TO_MM
-        ).toFixed(2);
-        const contentHeightMm = (dims.height * PX_TO_MM).toFixed(2);
-
-        console.log(">>> Page size (mm):", {
-          widthMm: contentWidthMm,
-          heightMm: contentHeightMm,
-        });
-
-        // ✅ نحط المقاس في CSS، ونخلي printToPDF يستخدمه
-        await workerWindow.webContents.insertCSS(`
-      @page {
-        size: ${contentWidthMm}mm ${contentHeightMm}mm !important;
-        margin: 0 !important;
-      }
-    `);
-
-        const pdfData = await workerWindow.webContents.printToPDF({
-          printBackground: true,
-          preferCSSPageSize: true, // ✅ مهم جدًا: نستخدم مقاس الـ CSS
-          margins: { top: 0, bottom: 0, left: 0, right: 0 },
-        });
-
-        const { filePath } = await dialog.showSaveDialog({
-          title: "Save Receipt",
-          defaultPath: "receipt.pdf",
-          filters: [{ name: "PDF", extensions: ["pdf"] }],
-        });
-
-        if (filePath) {
-          fs.writeFileSync(filePath, pdfData);
-          return { success: true, savedToPdf: true };
-        }
-        return { success: false, reason: "canceled" };
-      } catch (err) {
-        console.error("PDF generation error:", err);
-        return { success: false, error: `PDF failed: ${err.message}` };
-      }
-    };
-
-    // مفيش طابعة → احفظ PDF
-    if (!printerName) {
-      const res = await fallbackToPdf();
-      if (workerWindow && !workerWindow.isDestroyed()) workerWindow.close();
-      return res;
-    }
-
-    // اطبع على الطابعة
-    return await new Promise((resolve) => {
-      workerWindow.webContents.print(
-        {
-          silent: true,
-          printBackground: true,
-          deviceName: printerName,
-          margins: { marginType: "none" },
-          pageSize: {
-            width: Math.round(RECEIPT_WIDTH_MM * 1000),
-            height: 297000,
-          },
-        },
-        async (success, errorType) => {
-          if (success) {
-            if (workerWindow && !workerWindow.isDestroyed())
-              workerWindow.close();
-            resolve({ success: true });
-          } else {
-            console.warn("print failed:", errorType);
-            const res = await fallbackToPdf();
-            if (workerWindow && !workerWindow.isDestroyed())
-              workerWindow.close();
-            resolve({
-              ...res,
-              escposError: String(errorType || "print-failed"),
-            });
-          }
-        },
+      await workerWindow.loadURL(
+        `data:text/html;charset=utf-8,${encodeURIComponent(wrappedHtml)}`,
       );
-    });
-  } catch (err) {
-    console.error("print-html error:", err);
-    if (workerWindow && !workerWindow.isDestroyed()) workerWindow.close();
-    return { success: false, error: err.message };
-  }
-});
+
+      workerWindow.webContents.setZoomFactor(1);
+      await new Promise((r) => setTimeout(r, 500));
+
+      // ============================================
+      // PDF FALLBACK
+      // ============================================
+      const fallbackToPdf = async () => {
+        try {
+          const dims = await workerWindow.webContents.executeJavaScript(`
+        (() => {
+          const el =
+            document.querySelector('.container') ||
+            document.body.firstElementChild ||
+            document.body;
+          const rect = el.getBoundingClientRect();
+          return {
+            width: Math.ceil(rect.width),
+            height: Math.ceil(rect.height),
+          };
+        })()
+      `);
+
+          console.log(">>> Content actual size (px):", dims);
+
+          const PX_TO_MM = 0.264583;
+
+          const contentWidthMm = (
+            Math.min(dims.width, finalWidthPx) * PX_TO_MM
+          ).toFixed(2);
+          const contentHeightMm = (dims.height * PX_TO_MM).toFixed(2);
+
+          console.log(">>> Page size (mm):", {
+            widthMm: contentWidthMm,
+            heightMm: contentHeightMm,
+          });
+
+          await workerWindow.webContents.insertCSS(`
+        @page {
+          size: ${contentWidthMm}mm ${contentHeightMm}mm !important;
+          margin: 0 !important;
+        }
+      `);
+
+          const pdfData = await workerWindow.webContents.printToPDF({
+            printBackground: true,
+            preferCSSPageSize: true,
+            margins: { top: 0, bottom: 0, left: 0, right: 0 },
+          });
+
+          const { filePath } = await dialog.showSaveDialog({
+            title: "Save Receipt",
+            defaultPath: "receipt.pdf",
+            filters: [{ name: "PDF", extensions: ["pdf"] }],
+          });
+
+          if (filePath) {
+            fs.writeFileSync(filePath, pdfData);
+            return { success: true, savedToPdf: true };
+          }
+          return { success: false, reason: "canceled" };
+        } catch (err) {
+          console.error("PDF generation error:", err);
+          return { success: false, error: `PDF failed: ${err.message}` };
+        }
+      };
+
+      if (!printerName) {
+        const res = await fallbackToPdf();
+        if (workerWindow && !workerWindow.isDestroyed()) workerWindow.close();
+        return res;
+      }
+
+      // ============================================
+      // ✅ حساب ارتفاع المحتوى الفعلي
+      // ============================================
+      let finalPageHeight;
+
+      if (pageHeight === 0 || pageHeight === "auto") {
+        const contentHeight = await workerWindow.webContents.executeJavaScript(
+          `Math.ceil(document.body.scrollHeight)`,
+        );
+
+        console.log(">>> Content height (px):", contentHeight);
+
+        // ✅ ناخد الأكبر بين المحتوى و 297mm عشان بعض الطابعات
+        const minHeightMicron = 297000;
+        const contentHeightMicron = Math.round(contentHeight * MICRON_PER_PX);
+
+        finalPageHeight = Math.max(contentHeightMicron, minHeightMicron);
+
+        console.log(">>> Final page height (micron):", finalPageHeight);
+      } else if (typeof pageHeight === "number" && pageHeight > 0) {
+        finalPageHeight = pageHeight;
+      } else {
+        finalPageHeight = 297000;
+      }
+
+      // ============================================
+      // ✅ الطباعة
+      // ============================================
+      return await new Promise((resolve) => {
+        console.log("=== STARTING PRINT ===", {
+          printerName,
+          widthMicron: Math.round(finalWidthMm * 1000),
+          heightMicron: finalPageHeight,
+        });
+
+        workerWindow.webContents.print(
+          {
+            silent: true,
+            printBackground: true,
+            deviceName: printerName,
+            margins: { marginType: "none" },
+            pageSize: {
+              width: Math.round(finalWidthMm * 1000),
+              height: finalPageHeight,
+            },
+          },
+          async (success, errorType) => {
+            console.log("=== PRINT CALLBACK ===", {
+              success,
+              errorType,
+            });
+
+            if (success) {
+              if (workerWindow && !workerWindow.isDestroyed())
+                workerWindow.close();
+              resolve({ success: true });
+            } else {
+              console.warn("print failed:", errorType);
+              const res = await fallbackToPdf();
+              if (workerWindow && !workerWindow.isDestroyed())
+                workerWindow.close();
+              resolve({
+                ...res,
+                escposError: String(errorType || "print-failed"),
+              });
+            }
+          },
+        );
+      });
+    } catch (err) {
+      console.error("print-html error:", err);
+      if (workerWindow && !workerWindow.isDestroyed()) workerWindow.close();
+      return { success: false, error: err.message };
+    }
+  },
+);
 
 app.on("before-quit", async (event) => {
   if (!isQuitting) {

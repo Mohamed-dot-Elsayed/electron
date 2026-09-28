@@ -1,6 +1,6 @@
 import { createModel } from "../db/createModel";
-import {SchemaDef} from "../db/types"
-import { ORDER_TYPES } from '../types/constant';
+import { SchemaDef } from "../db/types";
+import { ORDER_TYPES } from "../types/constant";
 
 const OrderSchema: SchemaDef = {
   user: {
@@ -111,7 +111,7 @@ const OrderSchema: SchemaDef = {
   },
   paymobCallbackPayload: {
     type: "object",
-    schema: {}, 
+    schema: {},
     default: {},
   },
   geideaSessionId: {
@@ -122,7 +122,7 @@ const OrderSchema: SchemaDef = {
   },
   geideaCallbackPayload: {
     type: "object",
-    schema: {}, 
+    schema: {},
     default: {},
   },
   proofImage: {
@@ -130,8 +130,43 @@ const OrderSchema: SchemaDef = {
   },
   status: {
     type: "string",
-    enum: ["pending","rejected","confirmed","processing","out_for_delivery","delivered","returned","failed_to_deliver","canceled","scheduled","refund"],
+    enum: [
+      "pending",
+      "rejected",
+      "confirmed",
+      "processing",
+      "out_for_delivery",
+      "delivered",
+      "returned",
+      "failed_to_deliver",
+      "canceled",
+      "scheduled",
+    ],
     default: "pending",
+  },
+  statusDescription: {
+    type: "string",
+    default: "",
+  },
+  previousStatus: {
+    type: "string",
+    enum: [
+      "pending",
+      "rejected",
+      "confirmed",
+      "processing",
+      "out_for_delivery",
+      "delivered",
+      "returned",
+      "failed_to_deliver",
+      "canceled",
+      "scheduled",
+    ],
+    default: null,
+  },
+  quantityDeducted: {
+    type: "boolean",
+    default: false,
   },
 };
 

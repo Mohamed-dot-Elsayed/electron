@@ -6,6 +6,117 @@ import { ProductModel } from "../models/product";
 import { UserModel } from "../models/user";
 import { PaymentMethodModel } from "../models/paymentMethod";
 import { WarehouseModel } from "../models/warehouse";
+import { Product_WarehouseModel } from "../models/productWarehouse";
+import {
+  ProductPriceModel,
+  ProductPriceOptionModel,
+} from "../models/productPrice";
+import { OptionModel, VariationModel } from "../models/variation";
+
+/**
+ * Helper: بيجيب تفاصيل الـ variant (ProductPrice + options بتاعتها)
+ *
+ * بيرجّع:
+ * {
+ *   _id,
+ *   price,
+ *   code,
+ *   quantity,
+ *   gallery,
+ *   options: [{ variationName, ar_variationName, optionName, optionId }]
+ * }
+ */
+function getVariantDetails(variantId: string) {
+  if (!variantId) return null;
+
+  const productPrice = ProductPriceModel.findById(variantId);
+  if (!productPrice) return null;
+
+  // ── Options related to this variant ──
+  const priceOptions = ProductPriceOptionModel.find({
+    product_price_id: variantId,
+  });
+
+  const optionIds = priceOptions.map((po: any) => String(po.option_id));
+  const options = optionIds.length
+    ? OptionModel.find({ _id: { $in: optionIds } })
+    : [];
+
+  const optionMap = new Map(options.map((o: any) => [String(o._id), o]));
+
+  // ── Variations (Color, Size, ...) ──
+  const variationIds = [
+    ...new Set(
+      options
+        .filter((o: any) => o.variationId)
+        .map((o: any) => String(o.variationId)),
+    ),
+  ];
+
+  const variationDocs = variationIds.length
+    ? VariationModel.find({ _id: { $in: variationIds } })
+    : [];
+
+  const variationMap = new Map(
+    variationDocs.map((v: any) => [String(v._id), v]),
+  );
+
+  // ── Build options labels ──
+  const optionLabels = priceOptions
+    .map((po: any) => {
+      const option = optionMap.get(String(po.option_id));
+      if (!option) return null;
+
+      const variation = option.variationId
+        ? variationMap.get(String(option.variationId))
+        : null;
+
+      return {
+        optionId: option._id,
+        optionName: option.name,
+        variationId: variation?._id ?? null,
+        variationName: variation?.name ?? null,
+        ar_variationName: variation?.ar_name ?? null,
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    _id: productPrice._id,
+    productId: productPrice.productId,
+    price: productPrice.price ?? null,
+    code: productPrice.code ?? null,
+    quantity: productPrice.quantity ?? 0,
+    gallery: productPrice.gallery ?? [],
+    cost: productPrice.cost ?? 0,
+    options: optionLabels,
+  };
+}
+
+/**
+ * Helper: بيعمل populate للـ cartItems
+ * (بيضيف product + variant بتفاصيله الكاملة)
+ */
+function populateCartItems(cartItems: any[]) {
+  return (cartItems || []).map((item: any) => {
+    const product = ProductModel.findById(item.product);
+    const variant = item.variant ? getVariantDetails(item.variant) : null;
+
+    return {
+      ...item,
+      product: product
+        ? {
+            _id: product._id,
+            name: product.name,
+            ar_name: product.ar_name,
+            image: product.image,
+            price: product.price,
+          }
+        : null,
+      variant,
+    };
+  });
+}
 
 /**
  * GET /admin/online-orders
@@ -14,54 +125,36 @@ import { WarehouseModel } from "../models/warehouse";
 export const getAllOnlineOrders = async (req: Request, res: Response) => {
   const { status } = req.query;
 
+  // بنستبعد pending و rejected بس
+  // processing بتظهر عشان الـ admin يأكدها
   const filter: any = {
     status: { $nin: ["pending", "rejected"] },
   };
 
   const allowedStatuses = [
-    "confirmed",
     "processing",
+    "confirmed",
     "out_for_delivery",
     "delivered",
     "returned",
     "failed_to_deliver",
     "canceled",
     "scheduled",
-    "refund",
   ];
 
   if (status && allowedStatuses.includes(status as string)) {
     filter.status = status;
   }
 
-  const orders = OrderModel.find(filter)
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    )
-    .map((order) => {
+  const orders = OrderModel.find(filter, { sort: { createdAt: -1 } }).map(
+    (order) => {
       const user = UserModel.findById(order.user);
 
       const paymentMethod = PaymentMethodModel.findById(order.paymentMethod);
 
       const warehouse = WarehouseModel.findById(order.warehouse);
 
-      const cartItems =
-        order.cartItems?.map((item: any) => {
-          const product = ProductModel.findById(item.product);
-
-          return {
-            ...item,
-            product: product
-              ? {
-                  _id: product._id,
-                  name: product.name,
-                  image: product.image,
-                  price: product.price,
-                }
-              : null,
-          };
-        }) || [];
+      const cartItems = populateCartItems(order.cartItems || []);
 
       return {
         ...order,
@@ -93,7 +186,8 @@ export const getAllOnlineOrders = async (req: Request, res: Response) => {
 
         cartItems,
       };
-    });
+    },
+  );
 
   SuccessResponse(res, {
     message: "Online orders retrieved successfully",
@@ -118,23 +212,7 @@ export const getOnlineOrderById = async (req: Request, res: Response) => {
     ? PaymentMethodModel.findById(orderRaw.paymentMethod)
     : null;
 
-  const populatedCartItems = (orderRaw.cartItems || []).map((item: any) => {
-    const productPop = item.product
-      ? ProductModel.findById(item.product)
-      : null;
-
-    return {
-      ...item,
-      product: productPop
-        ? {
-            _id: productPop._id,
-            name: productPop.name,
-            image: productPop.image,
-            price: productPop.price,
-          }
-        : null,
-    };
-  });
+  const populatedCartItems = populateCartItems(orderRaw.cartItems || []);
 
   const order = {
     ...orderRaw,
@@ -164,50 +242,164 @@ export const getOnlineOrderById = async (req: Request, res: Response) => {
 };
 
 /**
+ * Helper: بيلاقي stock row في Product_Warehouse
+ *
+ * ✅ نفس منطق الـ POS (createSale):
+ * 1. لو المنتج ليه variant → productPriceId = variantId
+ * 2. لو ملهوش variant → productPriceId = null / مش موجود
+ * 3. Fallback: لو مش لاقي في المخزن ده، يدور في أي مخزن
+ */
+function findStockRow(item: any, warehouseId: string) {
+  const variantId = item.variant || null;
+
+  // بنجيب كل الـ rows للمنتج
+  const allRows = Product_WarehouseModel.find({
+    productId: item.product,
+  });
+
+  // بنفلتر حسب الـ variant
+  let filtered: any[];
+  if (variantId) {
+    filtered = allRows.filter((r: any) => r.productPriceId === variantId);
+  } else {
+    filtered = allRows.filter(
+      (r: any) =>
+        r.productPriceId === null ||
+        r.productPriceId === undefined ||
+        r.productPriceId === "",
+    );
+  }
+
+  if (!filtered.length) return null;
+
+  // نفضّل الـ row بتاعة المخزن ده
+  const inThisWarehouse = filtered.find(
+    (r: any) => String(r.warehouseId) === String(warehouseId),
+  );
+
+  // fallback: زي POS
+  return inThisWarehouse || filtered[0];
+}
+
+/**
  * PATCH /admin/online-orders/:id/status
- * تغيير حالة الأوردر (approved / rejected)
+ *
+ * الحالات المسموحة للـ admin فقط:
+ * confirmed, out_for_delivery, delivered, returned,
+ * failed_to_deliver, canceled, scheduled
+ *
+ * الفلو:
+ * - confirmed: تخصم من Product_Warehouse (لو quantityDeducted = false)
+ * - out_for_delivery / delivered: مفيش تغيير في الكمية
+ * - failed_to_deliver / returned: ترجع لـ Product_Warehouse (لو quantityDeducted = true)
+ * - canceled / scheduled: مفيش تغيير
  */
 export const updateOnlineOrderStatus = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { status, statusDescription } = req.body;
 
-  if (status == "rejected") {
-    throw new BadRequest("You Don't Have Permission to Reject Order");
-  }
-  if (
-    !status ||
-    ![
-      "pending",
-      "confirmed",
-      "processing",
-      "out_for_delivery",
-      "delivered",
-      "returned",
-      "failed_to_deliver",
-      "canceled",
-      "scheduled",
-      "refund",
-    ].includes(status)
-  ) {
-    throw new NotFound("Invalid status.");
+  // 1. التحقق من صحة الحالة
+  const allowedStatuses = [
+    "confirmed",
+    "out_for_delivery",
+    "delivered",
+    "returned",
+    "failed_to_deliver",
+    "canceled",
+    "scheduled",
+  ];
+
+  if (!status || !allowedStatuses.includes(status)) {
+    throw new BadRequest("Invalid status.");
   }
 
-  const order = OrderModel.updateById(id, {
-    status,
-    statusDescription,
-  });
-
+  // 2. جلب الأوردر
+  const order = OrderModel.findById(id);
   if (!order) {
     throw new NotFound("Order not found");
   }
 
-  const user = UserModel.findById(order.user);
+  const oldStatus = order.status;
+  const newStatus = status;
 
-  const paymentMethod = PaymentMethodModel.findById(order.paymentMethod);
+  // 3. منع نفس الحالة
+  if (oldStatus === newStatus) {
+    throw new BadRequest(`Order is already in "${newStatus}" status.`);
+  }
+
+  // 4. نتتبع الكمية بحقل quantityDeducted بدل الحالة
+  const wasQuantityDeducted = order.quantityDeducted === true;
+  let newQuantityDeducted = wasQuantityDeducted;
+
+  // 5. التعامل مع الكميات
+  if (newStatus === "confirmed") {
+    if (!wasQuantityDeducted) {
+      // التحقق من توفر الكمية في Product_Warehouse
+      for (const item of order.cartItems || []) {
+        const stock = findStockRow(item, order.warehouse);
+
+        if (!stock) {
+          throw new NotFound(
+            `Stock record not found for product "${item.product}" in this warehouse.`,
+          );
+        }
+
+        if (stock.quantity < item.quantity) {
+          throw new BadRequest(
+            `Insufficient quantity for product "${item.product}". Available: ${stock.quantity}, Requested: ${item.quantity}`,
+          );
+        }
+      }
+
+      // خصم الكمية من Product_Warehouse
+      for (const item of order.cartItems || []) {
+        const stock = findStockRow(item, order.warehouse);
+
+        if (stock) {
+          Product_WarehouseModel.updateById(stock._id, {
+            quantity: stock.quantity - item.quantity,
+          });
+        }
+      }
+
+      newQuantityDeducted = true;
+    }
+  } else if (newStatus === "returned" || newStatus === "failed_to_deliver") {
+    if (wasQuantityDeducted) {
+      // إرجاع الكمية لـ Product_Warehouse
+      for (const item of order.cartItems || []) {
+        const stock = findStockRow(item, order.warehouse);
+
+        if (stock) {
+          Product_WarehouseModel.updateById(stock._id, {
+            quantity: stock.quantity + item.quantity,
+          });
+        }
+      }
+
+      newQuantityDeducted = false;
+    }
+  }
+  // باقي الحالات: مفيش تغيير في الكمية
+
+  // 6. تحديث الأوردر
+  const updatedOrder = OrderModel.updateById(id, {
+    status: newStatus,
+    previousStatus: oldStatus,
+    quantityDeducted: newQuantityDeducted,
+    statusDescription: statusDescription ?? null,
+  });
+
+  if (!updatedOrder) {
+    throw new NotFound("Order not found");
+  }
+
+  // 7. populate للرد
+  const user = UserModel.findById(updatedOrder.user);
+  const paymentMethod = PaymentMethodModel.findById(updatedOrder.paymentMethod);
 
   const populatedOrder = {
-    ...order,
-
+    ...updatedOrder,
     user: user
       ? {
           _id: user._id,
@@ -216,7 +408,6 @@ export const updateOnlineOrderStatus = async (req: Request, res: Response) => {
           phone: user.phone,
         }
       : null,
-
     paymentMethod: paymentMethod
       ? {
           _id: paymentMethod._id,
@@ -225,10 +416,11 @@ export const updateOnlineOrderStatus = async (req: Request, res: Response) => {
           type: paymentMethod.type,
         }
       : null,
+    cartItems: populateCartItems(updatedOrder.cartItems || []),
   };
 
   SuccessResponse(res, {
-    message: `Order status updated to ${status}`,
+    message: `Order status updated from "${oldStatus}" to "${newStatus}"`,
     order: populatedOrder,
   });
 };

@@ -314,7 +314,7 @@ const formatCashierReceipt = (receiptData) => {
             color: #000;
             gap: 6px;
         }
-        .totals-row span:last-child { overflow-wrap: anywhere; text-align: ${isArabic ? "left" : "right"}; }
+        .totals-row span:last-child { overflow-wrap: anywhere; text-align: ${isArabic ? "left" : "right"}; direction: ltr; unicode-bidi: embed; }
 
         .grand-total {
             border: 2px solid #000;
@@ -342,6 +342,8 @@ const formatCashierReceipt = (receiptData) => {
             color: #000;
             white-space: nowrap;
             text-align: ${grandTotalStacked ? "center" : isArabic ? "left" : "right"};
+            direction: ltr;
+            unicode-bidi: embed;
         }
 
         .cust-info {
@@ -502,11 +504,11 @@ const formatCashierReceipt = (receiptData) => {
                       ${productName}
                       ${variationsHTML}${item.notes ? `<div class="notes-row">(${item.notes})</div>` : ""}
                     </td>
-                    <td class="item-price" style="font-size:${priceFontSize}px;">
+                    <td class="item-price" style="font-size:${priceFontSize}px; direction: ltr;">
                       ${unitPrice}
                     </td>
                     <td class="item-qty">${qty}</td>
-                    <td class="item-total" style="text-align: ${isArabic ? "left" : "right"}; font-size:${totalFontSize}px;">
+                    <td class="item-total" style="text-align: ${isArabic ? "left" : "right"}; font-size:${totalFontSize}px; direction: ltr;">
                       ${itemTotal.toFixed(2)}
                     </td>
                   </tr>
@@ -523,35 +525,20 @@ const formatCashierReceipt = (receiptData) => {
                 <span>${Number(receiptData.subtotal || 0).toFixed(2)}</span>
             </div>
 
-            ${
-              Number(receiptData.discount) > 0
-                ? `
             <div class="totals-row" style="color: #000;">
                 <span>${isArabic ? "الخصم" : "Discount"}</span>
-                <span>-${Number(receiptData.discount).toFixed(2)}</span>
-            </div>`
-                : ""
-            }
+                <span>${Number(receiptData.discount || 0) > 0 ? "-" : ""}${Number(receiptData.discount || 0).toFixed(2)}</span>
+            </div>
 
-            ${
-              Number(receiptData.tax) > 0
-                ? `
             <div class="totals-row">
                 <span>${isArabic ? "الضريبة" : "Tax"}</span>
-                <span>${Number(receiptData.tax).toFixed(2)}</span>
-            </div>`
-                : ""
-            }
+                <span>${Number(receiptData.tax || 0).toFixed(2)}</span>
+            </div>
 
-            ${
-              Number(receiptData.deliveryFees) > 0
-                ? `
             <div class="totals-row">
-                <span>${isArabic ? "الشحن" : "Shipping"}</span>
-                <span>${Number(receiptData.deliveryFees).toFixed(2)}</span>
-            </div>`
-                : ""
-            }
+                <span>${isArabic ? "رسوم الخدمة" : "Service Fees"}</span>
+                <span>${Number(receiptData.serviceFees || 0).toFixed(2)}</span>
+            </div>
 
             <div class="grand-total">
                 <span class="grand-total-label">${isArabic ? "الإجمالي الكلي" : "GRAND TOTAL"}</span>
@@ -601,12 +588,16 @@ export const prepareReceiptData = (
   requiredTotal,
   responseSuccess,
   response,
+  frontendTaxAmount = 0,
+  serviceFeesFromAPI = 0,
 ) => {
   const rawResponse = response || {};
   const rootData = rawResponse?.data || rawResponse;
   const saleData = rootData.sale || rawResponse.sale || {};
   const storeData = rootData.store || rawResponse.store || {};
   const itemsList = rootData.items || rawResponse.items || [];
+  const pricingDetails =
+    rootData.pricing_details || rawResponse.pricing_details || {};
   const customerData =
     saleData.customer_id || rootData.customer || rawResponse.customer || {};
 
@@ -627,14 +618,26 @@ export const prepareReceiptData = (
     detectedType = "delivery";
   }
 
-  const taxValue =
-    saleData.order_tax?.amount ?? saleData.tax_amount ?? order_tax ?? 0;
-  const discountValue =
-    saleData.order_discount?.amount ??
-    saleData.discount ??
-    totalDiscount ??
-    appliedDiscount ??
-    0;
+  // =========================================================
+  // ✅ استخراج القيم المالية
+  // =========================================================
+  // ✅ discount: من pricing_details.discount_amount أو sale.discount
+  const discountValue = Number(
+    pricingDetails.discount_amount || saleData.discount || 0,
+  );
+
+  // ✅ tax: من API أولاً، بعدين من frontend
+  const taxValue = Number(
+    pricingDetails.tax_amount || saleData.tax_amount || frontendTaxAmount || 0,
+  );
+
+  // ✅ service fees: من API أولاً، بعدين من service fees API
+  const serviceFeesValue = Number(
+    pricingDetails.service_fee_total ||
+      saleData.service_fee_total ||
+      serviceFeesFromAPI ||
+      0,
+  );
 
   const formattedItems =
     itemsList && itemsList.length > 0
@@ -733,20 +736,21 @@ export const prepareReceiptData = (
 
     items: formattedItems,
 
+    // ✅ القيم المالية
     subtotal: calculatedSubtotal.toFixed(2),
-    discount: Number(discountValue).toFixed(2),
-    tax: Number(taxValue).toFixed(2),
-    deliveryFees: Number(saleData.shipping || 0).toFixed(2),
+    discount: discountValue.toFixed(2),
+    tax: taxValue.toFixed(2),
+    serviceFees: serviceFeesValue.toFixed(2),
 
     total: Number(
-      saleData.grand_total ||
+      pricingDetails.grand_total ||
+        saleData.grand_total ||
         saleData.total ||
         requiredTotal ||
         amountToPay ||
         0,
     ).toFixed(2),
 
-    serviceFees: 0,
     table: "N/A",
     preparationNum: null,
   };

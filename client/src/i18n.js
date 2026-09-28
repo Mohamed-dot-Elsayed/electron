@@ -15,18 +15,21 @@ const resources = {
       shift: "Shift",
       //home
       Failedtofetchdiscountdata: "Failed to fetch discount data.",
-      IncompletetransferdataCannotcompletetransfer: "Incomplete transfer data. Cannot complete transfer.",
-      OrderTransferred: "Order transferred successfully from table {{sourceTableId}} to table {{newTableId}}.",
-      FailedtocompletetransferPleasetryagain: "Failed to complete transfer. Please try again.",
+      IncompletetransferdataCannotcompletetransfer:
+        "Incomplete transfer data. Cannot complete transfer.",
+      OrderTransferred:
+        "Order transferred successfully from table {{sourceTableId}} to table {{newTableId}}.",
+      FailedtocompletetransferPleasetryagain:
+        "Failed to complete transfer. Please try again.",
       take_away: "Take Away",
       Delivery: "Delivery",
       Dinein: "Dine In",
       //navbar
-      YouMustCloseShiftBeforeLogout: "You must close the shift before logging out.",
+      YouMustCloseShiftBeforeLogout:
+        "You must close the shift before logging out.",
       LoggedOutSuccessfully: "Logged out successfully",
       Errorwhileloggingout: "Error while logging out",
       code: "Code",
-
 
       //card
       Allitemsclearedfromtheorder: "All items cleared from the order.",
@@ -35,31 +38,47 @@ const resources = {
       Ordersavedaspending: "Order saved as pending!",
       Failedtosaveaspending: "Failed to save as pending.",
       Pleaseenteranoffercode: "Please enter an offer code.",
-      OffervalidatedsuccessfullyPleaseconfirm: "Offer validated successfully! Please confirm.",
-      Offerdetailsareincompleteintheresponse: "Offer details are in complete in the response",
-      FailedtovalidateofferPleasetryagain: "Failed to validate offer. Please try again.",
-      RewardAdded: "Reward item \"{{product}}\" successfully added to the order",
+      OffervalidatedsuccessfullyPleaseconfirm:
+        "Offer validated successfully! Please confirm.",
+      Offerdetailsareincompleteintheresponse:
+        "Offer details are in complete in the response",
+      FailedtovalidateofferPleasetryagain:
+        "Failed to validate offer. Please try again.",
+      RewardAdded: 'Reward item "{{product}}" successfully added to the order',
       SelectedItems: "Selected Items ({{count}}):",
       Failedtoapproveoffer: "Failed to approve offer.",
       Pleaseenteradealcode: "Please enter a deal code.",
-      DealvalidatedsuccessfullyPleaseconfirm: "Deal validated successfully! Please confirm.",
-      Unexpectedresponsefromserverorinvaliddeal: "Unexpected response from server or invalid deal",
-      FailedtoapplydealPleasetryagain: "Failed to apply deal. Please try again.",
-      DealAdded: "Deal \"{{deal_title}}\" successfully added to the order!",
-      CannottransferorderTableIDorCartIDsaremissing: "Cannot transfer order: Table ID or Cart IDs are missing.",
-      Pleaseselectanewtabletotransfertheorder: "Please select a new table to transfer the order.",
+      DealvalidatedsuccessfullyPleaseconfirm:
+        "Deal validated successfully! Please confirm.",
+      Unexpectedresponsefromserverorinvaliddeal:
+        "Unexpected response from server or invalid deal",
+      FailedtoapplydealPleasetryagain:
+        "Failed to apply deal. Please try again.",
+      DealAdded: 'Deal "{{deal_title}}" successfully added to the order!',
+      CannottransferorderTableIDorCartIDsaremissing:
+        "Cannot transfer order: Table ID or Cart IDs are missing.",
+      Pleaseselectanewtabletotransfertheorder:
+        "Please select a new table to transfer the order.",
       Failedtoidentifytheitemtoupdate: "Failed to identify the item to update.",
-      Missingrequireddatatoupdateitemstatus: "Missing required data to update item status.",
-      StatuscannotbeupdatedviaAPIatthistime: "Status cannot be updated via API at this time.",
-      Failedtoapplythestatusupdatelocally: "Failed to apply the status update locally.",
+      Missingrequireddatatoupdateitemstatus:
+        "Missing required data to update item status.",
+      StatuscannotbeupdatedviaAPIatthistime:
+        "Status cannot be updated via API at this time.",
+      Failedtoapplythestatusupdatelocally:
+        "Failed to apply the status update locally.",
       Failedtoupdatestatus: "Failed to update status.",
-      PleasefillinallrequiredfieldsManagerIDandPassword: "Please fill in all required fields: Manager ID and Password.",
+      PleasefillinallrequiredfieldsManagerIDandPassword:
+        "Please fill in all required fields: Manager ID and Password.",
       Itemvoidedsuccessfully: "Item voided successfully!",
-      InvalidManagerIDorPasswordAccessdenied: "Invalid Manager ID or Password. Access denied.",
-      NoresponsefromserverCheckyourinternetconnection: "No response from server. Check your internet connection.",
+      InvalidManagerIDorPasswordAccessdenied:
+        "Invalid Manager ID or Password. Access denied.",
+      NoresponsefromserverCheckyourinternetconnection:
+        "No response from server. Check your internet connection.",
       Anunexpectederroroccurred: "An unexpected error occurred.",
-      Pleaseselectitemstopayforfromthedoneitemslist: "Please select items to pay for from the done items list.",
-      PleaseselectitemschooseastatusandensureaTableIDisset: "Please select items, choose a status, and ensure a Table ID is set.",
+      Pleaseselectitemstopayforfromthedoneitemslist:
+        "Please select items to pay for from the done items list.",
+      PleaseselectitemschooseastatusandensureaTableIDisset:
+        "Please select items, choose a status, and ensure a Table ID is set.",
       Novaliditemstoupdate: "No valid items to update.",
       BulkUpdateSuccess: "Successfully updated {{count}} items to {{status}}",
       Itemremovedsuccessfully: "Item removed successfully",
@@ -72,7 +91,8 @@ const resources = {
       ChangeTable: "Change Table",
       ApplyStatus: "Apply Status ({{count}} selected)",
       ConfirmClearAllItems: "Confirm Clear All Items",
-      ConfirmRemoveAll: "Are you sure you want to remove all {{count}} items? This action cannot be undone.",
+      ConfirmRemoveAll:
+        "Are you sure you want to remove all {{count}} items? This action cannot be undone.",
       Cancel: "Cancel",
       Price: "Price",
       Item: "Item",
@@ -88,30 +108,35 @@ const resources = {
       Checkout: "Checkout",
       SaveasPending: "Save as Pending",
       ApplyOfferUsePoints: "Apply Offer / Use Points",
-      EnterLoyaltyOrRewardCode: "Enter the customer's loyalty code or the reward item code.",
+      EnterLoyaltyOrRewardCode:
+        "Enter the customer's loyalty code or the reward item code.",
       CheckCode: "Check Code",
       ConfirmRewardPurchase: "Confirm Reward Purchase",
       UserID: "User ID",
-      ConfirmAddOffer: "Confirm adding {{product}} to the order for ({{points}} Points)?",
+      ConfirmAddOffer:
+        "Confirm adding {{product}} to the order for ({{points}} Points)?",
       ApproveandAddItem: "Approve and Add Item",
       EnterDealCode: "Enter the customer's deal code to check validity.",
       ApplyDealCode: "Apply Deal Code",
       CheckDeal: "CheckDeal",
       ConfirmDealAcceptance: "Confirm Deal Acceptance",
       CustomerUserId: "Customer: User ID **{{user_id}}**",
-      ConfirmAddDeal: "Confirm adding {{deal_title}} for ({{deal_price}} EGP) to the order?",
+      ConfirmAddDeal:
+        "Confirm adding {{deal_title}} for ({{deal_price}} EGP) to the order?",
       PendingOrders: "Pending Orders",
       SubTotal: "Sub Total:",
       Tax: "Tax:",
       OtherCharge: "OtherCharge:",
       //item
-      QuantityIncreased: "The quantity of \"{{name}}\" has been increased to {{quantity}}.",
-      UpdateFailed: "Failed to update \"{{name}}\".",
-      ProductAdded: "\"{{name}}\" added successfully!",
-      SubmitFailed: "Failed to submit \"{{name}}\".",
-      ErrorLoadingData: "Error loading data. Please try again later. Check your authentication token."
-      , SelectBranchToViewItems: "Please select a branch to view items."
-      , TakeAway: "Take Away",
+      QuantityIncreased:
+        'The quantity of "{{name}}" has been increased to {{quantity}}.',
+      UpdateFailed: 'Failed to update "{{name}}".',
+      ProductAdded: '"{{name}}" added successfully!',
+      SubmitFailed: 'Failed to submit "{{name}}".',
+      ErrorLoadingData:
+        "Error loading data. Please try again later. Check your authentication token.",
+      SelectBranchToViewItems: "Please select a branch to view items.",
+      TakeAway: "Take Away",
       SelectCategory: "Select Category",
       ByPiece: "By Piece",
       ByWeight: "By Weight",
@@ -124,7 +149,8 @@ const resources = {
       Nocashiersavailable: "No cashiers available",
       ShowMore: "Show More",
       //login
-      NotificationsDisabled: "Notifications disabled; some features may be limited",
+      NotificationsDisabled:
+        "Notifications disabled; some features may be limited",
       FailedToEnableNotifications: "Failed to enable notifications",
       PleaseFillInAllFields: "Please fill in all fields",
       LoggedInSuccessfully: "Logged in successfully",
@@ -135,16 +161,17 @@ const resources = {
       Password: "Password",
       Login: "Login",
       //shift
-      ShiftOpenedSuccessfully: "Shift opened successfully! redirecting to home...",
+      ShiftOpenedSuccessfully:
+        "Shift opened successfully! redirecting to home...",
       FailedToOpenShift: "Failed to open shift.",
       ShiftClosedSuccessfully: "Shift closed successfully!",
       FailedToCloseShift: "Failed to close shift",
-      ShiftStatus: 'Shift Status',
+      ShiftStatus: "Shift Status",
       CurrentlyOnShift: "You're currently on shift",
       UpForShift: "You're up for your shift",
       TakeYourShift: "Take your shift",
-      BackToWork: "Back to Work"
-      , OpenNewShift: "Open New Shift",
+      BackToWork: "Back to Work",
+      OpenNewShift: "Open New Shift",
       redirectingtohomein: "redirecting to home in",
       Description: "Description",
       Address: "Address",
@@ -157,7 +184,8 @@ const resources = {
       Noaddressavailable: "No address available",
       AddAddress: "Add Address",
       ConfirmDelivery: "Confirm Delivery",
-      Pleasesearchbynameorphonetofindusers: "Please search by name or phone to find users",
+      Pleasesearchbynameorphonetofindusers:
+        "Please search by name or phone to find users",
       Edituser: "Edit user",
       FirstName: "First Name",
       LastName: "Last Name",
@@ -184,34 +212,42 @@ const resources = {
       Preorder: "Pre-order",
       Withorder: "With order",
       Reserved: "Reserved",
-      CannotTransferToSameTable: "Cannot transfer to the same table. Please select a different table."
-      , OrderTransferredSuccessfully: "Order transferred successfully!",
-      FailedtotransfertablePleasetryagain: "Failed to transfer table. Please try again.",
+      CannotTransferToSameTable:
+        "Cannot transfer to the same table. Please select a different table.",
+      OrderTransferredSuccessfully: "Order transferred successfully!",
+      FailedtotransfertablePleasetryagain:
+        "Failed to transfer table. Please try again.",
       MergedTable: "Merged Table",
       Cap: "Cap",
       Source: "Source",
       Customer: "Customer",
       Transferringorder: "Transferring order...",
       Failedtoloadtables: "Failed to load tables",
-      Pleasecheckyournetworkconnectionortryagainlater: "Please check your network connection or try again later",
+      Pleasecheckyournetworkconnectionortryagainlater:
+        "Please check your network connection or try again later",
       SelectNewTableForTransfer: "Select New Table for Transfer",
       DineInTables: "Dine-in Tables",
       NoTablesFound: "No tables found for this location.",
-      SelectAnotherLocationOrAddTables: "Please select another location or add tables.",
+      SelectAnotherLocationOrAddTables:
+        "Please select another location or add tables.",
       NoCafeLocationsFound: "No cafe locations found for this branch.",
-      EnsureLocationsConfigured: "Please ensure locations are configured in the system.",
-      SelectNewTableToTransferOrder: "Please select a new table to transfer the order.",
-      SelectTableToTransferFrom: "Select a table to transfer the order from Table {{sourceTableId}}.",
-      SelectTableToStartOrder: "Select a table to start an order. Merged tables are highlighted in red."
+      EnsureLocationsConfigured:
+        "Please ensure locations are configured in the system.",
+      SelectNewTableToTransferOrder:
+        "Please select a new table to transfer the order.",
+      SelectTableToTransferFrom:
+        "Select a table to transfer the order from Table {{sourceTableId}}.",
+      SelectTableToStartOrder:
+        "Select a table to start an order. Merged tables are highlighted in red.",
       //DeliveryInfo
-      , DeliveryInformation: "Delivery Information",
+      DeliveryInformation: "Delivery Information",
       Failedtoloaduserinformation: "Failed to load user information ❌",
       CustomerName: "Customer Name",
       PhoneNumber: "Phone Number",
       DeliveryAddress: "Delivery Address",
       Nouserinformationavailable: "No user information available ⚠️",
-      Pleaseselectacustomerfromthedeliverypage: "Please select a customer from the delivery page"
-      ,
+      Pleaseselectacustomerfromthedeliverypage:
+        "Please select a customer from the delivery page",
       //constants
       Pending: "Pending",
       Waiting: "Waiting",
@@ -220,7 +256,6 @@ const resources = {
       Done: "Done",
       Notes: "Notes",
       //ordersview
-
       ApproveandAddDeal: "Approve and Add Deal",
       Statusupdatedsuccessfully: "Status updated successfully",
       Errorupdatingstatus: "Error updating status",
@@ -245,8 +280,7 @@ const resources = {
       Operationfailed: "Operation failed",
       FailedtosubmitPleasetryagain: "Failed to submit. Please try again.",
       Unknownerror: "Unknown error",
-      AddAnotherAddressforUser
-        : "Add Another Address for User",
+      AddAnotherAddressforUser: "Add Another Address for User",
       AddNewDeliveryUser: "Add New Delivery User",
       EditDeliveryAddress: "Edit Delivery Address",
       AddressSelectionMode: "Address Selection Mode",
@@ -282,7 +316,8 @@ const resources = {
       Loadingorderdetails: "Loading order details",
       Imagesizemustbelessthan2MB: "Image size must be less than 2MB",
       Usernameisrequired: "Usernameisrequired",
-      Passwordmustbeatleast3characters: "Password must be at least 3 characters",
+      Passwordmustbeatleast3characters:
+        "Password must be at least 3 characters",
       Profileupdatedsuccessfully: "Profile updated successfully",
       Errorupdatingprofile: "Error updating profile",
       EditProfile: "Edit Profile",
@@ -309,7 +344,7 @@ const resources = {
       NoOrdersFoundForThisDate: "No orders found for this date.",
       Notifications: "Notifications",
       NoNotifications: "NoNotifications",
-      ClearAll: 'Clear All',
+      ClearAll: "Clear All",
       AddExpense: "Add Expense",
       Expense: "Expense",
       Category: "Category",
@@ -328,12 +363,14 @@ const resources = {
       //
       TotalAmount: "Total Amount",
       OrderNotes: "Order Notes (Optional)",
-      OrderNotesPlaceholder: "Add any special instructions or notes for this order...",
+      OrderNotesPlaceholder:
+        "Add any special instructions or notes for this order...",
       DiscountbyCompany: "Discount by Company",
       EnterDiscountCode: "Enter discount code",
       Checking: "Checking...",
       Apply: "Apply",
-      DiscountAppliedSuccess: "Discount of {{appliedDiscount}}% applied successfully!",
+      DiscountAppliedSuccess:
+        "Discount of {{appliedDiscount}}% applied successfully!",
       Remove: "Remove",
       AddAccountSplit: "+ Add account split",
       AmountPaidByCustomer: "Amount Paid by Customer",
@@ -356,7 +393,8 @@ const resources = {
       Incorrectpassword: "Incorrect password",
       totheserver: "An error occurred while connecting to the serve",
       Pleaseenteryourpassword: "Please enter your password",
-      QZTrayNotRunning: "QZ Tray service not running. Automatic printing is disabled.",
+      QZTrayNotRunning:
+        "QZ Tray service not running. Automatic printing is disabled.",
       PleaseEnterDiscountCode: "Please enter a discount code.",
       DiscountApplied: "Discount of {{discount}}% applied!",
       InvalidOrOffDiscountCode: "Invalid or inactive discount code.",
@@ -365,10 +403,11 @@ const resources = {
       AmountExceedsLimit: "Amount cannot exceed: {{amount}} EGP.",
       NoFinancialAccounts: "No financial accounts available.",
       DueOrderCreated: "Due order created successfully!",
-      OrderPlaced: "Order placed successfully!"
-      , FailedToProcessOrder: "Failed to process order.",
+      OrderPlaced: "Order placed successfully!",
+      FailedToProcessOrder: "Failed to process order.",
       SubmissionFailed: "Submission failed",
-      OrderExceedsDebitLimit: "Order amount ({{amount}} EGP) exceeds customer's debit limit.",
+      OrderExceedsDebitLimit:
+        "Order amount ({{amount}} EGP) exceeds customer's debit limit.",
       TotalMustEqual: "Total must equal {{amount}} EGP.",
       OrderIdMissing: "Order ID is missing.",
       SelectDeliveryPerson: "Please select a delivery person.",
@@ -388,7 +427,8 @@ const resources = {
       items: "items",
       SelectAll: "Select All",
       DeselectAll: "Deselect All",
-      SelectItemsForPayment: "Select items you want to process payment for ({{count}} selected)",
+      SelectItemsForPayment:
+        "Select items you want to process payment for ({{count}} selected)",
       ServiceFee: "Service Fee",
       EndShiftReport: "End Shift Report",
       Employee: "Employee",
@@ -435,8 +475,10 @@ const resources = {
       Adding: "Adding...",
       VariationOutOfStock: "This variation is out of stock",
       ProductOutOfStock: "This product is out of stock",
-      VariationOutOfStockAlert: "This variation is currently out of stock (Quantity: 0) and cannot be added to order.",
-      ProductOutOfStockAlert: "This product is currently out of stock (Quantity: 0) and cannot be added to order.",
+      VariationOutOfStockAlert:
+        "This variation is currently out of stock (Quantity: 0) and cannot be added to order.",
+      ProductOutOfStockAlert:
+        "This product is currently out of stock (Quantity: 0) and cannot be added to order.",
       SearchVariations: "Search variation or code...",
       AddVariation: "Add",
       SelectedVariations: "Selected Variations",
@@ -444,24 +486,66 @@ const resources = {
       MaxStockReached: "Maximum available stock reached",
       TotalItemsCount: "Total: {{count}} items",
       ItemsSelected: "items selected",
+
+      // ============ Online Orders ============
+      Products: "Products",
+      Destination: "Destination",
+      Warehouse: "Warehouse",
+      OrderType: "Order Type",
+      PaymentStatus: "Payment Status",
+      PaymentMethod: "Payment Method",
+      PaymentGateway: "Payment Gateway",
+      OrderSummary: "Order Summary",
+      OrderStatus: "Order Status",
+      CreatedDate: "Created Date",
+      FulfillmentInformation: "Fulfillment Information",
+      PickupOrder: "Store Pickup Order",
+      CustomerWillPickupFromWarehouse:
+        "Customer will pick up this order directly from the selected warehouse.",
+      Pickup: "Pickup",
+      BuildingNumber: "Building Number",
+      FloorNumber: "Floor Number",
+      ApartmentNumber: "Apartment Number",
+      UniqueIdentifier: "Unique Identifier",
+      AddressDetails: "Address Details",
+      Subtotal: "Subtotal",
+      CouponDiscount: "Coupon Discount",
+      ShippingPrice: "Shipping Price",
+      TotalPriceAfterDiscount: "Total Price After Discount",
+      UpdateOrderStatus: "Update Order Status",
+      UpdateStatus: "Update Status",
+      StatusUpdatedSuccessfully: "Status updated successfully!",
+      FailedToUpdateStatus: "Failed to update order status.",
+      FailedToFetchOrders: "Failed to fetch orders",
+      DeletedProduct: "Deleted Product",
+      NoProducts: "No products in this order",
+      Code: "Code",
+      NewStatus: "New Status",
+      SelectNewStatus: "Select new status...",
+      StatusDescription: "Status Description",
+      StatusDescriptionPlaceholder: "Add a note about this status change...",
+      Optional: "Optional",
+      NoTransitionsAvailable: "No status transitions available for this order.",
+      // ============ End Online Orders ============
     },
   },
   ar: {
     translation: {
-      ServiceFee: "رسوم الخدمة"
-      , TotalAmount: "مجموع الحساب",
+      ServiceFee: "رسوم الخدمة",
+      TotalAmount: "مجموع الحساب",
       ManagerID: "رقم هوية المدير",
       Voiding: "جاري الإلغاء",
-      ConfirmVoid: "تأكيد الإلغاء"
-      , ReadyForPayment: "جاهز للدفع",
+      ConfirmVoid: "تأكيد الإلغاء",
+      ReadyForPayment: "جاهز للدفع",
       items: "عناصر",
       SelectAll: "اختر الكل",
       DeselectAll: "إلغاء تحديد الكل",
-      SelectItemsForPayment: "اختر العناصر التي تريد معالجتها للدفع ({{count}} محددة)",
+      SelectItemsForPayment:
+        "اختر العناصر التي تريد معالجتها للدفع ({{count}} محددة)",
       EnterManagerID: "أدخل رقم هوية المدير",
       CurrentHall: "القاعة الحالية",
-      Table: "الطاولة"
-      , ProductAddedToTable: "تم إضافة المنتج للطاولة",
+      Table: "الطاولة",
+      ProductAddedToTable: "تم إضافة المنتج للطاولة",
       VoidItemManagerAuthentication: "إلغاء العنصر - مصادقة المدير",
       ExpenseAdded: "تمت إضافة المصروف",
       Failedtoaddexpense: "فشل في إضافة المصروف",
@@ -483,14 +567,14 @@ const resources = {
       OrderPlaced: "تم تقديم الطلب بنجاح",
       FailedToProcessOrder: "فشل في معالجة الطلب",
       SubmissionFailed: "فشل الإرسال",
-      OrderExceedsDebitLimit: "مبلغ الطلب ({{amount}} جنيه) يتجاوز حد الدين للعميل",
+      OrderExceedsDebitLimit:
+        "مبلغ الطلب ({{amount}} جنيه) يتجاوز حد الدين للعميل",
       TotalMustEqual: "يجب أن يساوي المجموع {{amount}} جنيه",
       OrderIdMissing: "رقم الطلب مفقود",
       SelectDeliveryPerson: "يرجى اختيار موظف التوصيل",
       DeliveryPersonAssigned: "تم تعيين موظف التوصيل بنجاح",
       FailedToAssignDeliveryPerson: "فشل في تعيين موظف التوصيل",
-      PhoneNumber2Optional: "رقم الهاتف 2 (اختياري)"
-      ,
+      PhoneNumber2Optional: "رقم الهاتف 2 (اختياري)",
       NoCategoriesFound: "لا توجد فئات.",
 
       Favorite: "المفضلة ",
@@ -508,9 +592,9 @@ const resources = {
       AmountPaidByCustomer: "المبلغ المدفوع من العميل",
       EnterAmountPaid: "أدخل المبلغ المدفوع",
       ChangeDue: "المبلغ المسترجع: {{value}} جنيه",
-      OrderNotesPlaceholder: "أضف أي ملاحظات أو تعليمات خاصة لهذا الطلب..."
-      , EnterDiscountCode: "أدخل رمز الخصم"
-      , Checking: "جارٍ التحقق...",
+      OrderNotesPlaceholder: "أضف أي ملاحظات أو تعليمات خاصة لهذا الطلب...",
+      EnterDiscountCode: "أدخل رمز الخصم",
+      Checking: "جارٍ التحقق...",
       Apply: "تطبيق",
       DiscountAppliedSuccess: "تم تطبيق خصم بنسبة {{appliedDiscount}}٪ بنجاح!",
 
@@ -520,8 +604,7 @@ const resources = {
       OriginalAmount: "المبلغ الأصلي :",
       Discount: "الخصم :",
       Remaining: "المتبقي :",
-      Change: "الباقي"
-      ,
+      Change: "الباقي",
 
       EnterPassword: "أدخل كلمة المرور",
       NoOrdersFoundForThisDate: "لا توجد طلبات في هذا التاريخ",
@@ -565,9 +648,12 @@ const resources = {
       ReceptionHall: "صالة الاستقبال",
       //home
       Failedtofetchdiscountdata: "فشل في جلب بيانات الخصم.",
-      IncompletetransferdataCannotcompletetransfer: "بيانات النقل غير مكتملة. لا يمكن إكمال النقل.",
-      OrderTransferred: "تم نقل الطلب بنجاح من الطاولة {{sourceTableId}} إلى الطاولة {{newTableId}}.",
-      FailedtocompletetransferPleasetryagain: "فشل في إكمال النقل. يرجى المحاولة مرة أخرى.",
+      IncompletetransferdataCannotcompletetransfer:
+        "بيانات النقل غير مكتملة. لا يمكن إكمال النقل.",
+      OrderTransferred:
+        "تم نقل الطلب بنجاح من الطاولة {{sourceTableId}} إلى الطاولة {{newTableId}}.",
+      FailedtocompletetransferPleasetryagain:
+        "فشل في إكمال النقل. يرجى المحاولة مرة أخرى.",
       take_away: "تيك أواي ",
       Delivery: "توصيل",
       Dinein: "صالة ",
@@ -594,30 +680,45 @@ const resources = {
       Ordersavedaspending: "تم حفظ الطلب كمعلق!",
       Failedtosaveaspending: "فشل في الحفظ كمعلق.",
       Pleaseenteranoffercode: "يرجى إدخال رمز العرض.",
-      OffervalidatedsuccessfullyPleaseconfirm: "تم التحقق من العرض بنجاح! يرجى التأكيد.",
-      Offerdetailsareincompleteintheresponse: "تفاصيل العرض غير مكتملة في الاستجابة",
-      FailedtovalidateofferPleasetryagain: "فشل في التحقق من العرض. يرجى المحاولة مرة أخرى.",
-      RewardAdded: "تم إضافة العنصر \"{{product}}\" بنجاح إلى الطلب",
+      OffervalidatedsuccessfullyPleaseconfirm:
+        "تم التحقق من العرض بنجاح! يرجى التأكيد.",
+      Offerdetailsareincompleteintheresponse:
+        "تفاصيل العرض غير مكتملة في الاستجابة",
+      FailedtovalidateofferPleasetryagain:
+        "فشل في التحقق من العرض. يرجى المحاولة مرة أخرى.",
+      RewardAdded: 'تم إضافة العنصر "{{product}}" بنجاح إلى الطلب',
       Failedtoapproveoffer: "فشل في الموافقة على العرض.",
       Pleaseenteradealcode: "يرجى إدخال رمز الصفقة.",
-      DealvalidatedsuccessfullyPleaseconfirm: "تم التحقق من الصفقة بنجاح! يرجى التأكيد.",
-      Unexpectedresponsefromserverorinvaliddeal: "استجابة غير متوقعة من الخادم أو صفقة غير صالحة",
-      FailedtoapplydealPleasetryagain: "فشل في تطبيق الصفقة. يرجى المحاولة مرة أخرى.",
-      DealAdded: "تم إضافة العرض \"{{deal_title}}\" بنجاح إلى الطلب!",
-      CannottransferorderTableIDorCartIDsaremissing: "لا يمكن نقل الطلب: معرف الطاولة أو معرفات العربة مفقودة.",
-      Pleaseselectanewtabletotransfertheorder: "يرجى اختيار طاولة جديدة لنقل الطلب.",
+      DealvalidatedsuccessfullyPleaseconfirm:
+        "تم التحقق من الصفقة بنجاح! يرجى التأكيد.",
+      Unexpectedresponsefromserverorinvaliddeal:
+        "استجابة غير متوقعة من الخادم أو صفقة غير صالحة",
+      FailedtoapplydealPleasetryagain:
+        "فشل في تطبيق الصفقة. يرجى المحاولة مرة أخرى.",
+      DealAdded: 'تم إضافة العرض "{{deal_title}}" بنجاح إلى الطلب!',
+      CannottransferorderTableIDorCartIDsaremissing:
+        "لا يمكن نقل الطلب: معرف الطاولة أو معرفات العربة مفقودة.",
+      Pleaseselectanewtabletotransfertheorder:
+        "يرجى اختيار طاولة جديدة لنقل الطلب.",
       Failedtoidentifytheitemtoupdate: "فشل في تحديد العنصر للتحديث.",
-      Missingrequireddatatoupdateitemstatus: "البيانات المطلوبة لتحديث حالة العنصر مفقودة.",
-      StatuscannotbeupdatedviaAPIatthistime: "لا يمكن تحديث الحالة عبر API في هذا الوقت.",
+      Missingrequireddatatoupdateitemstatus:
+        "البيانات المطلوبة لتحديث حالة العنصر مفقودة.",
+      StatuscannotbeupdatedviaAPIatthistime:
+        "لا يمكن تحديث الحالة عبر API في هذا الوقت.",
       Failedtoapplythestatusupdatelocally: "فشل في تطبيق تحديث الحالة محليًا.",
       Failedtoupdatestatus: "فشل في تحديث الحالة.",
-      PleasefillinallrequiredfieldsManagerIDandPassword: "يرجى ملء جميع الحقول المطلوبة: معرف المدير وكلمة المرور.",
+      PleasefillinallrequiredfieldsManagerIDandPassword:
+        "يرجى ملء جميع الحقول المطلوبة: معرف المدير وكلمة المرور.",
       Itemvoidedsuccessfully: "تم إلغاء العنصر بنجاح!",
-      InvalidManagerIDorPasswordAccessdenied: "معرف المدير أو كلمة المرور غير صالحة. تم رفض الوصول.",
-      NoresponsefromserverCheckyourinternetconnection: "لا يوجد استجابة من الخادم. تحقق من اتصالك بالإنترنت.",
+      InvalidManagerIDorPasswordAccessdenied:
+        "معرف المدير أو كلمة المرور غير صالحة. تم رفض الوصول.",
+      NoresponsefromserverCheckyourinternetconnection:
+        "لا يوجد استجابة من الخادم. تحقق من اتصالك بالإنترنت.",
       Anunexpectederroroccurred: "حدث خطأ غير متوقع.",
-      Pleaseselectitemstopayforfromthedoneitemslist: "يرجى اختيار العناصر للدفع من قائمة العناصر المكتملة.",
-      PleaseselectitemschooseastatusandensureaTableIDisset: "يرجى اختيار العناصر، اختيار حالة، والتأكد من تعيين معرف الطاولة.",
+      Pleaseselectitemstopayforfromthedoneitemslist:
+        "يرجى اختيار العناصر للدفع من قائمة العناصر المكتملة.",
+      PleaseselectitemschooseastatusandensureaTableIDisset:
+        "يرجى اختيار العناصر، اختيار حالة، والتأكد من تعيين معرف الطاولة.",
       Novaliditemstoupdate: "لا توجد عناصر صالحة للتحديث.",
       BulkUpdateSuccess: "تم تحديث {{count}} عنصرًا بنجاح إلى {{status}}",
       Itemremovedsuccessfully: "تمت إزالة العنصر بنجاح",
@@ -629,7 +730,8 @@ const resources = {
       ApplyDeal: "إتمام الطلب",
       ChangeTable: "تغيير الطاولة",
       ApplyStatus: "تطبيق الحالة ({{count}} مختارة)",
-      ConfirmRemoveAll: "هل أنت متأكد أنك تريد إزالة جميع العناصر وعددها {{count}}؟ هذا الإجراء لا يمكن التراجع عنه.",
+      ConfirmRemoveAll:
+        "هل أنت متأكد أنك تريد إزالة جميع العناصر وعددها {{count}}؟ هذا الإجراء لا يمكن التراجع عنه.",
       Cancel: "إلغاء",
       Preparation: "التحضير",
       Price: "السعر",
@@ -647,24 +749,28 @@ const resources = {
       Checkout: "الدفع",
       SaveasPending: "حفظ كمعلق",
       ApplyOfferUsePoints: "تطبيق العرض / استخدام النقاط",
-      EnterLoyaltyOrRewardCode: "أدخل رمز الولاء الخاص بالعميل أو رمز عنصر المكافأة.",
+      EnterLoyaltyOrRewardCode:
+        "أدخل رمز الولاء الخاص بالعميل أو رمز عنصر المكافأة.",
       CheckCode: "تحقق من الرمز",
       ConfirmRewardPurchase: "تأكيد شراء المكافأة",
       UserID: "معرف المستخدم",
-      ConfirmAddOffer: "تأكيد إضافة {{product}} إلى الطلب مقابل ({{points}} نقاط)؟",
+      ConfirmAddOffer:
+        "تأكيد إضافة {{product}} إلى الطلب مقابل ({{points}} نقاط)؟",
       CustomerUserId: "العميل: رقم المستخدم **{{user_id}}**",
-      ConfirmAddDeal: "تأكيد إضافة {{deal_title}} مقابل ({{deal_price}} جنيه) إلى الطلب؟",
+      ConfirmAddDeal:
+        "تأكيد إضافة {{deal_title}} مقابل ({{deal_price}} جنيه) إلى الطلب؟",
       PendingOrders: "الطلبات المعلقة",
       OtherCharge: "رسوم أخرى",
       Tax: "ضريبة",
       SubTotal: "المجموع الفرعي",
       Notes: "ملاحظات",
       //item
-      QuantityIncreased: "تم زيادة كمية \"{{name}}\" إلى {{quantity}}.",
-      UpdateFailed: "فشل في تحديث \"{{name}}\".",
-      ProductAdded: "\"{{name}}\" تمت إضافته بنجاح!",
-      SubmitFailed: "فشل في تقديم \"{{name}}\".",
-      ErrorLoadingData: "خطأ في تحميل البيانات. يرجى المحاولة مرة أخرى لاحقًا. تحقق من رمز المصادقة الخاص بك.",
+      QuantityIncreased: 'تم زيادة كمية "{{name}}" إلى {{quantity}}.',
+      UpdateFailed: 'فشل في تحديث "{{name}}".',
+      ProductAdded: '"{{name}}" تمت إضافته بنجاح!',
+      SubmitFailed: 'فشل في تقديم "{{name}}".',
+      ErrorLoadingData:
+        "خطأ في تحميل البيانات. يرجى المحاولة مرة أخرى لاحقًا. تحقق من رمز المصادقة الخاص بك.",
       SelectBranchToViewItems: "يرجى اختيار فرع لعرض العناصر.",
       TakeAway: "تيك واي ",
       SelectCategory: "اختر الفئة",
@@ -679,16 +785,17 @@ const resources = {
       Nocashiersavailable: "لا يوجد  كاشير متاح",
       ShowMore: "عرض المزيد",
       //shift
-      ShiftOpenedSuccessfully: "تم فتح الوردية بنجاح! جاري إعادة التوجيه إلى الصفحة الرئيسية...",
+      ShiftOpenedSuccessfully:
+        "تم فتح الوردية بنجاح! جاري إعادة التوجيه إلى الصفحة الرئيسية...",
       FailedToOpenShift: "فشل في فتح الوردية.",
       ShiftClosedSuccessfully: "تم إغلاق الوردية بنجاح!",
       FailedToCloseShift: "فشل في إغلاق الوردية",
-      ShiftStatus: 'حالة الوردية',
+      ShiftStatus: "حالة الوردية",
       CurrentlyOnShift: "أنت حاليًا في الوردية",
       UpForShift: "أنت على وشك بدء الوردية",
       TakeYourShift: "ابدأ ورديتك",
-      BackToWork: "العودة إلى العمل"
-      , OpenNewShift: "فتح وردية جديدة",
+      BackToWork: "العودة إلى العمل",
+      OpenNewShift: "فتح وردية جديدة",
       redirectingtohomein: "جارٍ إعادة التوجيه إلى الصفحة الرئيسية في",
       SelectProduct: "اختر المنتج",
       Description: "الوصف",
@@ -701,7 +808,8 @@ const resources = {
       Noaddressavailable: "لا يوجد عنوان متاح",
       AddAddress: "إضافة عنوان",
       ConfirmDelivery: "تأكيد التوصيل",
-      Pleasesearchbynameorphonetofindusers: "يرجى البحث بالاسم أو الهاتف للعثور على المستخدمين",
+      Pleasesearchbynameorphonetofindusers:
+        "يرجى البحث بالاسم أو الهاتف للعثور على المستخدمين",
       Edituser: "تعديل المستخدم",
       FirstName: "الاسم الأول",
       LastName: "اسم العائلة",
@@ -710,7 +818,6 @@ const resources = {
       AnotherPhone: "هاتف آخر",
       Phone: "الهاتف",
       SearchuserNameorPhone: "ابحث باسم المستخدم أو الهاتف",
-      //Delivery
       Nodescriptionavailable: "لا يوجد وصف متاح",
       Min: "الحد الأدنى",
       Max: "الحد الأقصى",
@@ -730,15 +837,18 @@ const resources = {
       Preorder: "طلب مسبق",
       Withorder: "مع الطلب",
       Reserved: "محجوز",
-      CannotTransferToSameTable: "لا يمكن النقل إلى نفس الطاولة. يرجى اختيار طاولة مختلفة.",
+      CannotTransferToSameTable:
+        "لا يمكن النقل إلى نفس الطاولة. يرجى اختيار طاولة مختلفة.",
       OrderTransferredSuccessfully: "تم نقل الطلب بنجاح!",
-      FailedtotransfertablePleasetryagain: "فشل في نقل الطاولة. يرجى المحاولة مرة أخرى.",
+      FailedtotransfertablePleasetryagain:
+        "فشل في نقل الطاولة. يرجى المحاولة مرة أخرى.",
       MergedTable: "طاولة مدمجة",
       Cap: "عدد",
       Source: "المصدر",
       Transferringorder: "جارٍ نقل الطلب...",
       Failedtoloadtables: "فشل في تحميل الطاولات",
-      Pleasecheckyournetworkconnectionortryagainlater: "يرجى التحقق من اتصال الشبكة أو المحاولة مرة أخرى لاحقًا",
+      Pleasecheckyournetworkconnectionortryagainlater:
+        "يرجى التحقق من اتصال الشبكة أو المحاولة مرة أخرى لاحقًا",
       SelectNewTableForTransfer: "اختر طاولة جديدة للنقل",
       DineInTables: "طاولات الصالة",
       NoTablesFound: "لم يتم العثور على طاولات لهذا الموقع.",
@@ -746,8 +856,10 @@ const resources = {
       NoCafeLocationsFound: "لم يتم العثور على مواقع مقاهي لهذا الفرع.",
       EnsureLocationsConfigured: "يرجى التأكد من تكوين المواقع في النظام.",
       SelectNewTableToTransferOrder: "يرجى اختيار طاولة جديدة لنقل الطلب.",
-      SelectTableToTransferFrom: "اختر طاولة لنقل الطلب من الطاولة {{sourceTableId}}.",
-      SelectTableToStartOrder: "اختر طاولة لبدء الطلب. الطاولات المدمجة مميزة باللون البنفسجي.",
+      SelectTableToTransferFrom:
+        "اختر طاولة لنقل الطلب من الطاولة {{sourceTableId}}.",
+      SelectTableToStartOrder:
+        "اختر طاولة لبدء الطلب. الطاولات المدمجة مميزة باللون البنفسجي.",
       ConfirmClearAllItems: "تأكيد مسح جميع العناصر",
       //DeliveryInfo
       DeliveryInformation: "معلومات التوصيل",
@@ -756,7 +868,8 @@ const resources = {
       PhoneNumber: "رقم الهاتف",
       DeliveryAddress: "عنوان التوصيل",
       Nouserinformationavailable: "لا توجد معلومات مستخدم متاحة ⚠️",
-      Pleaseselectacustomerfromthedeliverypage: "يرجى اختيار عميل من صفحة التوصيل",
+      Pleaseselectacustomerfromthedeliverypage:
+        "يرجى اختيار عميل من صفحة التوصيل",
       //constants
       Pending: "معلق",
       Waiting: "انتظار",
@@ -790,12 +903,10 @@ const resources = {
       Addressadded: "تمت إضافة العنوان",
       Useradded: "تمت إضافة المستخدم",
       successfully: "بنجاح",
-      //DeliveryAdd
       Operationfailed: "فشل العملية",
       FailedtosubmitPleasetryagain: "فشل في الإرسال. يرجى المحاولة مرة أخرى.",
       Unknownerror: "خطأ غير معروف",
-      AddAnotherAddressforUser
-        : "إضافة عنوان آخر للمستخدم",
+      AddAnotherAddressforUser: "إضافة عنوان آخر للمستخدم",
       AddNewDeliveryUser: "إضافة مستخدم توصيل جديد",
       EditDeliveryAddress: "تعديل عنوان التوصيل",
       AddressSelectionMode: "وضع اختيار العنوان",
@@ -832,7 +943,8 @@ const resources = {
       EditProfile: "تعديل الملف الشخصي",
       Imagesizemustbelessthan2MB: "يجب أن يكون حجم الصورة أقل من 2 ميجابايت",
       Usernameisrequired: "اسم المستخدم مطلوب",
-      Passwordmustbeatleast3characters: "يجب أن تكون كلمة المرور 3 أحرف على الأقل",
+      Passwordmustbeatleast3characters:
+        "يجب أن تكون كلمة المرور 3 أحرف على الأقل",
       Profileupdatedsuccessfully: "تم تحديث الملف الشخصي بنجاح",
       Inactive: "غير نشط",
       Active: "نشط",
@@ -882,8 +994,10 @@ const resources = {
       Adding: "جاري الإضافة...",
       VariationOutOfStock: "هذا الفاريشن غير متاح حالياً بالمخزن",
       ProductOutOfStock: "هذا المنتج غير متوفر بالمخزن حالياً",
-      VariationOutOfStockAlert: "هذا الفاريشن غير متوفر حالياً بالمخزن (الكمية 0) ولا يمكن إضافته للطلب.",
-      ProductOutOfStockAlert: "هذا المنتج غير متوفر حالياً بالمخزن (الكمية 0) ولا يمكن إضافته للطلب.",
+      VariationOutOfStockAlert:
+        "هذا الفاريشن غير متوفر حالياً بالمخزن (الكمية 0) ولا يمكن إضافته للطلب.",
+      ProductOutOfStockAlert:
+        "هذا المنتج غير متوفر حالياً بالمخزن (الكمية 0) ولا يمكن إضافته للطلب.",
       SearchVariations: "بحث في الفاريشن أو الكود...",
       AddVariation: "إضافة",
       SelectedVariations: "الفاريشن المختارة",
@@ -891,9 +1005,51 @@ const resources = {
       MaxStockReached: "تم الوصول للحد الأقصى للكمية المتاحة في المخزن",
       TotalItemsCount: "إجمالي: {{count}} قطع",
       ItemsSelected: "قطع مختارة",
+
+      // ============ Online Orders ============
+      Products: "المنتجات",
+      Destination: "الوجهة",
+      Warehouse: "المخزن",
+      OrderType: "نوع الطلب",
+      PaymentStatus: "حالة الدفع",
+      PaymentMethod: "طريقة الدفع",
+      PaymentGateway: "بوابة الدفع",
+      OrderSummary: "ملخص الطلب",
+      OrderStatus: "حالة الطلب",
+      CreatedDate: "تاريخ الإنشاء",
+      FulfillmentInformation: "معلومات التنفيذ",
+      PickupOrder: "طلب استلام من الفرع",
+      CustomerWillPickupFromWarehouse:
+        "العميل سيستلم هذا الطلب مباشرةً من المخزن المحدد.",
+      Pickup: "استلام",
+      BuildingNumber: "رقم المبنى",
+      FloorNumber: "رقم الدور",
+      ApartmentNumber: "رقم الشقة",
+      UniqueIdentifier: "معرّف فريد",
+      AddressDetails: "تفاصيل العنوان",
+      Subtotal: "المجموع الفرعي",
+      CouponDiscount: "خصم الكوبون",
+      ShippingPrice: "سعر الشحن",
+      TotalPriceAfterDiscount: "الإجمالي بعد الخصم",
+      UpdateOrderStatus: "تحديث حالة الطلب",
+      UpdateStatus: "تحديث الحالة",
+      StatusUpdatedSuccessfully: "تم تحديث الحالة بنجاح!",
+      FailedToUpdateStatus: "فشل في تحديث حالة الطلب.",
+      FailedToFetchOrders: "فشل في جلب الطلبات",
+      DeletedProduct: "منتج محذوف",
+      NoProducts: "لا توجد منتجات في هذا الطلب",
+      Code: "الكود",
+      NewStatus: "الحالة الجديدة",
+      SelectNewStatus: "اختر الحالة الجديدة...",
+      StatusDescription: "وصف الحالة",
+      StatusDescriptionPlaceholder: "أضف ملاحظة عن تغيير الحالة...",
+      Optional: "اختياري",
+      NoTransitionsAvailable: "لا توجد تغييرات متاحة لهذا الطلب.",
+      // ============ End Online Orders ============
     },
   },
 };
+
 i18n.use(initReactI18next).init({
   resources,
   lng: localStorage.getItem("language") || "en",
@@ -902,6 +1058,5 @@ i18n.use(initReactI18next).init({
     escapeValue: false,
   },
 });
-
 
 export default i18n;

@@ -15,12 +15,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getPrinters: () => ipcRenderer.invoke("get-printers"),
 
   // Printing
-  printHtml: (html, printerName) =>
-    ipcRenderer.invoke("print-html", { html, printerName }),
+  printHtml: (html, printerName, options = {}) =>
+    ipcRenderer.invoke("print-html", { html, printerName, ...options }),
 
   printReceiptImage: (html, printerName) =>
     ipcRenderer.invoke("print-html", { html, printerName }),
 
-  // Receipt width (يستخدمه الفرونت في مسطرة الاختبار)
+  // Receipt width
   getReceiptImageWidthPx: () => ipcRenderer.invoke("get-receipt-width-px"),
 });

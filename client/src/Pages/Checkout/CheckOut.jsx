@@ -74,15 +74,30 @@ const CheckOut = ({
   })();
 
   const { data: taxesData } = useGet("api/taxes");
-  const { data: nextInvoiceRes } = useGet("api/admin/pos/sales/next-invoice-number");
-  const nextInvoiceNumber = nextInvoiceRes?.data?.dailyOrderNumber || nextInvoiceRes?.dailyOrderNumber;
 
-  const [selectedDiscountId, setSelectedDiscountId] = useState(initialDiscountId);
+  // ✅ جلب الـ service fees من الـ API
+  const { data: serviceFeesData } = useGet("api/pos-home/service-fees");
+
+  const { data: nextInvoiceRes } = useGet(
+    "api/admin/pos/sales/next-invoice-number",
+  );
+  const nextInvoiceNumber =
+    nextInvoiceRes?.data?.dailyOrderNumber || nextInvoiceRes?.dailyOrderNumber;
+
+  const [selectedDiscountId, setSelectedDiscountId] =
+    useState(initialDiscountId);
   const [selectedTaxId, setSelectedTaxId] = useState(null);
   const [freeDiscount, setFreeDiscount] = useState(initialFreeDiscount);
-  const [appliedDiscount, setAppliedDiscount] = useState(initialAppliedDiscount);
+  const [appliedDiscount, setAppliedDiscount] = useState(
+    initialAppliedDiscount,
+  );
   const [discountCode, setDiscountCode] = useState(initialDiscountCode);
 
+  // ✅ حساب مجموع الـ service fees من الـ API
+  const serviceFeesTotal = useMemo(() => {
+    const fees = serviceFeesData?.data?.data || serviceFeesData?.data || [];
+    return fees.reduce((sum, fee) => sum + Number(fee.amount || 0), 0);
+  }, [serviceFeesData]);
 
   // === QZ Tray Connection ===
   useEffect(() => {
@@ -99,14 +114,14 @@ const CheckOut = ({
 
     // إعداد الهيدر للإرسال
     const authHeaders = {
-      "Authorization": `Bearer ${token}` // إضافة التوكين هنا
+      Authorization: `Bearer ${token}`, // إضافة التوكين هنا
     };
 
     // 2. إعداد الـ Certificate
     qz.security.setCertificatePromise(function (resolve, reject) {
       fetch(`${baseUrl}api/qztray/cert`, {
         method: "GET",
-        headers: authHeaders // <--- إرسال التوكين هنا
+        headers: authHeaders, // <--- إرسال التوكين هنا
       })
         .then((response) => {
           if (!response.ok) {
@@ -134,7 +149,7 @@ const CheckOut = ({
 
         fetch(apiUrl, {
           method: "GET",
-          headers: authHeaders // <--- إرسال التوكين هنا أيضاً
+          headers: authHeaders, // <--- إرسال التوكين هنا أيضاً
         })
           .then((response) => {
             if (!response.ok) {
@@ -163,7 +178,7 @@ const CheckOut = ({
         .catch((err) => {
           console.error("❌ QZ Tray connection error:", err);
           // تجاهل الخطأ إذا كان بسبب التكرار، لكن اعرضه إذا كان اتصالاً فعلياً
-          // toast.error(t("QZTrayNotRunning")); 
+          // toast.error(t("QZTrayNotRunning"));
         });
     }
 
@@ -191,13 +206,14 @@ const CheckOut = ({
 
   const searchResults = useMemo(() => {
     // استخرج الـ array من الشكل الجديد: { success, data: { message, data: [...] } }
-    const customers = dueUsersData?.data?.data || dueUsersData?.data?.dueCustomers || [];
-    return customers.filter((c) =>
-      c.name?.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
-      c.phone_number?.includes(customerSearchQuery)
+    const customers =
+      dueUsersData?.data?.data || dueUsersData?.data?.dueCustomers || [];
+    return customers.filter(
+      (c) =>
+        c.name?.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+        c.phone_number?.includes(customerSearchQuery),
     );
   }, [dueUsersData, customerSearchQuery]);
-
 
   // ──── حساب الخصم من الـ shared hook ────
   const {
@@ -207,7 +223,7 @@ const CheckOut = ({
     amountToPay,
     selectedDiscountId,
     appliedDiscount,
-    freeDiscount
+    freeDiscount,
   );
   // taxableAmount = discountedAmount (المبلغ بعد كل الخصومات)
   const taxableAmount = discountedAmount;
@@ -218,7 +234,9 @@ const CheckOut = ({
   const selectedTaxAmount = useMemo(() => {
     if (!selectedTaxId || !taxesData?.data?.taxes) return 0;
 
-    const selectedTax = taxesData.data.taxes.find(t => t._id === selectedTaxId);
+    const selectedTax = taxesData.data.taxes.find(
+      (t) => t._id === selectedTaxId,
+    );
     if (!selectedTax) return 0;
 
     console.log("Selected Tax raw amount:", selectedTax.amount);
@@ -228,7 +246,9 @@ const CheckOut = ({
       let rate = selectedTax.amount;
       if (rate <= 1) rate *= 100; // fix common admin mistake
       const taxValue = taxableAmount * (rate / 100);
-      console.log(`Calculated tax: ${taxValue} (from ${taxableAmount} × ${rate}%)`);
+      console.log(
+        `Calculated tax: ${taxValue} (from ${taxableAmount} × ${rate}%)`,
+      );
       return taxValue;
     } else {
       return selectedTax.amount;
@@ -238,7 +258,7 @@ const CheckOut = ({
   const requiredTotal = useMemo(() => {
     if (selectedPaymentItemIds.length > 0) {
       const selectedItems = orderItems.filter((item) =>
-        selectedPaymentItemIds.includes(item.temp_id)
+        selectedPaymentItemIds.includes(item.temp_id),
       );
       return selectedItems.reduce((acc, item) => {
         const quantity = item.count ?? item.quantity ?? 1;
@@ -257,11 +277,10 @@ const CheckOut = ({
   console.log("requiredTotal:", requiredTotal);
   console.log("Tax id selected:", selectedTaxId);
 
-
   const { totalScheduled, remainingAmount, changeAmount } = useMemo(() => {
     const sum = paymentSplits.reduce(
       (acc, split) => acc + (parseFloat(split.amount) || 0),
-      0
+      0,
     );
     const calculatedRemaining = requiredTotal - sum;
     const calculatedChange = sum - requiredTotal;
@@ -283,8 +302,14 @@ const CheckOut = ({
   const { accounts: fetchedAccounts } = usePosSelections();
 
   useEffect(() => {
-    if (fetchedAccounts?.length > 0 && !sessionStorage.getItem("financial_accounts")) {
-      sessionStorage.setItem("financial_accounts", JSON.stringify(fetchedAccounts));
+    if (
+      fetchedAccounts?.length > 0 &&
+      !sessionStorage.getItem("financial_accounts")
+    ) {
+      sessionStorage.setItem(
+        "financial_accounts",
+        JSON.stringify(fetchedAccounts),
+      );
     }
   }, [fetchedAccounts]);
 
@@ -334,7 +359,7 @@ const CheckOut = ({
       requiredTotal > 0
     ) {
       const visaAccount = financialAccounts.find((acc) =>
-        acc.name?.toLowerCase().includes("visa")
+        acc.name?.toLowerCase().includes("visa"),
       );
 
       const defaultAccountId = visaAccount
@@ -365,7 +390,7 @@ const CheckOut = ({
           return prev.map((split) =>
             split._id === "split-1"
               ? { ...split, amount: requiredTotal || 0 }
-              : split
+              : split,
           );
         }
         return prev;
@@ -405,7 +430,9 @@ const CheckOut = ({
           }
 
           setAppliedDiscount(discountValue);
-          toast.success(t("DiscountAppliedSuccess", { appliedDiscount: couponData.amount }));
+          toast.success(
+            t("DiscountAppliedSuccess", { appliedDiscount: couponData.amount }),
+          );
         }
       } else {
         // عرض الرسالة من الباك إند في حالة success: false
@@ -416,9 +443,10 @@ const CheckOut = ({
     } catch (e) {
       // جلب رسالة الخطأ المخصصة "Coupon not found" من الـ catch
       // الباك إند باعتها في e.response.data.error.message
-      const backendError = e.response?.data?.error?.message
-        || e.response?.data?.message
-        || e.message;
+      const backendError =
+        e.response?.data?.error?.message ||
+        e.response?.data?.message ||
+        e.message;
 
       setAppliedDiscount(0);
       setDiscountError(backendError);
@@ -438,19 +466,19 @@ const CheckOut = ({
     setPaymentSplits((prevSplits) => {
       const totalExcludingCurrent = prevSplits.reduce(
         (acc, s) => (s._id === _id ? acc : acc + s.amount),
-        0
+        0,
       );
       const maxAllowed = requiredTotal - totalExcludingCurrent;
 
       if (newAmount > maxAllowed) {
         toast.error(t("AmountExceedsLimit", { amount: maxAllowed.toFixed(2) }));
         return prevSplits.map((split) =>
-          split._id === _id ? { ...split, amount: maxAllowed } : split
+          split._id === _id ? { ...split, amount: maxAllowed } : split,
         );
       }
 
       return prevSplits.map((split) =>
-        split._id === _id ? { ...split, amount: newAmount } : split
+        split._id === _id ? { ...split, amount: newAmount } : split,
       );
     });
   };
@@ -460,29 +488,29 @@ const CheckOut = ({
       prev.map((split) =>
         split._id === _id
           ? {
-            ...split,
-            account_id: accountId,
-            checkout: "",
-            transition_id: "",
-          }
-          : split
-      )
+              ...split,
+              account_id: accountId,
+              checkout: "",
+              transition_id: "",
+            }
+          : split,
+      ),
     );
   };
 
   const handleDescriptionChange = (_id, value) => {
     setPaymentSplits((prev) =>
       prev.map((split) =>
-        split._id === _id ? { ...split, checkout: value } : split
-      )
+        split._id === _id ? { ...split, checkout: value } : split,
+      ),
     );
   };
 
   const handleTransitionIdChange = (_id, value) => {
     setPaymentSplits((prev) =>
       prev.map((split) =>
-        split._id === _id ? { ...split, transition_id: value } : split
-      )
+        split._id === _id ? { ...split, transition_id: value } : split,
+      ),
     );
   };
 
@@ -526,7 +554,7 @@ const CheckOut = ({
     Due = 0,
     customer_id = undefined,
     dueModuleValue = 0,
-    forcedPassword = null
+    forcedPassword = null,
   ) => {
     const freeDiscountValue = parseFloat(freeDiscount) || 0;
 
@@ -543,7 +571,10 @@ const CheckOut = ({
     const safeOrderItems = Array.isArray(orderItems) ? orderItems : [];
     const hasDealItems = safeOrderItems.some((item) => item.is_deal);
     const endpoint = getOrderEndpoint(null, safeOrderItems, hasDealItems);
-    const financialsPayload = buildFinancialsPayload(paymentSplits, financialAccounts);
+    const financialsPayload = buildFinancialsPayload(
+      paymentSplits,
+      financialAccounts,
+    );
 
     const moduleId = sessionStorage.getItem("module_id");
 
@@ -555,9 +586,10 @@ const CheckOut = ({
         orderItems: safeOrderItems,
         amountToPay: requiredTotal,
         order_tax,
-        totalDiscount: appliedDiscount > 0
-          ? amountToPay * (appliedDiscount / 100)
-          : totalDiscount,
+        totalDiscount:
+          appliedDiscount > 0
+            ? amountToPay * (appliedDiscount / 100)
+            : totalDiscount,
         notes: orderNotes.trim() || "No special instructions",
         financialsPayload,
         cashierId,
@@ -599,6 +631,7 @@ const CheckOut = ({
 
         if (Due === 0) {
           // طلب عادي (مش آجل)
+          // ✅ بنبعت selectedTaxAmount و serviceFeesTotal للـ prepareReceiptData
           const receiptData = prepareReceiptData(
             safeOrderItems,
             amountToPay,
@@ -609,7 +642,9 @@ const CheckOut = ({
             null,
             requiredTotal,
             response.success,
-            { ...response, nextInvoiceNumber}
+            { ...response, nextInvoiceNumber },
+            selectedTaxAmount, // ✅ tax من الـ frontend
+            serviceFeesTotal, // ✅ service fees من الـ API
           );
 
           if (shouldPrintReceipt) {
@@ -621,7 +656,9 @@ const CheckOut = ({
           } else {
             // بدون طباعة
             completeOrder();
-            toast.success(t("OrderCompletedSuccessfully") + " (" + t("NoPrint") + ")");
+            toast.success(
+              t("OrderCompletedSuccessfully") + " (" + t("NoPrint") + ")",
+            );
           }
         } else {
           // طلب آجل → بدون طباعة عادةً
@@ -644,8 +681,8 @@ const CheckOut = ({
       toast.info(
         t("CustomerCurrentDue", {
           current: customer.amount_Due.toFixed(2),
-          new: newTotalDue.toFixed(2)
-        })
+          new: newTotalDue.toFixed(2),
+        }),
       );
     }
 
@@ -657,13 +694,13 @@ const CheckOut = ({
   const handleSubmitOrder = async () => {
     if (!isTotalMet || totalScheduled === 0) {
       return toast.error(
-        t("TotalMustEqual", { amount: requiredTotal.toFixed(2) })
+        t("TotalMustEqual", { amount: requiredTotal.toFixed(2) }),
       );
     }
 
     const validation = validatePaymentSplits(
       paymentSplits,
-      getDescriptionStatus
+      getDescriptionStatus,
     );
     if (!validation.valid) {
       return toast.error(validation.error);
@@ -749,7 +786,9 @@ const CheckOut = ({
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-3">
           <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-semibold text-gray-800">{t("Checkout") || "Checkout"}</h2>
+            <h2 className="text-2xl font-semibold text-gray-800">
+              {t("Checkout") || "Checkout"}
+            </h2>
             {nextInvoiceNumber && (
               <span className="px-2.5 py-1 text-xs sm:text-sm font-bold bg-[#8B2635]/10 text-[#8B2635] rounded-lg border border-[#8B2635]/20">
                 #{nextInvoiceNumber}
@@ -765,7 +804,6 @@ const CheckOut = ({
         </div>
 
         <div className="px-4 sm:px-6 pb-6 overflow-y-auto flex-1">
-
           {/* Payment Method Cards - Row 1 */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 mb-3">
             {mainAccounts.map((acc) => (
@@ -773,13 +811,16 @@ const CheckOut = ({
                 key={acc._id}
                 onClick={() => handleCardSelect(String(acc._id))}
                 className={`flex flex-col items-center justify-center gap-1 rounded-xl border-2 py-4 px-2 transition-all
-                  ${isCardSelected(acc._id)
-                    ? "border-[#8B2635] bg-red-50 text-[#8B2635]"
-                    : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                  ${
+                    isCardSelected(acc._id)
+                      ? "border-[#8B2635] bg-red-50 text-[#8B2635]"
+                      : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
                   }`}
               >
                 <span className="text-2xl">{getAccountIcon(acc.name)}</span>
-                <span className="text-xs font-medium text-center leading-tight">{acc.name}</span>
+                <span className="text-xs font-medium text-center leading-tight">
+                  {acc.name}
+                </span>
               </button>
             ))}
           </div>
@@ -791,13 +832,16 @@ const CheckOut = ({
                 key={acc._id}
                 onClick={() => handleCardSelect(String(acc._id))}
                 className={`flex flex-col items-center justify-center gap-1 rounded-xl border-2 py-4 px-2 transition-all
-                  ${isCardSelected(acc._id)
-                    ? "border-[#8B2635] bg-red-50 text-[#8B2635]"
-                    : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                  ${
+                    isCardSelected(acc._id)
+                      ? "border-[#8B2635] bg-red-50 text-[#8B2635]"
+                      : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50"
                   }`}
               >
                 <span className="text-2xl">{getAccountIcon(acc.name)}</span>
-                <span className="text-xs font-medium text-center leading-tight">{acc.name}</span>
+                <span className="text-xs font-medium text-center leading-tight">
+                  {acc.name}
+                </span>
               </button>
             ))}
 
@@ -805,9 +849,10 @@ const CheckOut = ({
             <button
               onClick={() => handleCardSelect("due")}
               className={`flex flex-col items-center justify-center gap-1 rounded-xl border-2 py-4 px-2 transition-all
-                ${isDueOrder
-                  ? "border-orange-500 bg-orange-50 text-orange-600"
-                  : "border-gray-200 bg-white text-orange-500 hover:border-orange-300 hover:bg-orange-50"
+                ${
+                  isDueOrder
+                    ? "border-orange-500 bg-orange-50 text-orange-600"
+                    : "border-gray-200 bg-white text-orange-500 hover:border-orange-300 hover:bg-orange-50"
                 }`}
             >
               <span className="text-2xl">🕐</span>
@@ -818,41 +863,54 @@ const CheckOut = ({
             <button
               onClick={() => handleCardSelect("split")}
               className={`flex flex-col items-center justify-center gap-1 rounded-xl border-2 py-4 px-2 transition-all
-                ${paymentSplits.length > 1
-                  ? "border-blue-500 bg-blue-50 text-blue-600"
-                  : "border-gray-200 bg-white text-blue-500 hover:border-blue-300 hover:bg-blue-50"
+                ${
+                  paymentSplits.length > 1
+                    ? "border-blue-500 bg-blue-50 text-blue-600"
+                    : "border-gray-200 bg-white text-blue-500 hover:border-blue-300 hover:bg-blue-50"
                 }`}
             >
               <span className="text-2xl">🔀</span>
-              <span className="text-xs font-medium">{t("Split") || "Split"}</span>
+              <span className="text-xs font-medium">
+                {t("Split") || "Split"}
+              </span>
             </button>
           </div>
 
           {/* Split Payment Details */}
           {paymentSplits.length > 1 && (
             <div className="mb-4 space-y-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
-              <p className="text-sm font-semibold text-gray-600">{t("PaymentDetails") || "Payment Details"}</p>
+              <p className="text-sm font-semibold text-gray-600">
+                {t("PaymentDetails") || "Payment Details"}
+              </p>
               {paymentSplits.map((split, idx) => (
                 <div key={split._id} className="flex items-center gap-2">
                   <span className="text-xs text-gray-500 w-5">#{idx + 1}</span>
                   <div className="flex-1 min-w-0">
                     <select
                       value={String(split.account_id)}
-                      onChange={(e) => handleAccountChange(split._id, e.target.value)}
+                      onChange={(e) =>
+                        handleAccountChange(split._id, e.target.value)
+                      }
                       className="w-full text-xs border border-gray-300 rounded-lg px-2 py-1.5 bg-white"
                     >
                       {financialAccounts.map((acc) => (
-                        <option key={acc._id} value={String(acc._id)}>{acc.name}</option>
+                        <option key={acc._id} value={String(acc._id)}>
+                          {acc.name}
+                        </option>
                       ))}
                     </select>
                   </div>
                   <div className="flex-1 relative">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">{t("EGP")}</span>
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">
+                      {t("EGP")}
+                    </span>
                     <input
                       type="number"
                       min="0"
                       value={split.amount === 0 ? "" : String(split.amount)}
-                      onChange={(e) => handleAmountChange(split._id, e.target.value)}
+                      onChange={(e) =>
+                        handleAmountChange(split._id, e.target.value)
+                      }
                       className="w-full pl-10 pr-2 py-1.5 text-sm border border-gray-300 rounded-lg"
                     />
                   </div>
@@ -878,38 +936,56 @@ const CheckOut = ({
           )}
 
           {/* Visa Transaction ID */}
-          {paymentSplits.length === 1 && isVisaAccount(paymentSplits[0]?.account_id) && (
-            <div className="mb-4 flex items-center gap-2">
-              <label className="text-sm text-gray-600 whitespace-nowrap">{t("TransactionID")}:</label>
-              <input
-                type="text"
-                placeholder={t("EnterTransactionID")}
-                value={paymentSplits[0]?.transition_id || ""}
-                onChange={(e) => handleTransitionIdChange(paymentSplits[0]._id, e.target.value)}
-                className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg"
-              />
-            </div>
-          )}
+          {paymentSplits.length === 1 &&
+            isVisaAccount(paymentSplits[0]?.account_id) && (
+              <div className="mb-4 flex items-center gap-2">
+                <label className="text-sm text-gray-600 whitespace-nowrap">
+                  {t("TransactionID")}:
+                </label>
+                <input
+                  type="text"
+                  placeholder={t("EnterTransactionID")}
+                  value={paymentSplits[0]?.transition_id || ""}
+                  onChange={(e) =>
+                    handleTransitionIdChange(
+                      paymentSplits[0]._id,
+                      e.target.value,
+                    )
+                  }
+                  className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                />
+              </div>
+            )}
 
           {/* Description field */}
-          {paymentSplits.length === 1 && getDescriptionStatus(paymentSplits[0]?.account_id) && (
-            <div className="mb-4">
-              <input
-                type="text"
-                placeholder="Last 4 digits"
-                value={paymentSplits[0]?.checkout || ""}
-                onChange={(e) => handleDescriptionChange(paymentSplits[0]._id, e.target.value)}
-                maxLength={4}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-              />
-            </div>
-          )}
+          {paymentSplits.length === 1 &&
+            getDescriptionStatus(paymentSplits[0]?.account_id) && (
+              <div className="mb-4">
+                <input
+                  type="text"
+                  placeholder="Last 4 digits"
+                  value={paymentSplits[0]?.checkout || ""}
+                  onChange={(e) =>
+                    handleDescriptionChange(
+                      paymentSplits[0]._id,
+                      e.target.value,
+                    )
+                  }
+                  maxLength={4}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                />
+              </div>
+            )}
 
           {/* Amount by Customer */}
           <div className="mb-3">
-            <label className="block text-sm text-gray-600 mb-1">{t("AmountPaidByCustomer") || "Amount by Customer"}</label>
+            <label className="block text-sm text-gray-600 mb-1">
+              {t("AmountPaidByCustomer") || "Amount by Customer"}
+            </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">{t("EGP")}</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">
+                {t("EGP")}
+              </span>
               <input
                 type="number"
                 min="0"
@@ -930,14 +1006,20 @@ const CheckOut = ({
           {isDueModuleAllowed && remainingAmount > 0.01 && (
             <div className="mb-3 p-3 bg-purple-50 border border-purple-200 rounded-xl">
               <p className="text-sm font-bold text-purple-600 text-center mb-2">
-                Due Module: <strong>{remainingAmount.toFixed(2)} {t("EGP")}</strong>
+                Due Module:{" "}
+                <strong>
+                  {remainingAmount.toFixed(2)} {t("EGP")}
+                </strong>
               </p>
               <Button
                 className="w-full text-white bg-purple-600 hover:bg-purple-700"
                 disabled={loading}
-                onClick={() => proceedWithOrderSubmission(0, undefined, remainingAmount)}
+                onClick={() =>
+                  proceedWithOrderSubmission(0, undefined, remainingAmount)
+                }
               >
-                {t("ConfirmWithDueModule") || `Confirm (${remainingAmount.toFixed(2)} ${t("EGP")})`}
+                {t("ConfirmWithDueModule") ||
+                  `Confirm (${remainingAmount.toFixed(2)} ${t("EGP")})`}
               </Button>
             </div>
           )}
@@ -947,20 +1029,34 @@ const CheckOut = ({
             <div className="mb-3 p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm space-y-1">
               {appliedDiscount > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-gray-600">{t("Discount")} ({appliedDiscount}%)</span>
-                  <span className="text-red-500">-{(amountToPay * (appliedDiscount / 100)).toFixed(2)} {t("EGP")}</span>
+                  <span className="text-gray-600">
+                    {t("Discount")} ({appliedDiscount}%)
+                  </span>
+                  <span className="text-red-500">
+                    -{(amountToPay * (appliedDiscount / 100)).toFixed(2)}{" "}
+                    {t("EGP")}
+                  </span>
                 </div>
               )}
-              {appliedDiscount === 0 && totalDiscountValue > (parseFloat(freeDiscount) || 0) && (
-                <div className="flex justify-between text-blue-600">
-                  <span>{t("ListDiscount")}</span>
-                  <span>-{(totalDiscountValue - (parseFloat(freeDiscount) || 0)).toFixed(2)} {t("EGP")}</span>
-                </div>
-              )}
+              {appliedDiscount === 0 &&
+                totalDiscountValue > (parseFloat(freeDiscount) || 0) && (
+                  <div className="flex justify-between text-blue-600">
+                    <span>{t("ListDiscount")}</span>
+                    <span>
+                      -
+                      {(
+                        totalDiscountValue - (parseFloat(freeDiscount) || 0)
+                      ).toFixed(2)}{" "}
+                      {t("EGP")}
+                    </span>
+                  </div>
+                )}
               {freeDiscount && parseFloat(freeDiscount) > 0 && (
                 <div className="flex justify-between text-purple-600">
                   <span>{t("FreeDiscount")}</span>
-                  <span>-{parseFloat(freeDiscount).toFixed(2)} {t("EGP")}</span>
+                  <span>
+                    -{parseFloat(freeDiscount).toFixed(2)} {t("EGP")}
+                  </span>
                 </div>
               )}
             </div>
@@ -1016,7 +1112,7 @@ const CheckOut = ({
             isDueOrder ? 1 : 0,
             selectedCustomer?._id,
             remainingAmount > 0.01 && isDueModuleAllowed ? remainingAmount : 0,
-            password
+            password,
           );
         }}
       />

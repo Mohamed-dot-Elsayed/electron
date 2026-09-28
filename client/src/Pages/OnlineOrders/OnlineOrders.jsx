@@ -12,8 +12,6 @@ import {
   ChevronRight,
   X,
   Loader2,
-  CheckCircle,
-  AlertCircle,
   CreditCard,
   Building,
   Truck,
@@ -22,7 +20,7 @@ import {
   Wifi,
 } from "lucide-react";
 import { useGet } from "@/Hooks/useGet";
-import { usePut } from "@/Hooks/usePut"; // Imported custom usePut hook[cite: 10]
+import { usePut } from "@/Hooks/usePut";
 
 export default function OnlineOrders() {
   const [orders, setOrders] = useState([]);
@@ -32,8 +30,8 @@ export default function OnlineOrders() {
 
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [newStatusValue, setNewStatusValue] = useState("");
+  const [statusDescription, setStatusDescription] = useState("");
 
-  // Initialize the usePut hook for status updating[cite: 10]
   const { putData, loading: isUpdatingStatus } = usePut();
 
   const { t, i18n } = useTranslation();
@@ -66,26 +64,46 @@ export default function OnlineOrders() {
     }
   }, [data, error, t]);
 
-  // Synchronize local select state whenever selectedOrder changes
+  // Sync local status select state
   useEffect(() => {
     if (selectedOrder) {
-      setNewStatusValue(selectedOrder.status || "pending");
+      setNewStatusValue(selectedOrder.status || "processing");
+      setStatusDescription(selectedOrder.statusDescription || "");
     }
   }, [selectedOrder]);
 
-  const orderStatuses = [
-    "pending",
-    "confirmed",
+  // ✅ الحالات اللي بتتعرض في الفلتر (بتشمل processing للعرض)
+  const filterStatuses = [
     "processing",
+    "confirmed",
     "out_for_delivery",
     "delivered",
     "returned",
     "failed_to_deliver",
     "canceled",
     "scheduled",
-    "refund",
-    "rejected",
   ];
+
+  // ✅ تحديد الحالات المتاحة حسب الحالة الحالية
+  const getAvailableStatuses = (currentStatus) => {
+    const transitions = {
+      processing: ["confirmed", "canceled", "scheduled"],
+      confirmed: [
+        "out_for_delivery",
+        "delivered",
+        "failed_to_deliver",
+        "returned",
+      ],
+      out_for_delivery: ["delivered", "failed_to_deliver", "returned"],
+      delivered: ["returned"],
+      scheduled: ["confirmed", "canceled"],
+      canceled: [],
+      returned: [],
+      failed_to_deliver: [],
+    };
+
+    return transitions[currentStatus] || [];
+  };
 
   useEffect(() => {
     let filtered = Array.isArray(orders) ? orders : [];
@@ -140,21 +158,55 @@ export default function OnlineOrders() {
     });
   };
 
-  // Handler for updating order status using the usePut hook[cite: 10]
+  // ✅ build variant label (زي "Color: Red / Size: XL")
+  const buildVariantLabel = (variant) => {
+    if (!variant?.options?.length) return null;
+
+    return variant.options
+      .map((opt) => {
+        const variationName = isArabic
+          ? opt.ar_variationName || opt.variationName
+          : opt.variationName;
+        return variationName
+          ? `${variationName}: ${opt.optionName}`
+          : opt.optionName;
+      })
+      .join(" / ");
+  };
+
+  // ✅ helper: يجيب أول منتج من الأوردر
+  const getFirstItem = (order) => {
+    const item = order?.cartItems?.[0];
+    if (!item) return { product: null, variant: null, quantity: 0, price: 0 };
+    return {
+      product: item.product,
+      variant: item.variant,
+      quantity: item.quantity || 0,
+      price: item.price || item.product?.price || 0,
+    };
+  };
+
+  // Handler for updating order status
   const handleUpdateStatus = async () => {
     if (!selectedOrder || isUpdatingStatus) return;
 
     try {
       await putData(`api/online-order/${selectedOrder._id}/status`, {
         status: newStatusValue,
+        statusDescription: statusDescription || undefined,
       });
 
-      // Update local states seamlessly
       const updatedOrders = orders.map((o) =>
-        o._id === selectedOrder._id ? { ...o, status: newStatusValue } : o,
+        o._id === selectedOrder._id
+          ? { ...o, status: newStatusValue, statusDescription }
+          : o,
       );
       setOrders(updatedOrders);
-      setSelectedOrder((prev) => ({ ...prev, status: newStatusValue }));
+      setSelectedOrder((prev) => ({
+        ...prev,
+        status: newStatusValue,
+        statusDescription,
+      }));
 
       toast.success(
         t("StatusUpdatedSuccessfully") || "Status updated successfully!",
@@ -169,8 +221,6 @@ export default function OnlineOrders() {
   if (isLoading) return <Loading />;
 
   const safeList = Array.isArray(filteredOrders) ? filteredOrders : [];
-  const firstCartItem = selectedOrder?.cartItems?.[0];
-  const productData = firstCartItem?.product;
 
   return (
     <div
@@ -189,14 +239,15 @@ export default function OnlineOrders() {
           </p>
         </div>
 
-        {/* Internet Connection Notice */}
         <div className="flex items-center gap-3 bg-amber-50/90 border border-amber-200/90 text-amber-900 px-4 py-2.5 rounded-xl shadow-xs max-w-md">
           <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600">
             <Wifi className="w-4 h-4" />
           </div>
           <div className="text-xs sm:text-sm leading-snug">
             <span className="font-bold text-amber-950 block">
-              {isArabic ? "تنبيه اتصال الإنترنت:" : "Internet Connection Notice:"}
+              {isArabic
+                ? "تنبيه اتصال الإنترنت:"
+                : "Internet Connection Notice:"}
             </span>
             <span className="text-amber-800">
               {isArabic
@@ -216,7 +267,7 @@ export default function OnlineOrders() {
               type="text"
               placeholder={
                 t("SearchByOrderNumber") ||
-                "Search by order ID, city, or address..."
+                "Search by product, city, or address..."
               }
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -232,7 +283,7 @@ export default function OnlineOrders() {
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-bg-primary focus:border-transparent appearance-none"
             >
               <option value="all">{t("AllStatuses") || "All Statuses"}</option>
-              {orderStatuses.map((status) => (
+              {filterStatuses.map((status) => (
                 <option key={status} value={status}>
                   {t(status) || status.replace(/_/g, " ")}
                 </option>
@@ -251,7 +302,7 @@ export default function OnlineOrders() {
                 <th
                   className={`px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider ${isArabic ? "text-right" : "text-left"}`}
                 >
-                  {t("OrderNumber") || "Order #"}
+                  {t("Product") || "Product"}
                 </th>
                 <th
                   className={`px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider ${isArabic ? "text-right" : "text-left"}`}
@@ -287,8 +338,8 @@ export default function OnlineOrders() {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {safeList.map((order) => {
-                const firstProduct = order.cartItems?.[0]?.product;
-                const productName = firstProduct?.name || "Deleted Product";
+                const { product, variant, quantity } = getFirstItem(order);
+                const variantLabel = buildVariantLabel(variant);
 
                 return (
                   <tr
@@ -296,12 +347,32 @@ export default function OnlineOrders() {
                     onClick={() => setSelectedOrder(order)}
                     className="hover:bg-gray-50 transition-colors cursor-pointer"
                   >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <Package className="w-4 h-4 text-gray-400 mr-2" />
-                        <span className="text-sm font-medium text-blue-600 hover:underline truncate max-w-[140px]">
-                          {productName}
-                        </span>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        {product?.image ? (
+                          <img
+                            src={product.image}
+                            alt={product.name}
+                            className="w-12 h-12 rounded-lg object-cover border border-gray-200 flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                            <Package className="w-5 h-5 text-gray-400" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-gray-900 truncate max-w-[180px]">
+                            {product?.name || "Deleted Product"}
+                          </div>
+                          {variantLabel && (
+                            <div className="text-xs text-gray-500 truncate max-w-[180px]">
+                              {variantLabel}
+                            </div>
+                          )}
+                          <div className="text-xs text-gray-400">
+                            × {quantity}
+                          </div>
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -330,7 +401,7 @@ export default function OnlineOrders() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center text-sm font-medium text-gray-900">
+                      <div className="text-sm font-medium text-gray-900">
                         {order.totalPriceAfterDiscount != null
                           ? Number(order.totalPriceAfterDiscount).toFixed(2)
                           : Number(order.totalOrderPrice || 0).toFixed(2)}{" "}
@@ -377,8 +448,8 @@ export default function OnlineOrders() {
       {/* Mobile Cards */}
       <div className="md:hidden space-y-4">
         {safeList.map((order) => {
-          const firstProduct = order.cartItems?.[0]?.product;
-          const productName = firstProduct?.name || "Deleted Product";
+          const { product, variant, quantity } = getFirstItem(order);
+          const variantLabel = buildVariantLabel(variant);
 
           return (
             <div
@@ -386,39 +457,57 @@ export default function OnlineOrders() {
               onClick={() => setSelectedOrder(order)}
               className="bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow cursor-pointer"
             >
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <div className="flex items-center mb-1">
-                    <Package className="w-4 h-4 text-gray-400 mr-2" />
-                    <span className="font-semibold text-blue-600 truncate max-w-[140px]">
-                      {productName}
+              <div className="flex gap-3 mb-3">
+                {product?.image ? (
+                  <img
+                    src={product.image}
+                    alt={product.name}
+                    className="w-16 h-16 rounded-lg object-cover border border-gray-200 flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                    <Package className="w-6 h-6 text-gray-400" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold text-gray-900 truncate">
+                        {product?.name || "Deleted Product"}
+                      </div>
+                      {variantLabel && (
+                        <div className="text-xs text-gray-500 truncate">
+                          {variantLabel}
+                        </div>
+                      )}
+                      <div className="text-xs text-gray-400">× {quantity}</div>
+                    </div>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border flex-shrink-0 ${getStatusColor(order.status)}`}
+                    >
+                      {t(order.status) || order.status?.replace(/_/g, " ")}
                     </span>
                   </div>
-                  <div className="text-sm text-gray-600">
+                  <div className="text-xs text-gray-600 mt-1">
                     {order.shippingAddress
                       ? `${order.shippingAddress.city}, ${order.shippingAddress.zone}`
                       : "Pickup"}
                   </div>
                 </div>
-                <span
-                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(order.status)}`}
-                >
-                  {t(order.status) || order.status?.replace(/_/g, " ")}
-                </span>
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-sm mb-3">
-                <div className="flex items-center text-gray-600">
-                  <span className="font-medium">
-                    {order.totalPriceAfterDiscount != null
-                      ? Number(order.totalPriceAfterDiscount).toFixed(2)
-                      : Number(order.totalOrderPrice || 0).toFixed(2)}{" "}
-                    EGP
-                  </span>
+                <div className="flex items-center text-gray-700 font-medium">
+                  {order.totalPriceAfterDiscount != null
+                    ? Number(order.totalPriceAfterDiscount).toFixed(2)
+                    : Number(order.totalOrderPrice || 0).toFixed(2)}{" "}
+                  EGP
                 </div>
                 <div className="flex items-center text-gray-600">
                   <MapPin className="w-4 h-4 text-gray-400 mr-1" />
-                  <span>{order.warehouse?.name || "N/A"}</span>
+                  <span className="truncate">
+                    {order.warehouse?.name || "N/A"}
+                  </span>
                 </div>
               </div>
 
@@ -443,7 +532,7 @@ export default function OnlineOrders() {
         )}
       </div>
 
-      {/* Modern Professional Order Details Modal */}
+      {/* Order Details Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
           <div
@@ -451,57 +540,49 @@ export default function OnlineOrders() {
             onClick={() => setSelectedOrder(null)}
           />
 
-          <div className="relative bg-white w-full max-w-2xl rounded-[24px] shadow-2xl overflow-hidden z-10 my-8 flex flex-col max-h-[90vh] border border-gray-100">
-            {/* Top Header / Hero Image Section */}
-            <div className="relative w-full h-56 bg-gray-100 overflow-hidden flex-shrink-0">
-              {productData?.image ? (
-                <img
-                  src={productData.image}
-                  alt={productData?.name || "Product"}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 text-gray-400">
-                  <Package className="w-16 h-16 mb-2 text-gray-300" />
-                  <span className="text-sm font-medium">
-                    {t("NoImageAvailable") || "No Image Available"}
-                  </span>
-                </div>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-
+          <div className="relative bg-white w-full max-w-3xl rounded-[24px] shadow-2xl overflow-hidden z-10 my-8 flex flex-col max-h-[90vh] border border-gray-100">
+            {/* Header */}
+            <div className="relative w-full bg-gradient-to-r from-blue-600 to-indigo-700 px-6 py-5 flex-shrink-0">
               <button
                 onClick={() => setSelectedOrder(null)}
-                className="absolute top-4 right-4 w-10 h-10 bg-white/80 hover:bg-white backdrop-blur-md rounded-full flex items-center justify-center text-gray-700 shadow-lg transition-transform hover:scale-105"
+                className="absolute top-4 right-4 w-9 h-9 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-full flex items-center justify-center text-white shadow-lg transition-all"
                 aria-label="Close modal"
               >
                 <X className="w-5 h-5" />
               </button>
 
-              <div className="absolute bottom-4 left-6 right-6 flex justify-between items-end text-white">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                  <Package className="w-5 h-5 text-white" />
+                </div>
                 <div>
-                  <h2 className="text-xl md:text-2xl font-bold truncate drop-shadow-md">
-                    {productData?.name ||
-                      t("DeletedProduct") ||
-                      "Deleted Product"}
+                  <h2 className="text-lg md:text-xl font-bold text-white">
+                    {t("OrderDetails") || "Order Details"}
                   </h2>
-                  <p className="text-xs text-gray-200 mt-0.5">
+                  <p className="text-xs text-blue-100 mt-0.5">
                     ID: {selectedOrder._id}
                   </p>
                 </div>
-                <div className="flex gap-2">
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md shadow-sm ${getStatusColor(selectedOrder.status)}`}
-                  >
-                    {t(selectedOrder.status) ||
-                      selectedOrder.status?.replace(/_/g, " ")}
+              </div>
+
+              <div className="mt-3 flex gap-2">
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md shadow-sm ${getStatusColor(selectedOrder.status)}`}
+                >
+                  {t(selectedOrder.status) ||
+                    selectedOrder.status?.replace(/_/g, " ")}
+                </span>
+                {selectedOrder.previousStatus && (
+                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-white/15 text-white border border-white/20">
+                    ← {selectedOrder.previousStatus}
                   </span>
-                </div>
+                )}
               </div>
             </div>
 
-            {/* Scrollable Modal Body */}
+            {/* Body */}
             <div className="p-6 overflow-y-auto space-y-6 flex-grow">
+              {/* Info Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 flex flex-col">
                   <span className="text-xs text-gray-400 font-medium mb-1">
@@ -536,59 +617,101 @@ export default function OnlineOrders() {
                 </div>
               </div>
 
-              {/* Product Information Card */}
+              {/* ✅ Products Section (كل الـ cartItems) */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
                 <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
                   <Package className="w-4 h-4 text-blue-600" />
-                  {t("ProductInformation") || "Product Information"}
+                  {t("Products") || "Products"} (
+                  {selectedOrder.cartItems?.length || 0})
                 </h3>
-                <div className="divide-y divide-gray-100 text-sm">
-                  <div className="flex justify-between py-2">
-                    <span className="text-gray-500">
-                      {t("ProductName") || "Product Name"}
-                    </span>
-                    <span className="font-medium text-gray-900">
-                      {productData?.name ||
-                        t("DeletedProduct") ||
-                        "Deleted Product"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-2">
-                    <span className="text-gray-500">
-                      {t("UnitPrice") || "Unit Price"}
-                    </span>
-                    <span className="font-medium text-gray-900">
-                      {Number(
-                        productData?.price ?? firstCartItem?.price ?? 0,
-                      ).toFixed(2)}{" "}
-                      EGP
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-2">
-                    <span className="text-gray-500">
-                      {t("Quantity") || "Quantity"}
-                    </span>
-                    <span className="font-medium text-gray-900">
-                      {firstCartItem?.quantity || 1}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-2">
-                    <span className="text-gray-500">
-                      {t("ItemTotal") || "Item Total"}
-                    </span>
-                    <span className="font-bold text-gray-900">
-                      {(
-                        Number(
-                          productData?.price ?? firstCartItem?.price ?? 0,
-                        ) * (firstCartItem?.quantity || 1)
-                      ).toFixed(2)}{" "}
-                      EGP
-                    </span>
-                  </div>
+
+                <div className="space-y-3">
+                  {(selectedOrder.cartItems || []).map((item, idx) => {
+                    const variantLabel = buildVariantLabel(item.variant);
+                    const unitPrice = Number(
+                      item.price ?? item.product?.price ?? 0,
+                    );
+                    const qty = Number(item.quantity || 0);
+
+                    return (
+                      <div
+                        key={item._id || idx}
+                        className="flex gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100"
+                      >
+                        {item.product?.image ? (
+                          <img
+                            src={item.product.image}
+                            alt={item.product.name}
+                            className="w-16 h-16 rounded-lg object-cover border border-gray-200 flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                            <Package className="w-6 h-6 text-gray-400" />
+                          </div>
+                        )}
+
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-gray-900 truncate">
+                            {item.product?.name ||
+                              t("DeletedProduct") ||
+                              "Deleted Product"}
+                          </div>
+
+                          {variantLabel && (
+                            <div className="text-xs text-gray-500 mt-0.5 truncate">
+                              {variantLabel}
+                            </div>
+                          )}
+
+                          {item.variant?.code && (
+                            <div className="text-[11px] text-gray-400 mt-0.5">
+                              {t("Code") || "Code"}: {item.variant.code}
+                            </div>
+                          )}
+
+                          {/* variant options badges */}
+                          {item.variant?.options?.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {item.variant.options.map((opt, i) => {
+                                const vName = isArabic
+                                  ? opt.ar_variationName || opt.variationName
+                                  : opt.variationName;
+                                return (
+                                  <span
+                                    key={i}
+                                    className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-100"
+                                  >
+                                    {vName ? `${vName}: ` : ""}
+                                    {opt.optionName}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          <div className="flex justify-between items-center mt-2 text-sm">
+                            <div className="text-gray-500">
+                              {unitPrice.toFixed(2)} EGP × {qty}
+                            </div>
+                            <div className="font-bold text-gray-900">
+                              {(unitPrice * qty).toFixed(2)} EGP
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {(!selectedOrder.cartItems ||
+                    selectedOrder.cartItems.length === 0) && (
+                    <div className="text-center py-6 text-gray-400 text-sm">
+                      {t("NoProducts") || "No products in this order"}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Order Summary Card */}
+              {/* Order Summary */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
                 <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
                   <Tag className="w-4 h-4 text-blue-600" />
@@ -649,7 +772,7 @@ export default function OnlineOrders() {
                 </div>
               </div>
 
-              {/* Order Details Specification Card */}
+              {/* Order Details */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
                 <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
                   <Building className="w-4 h-4 text-blue-600" />
@@ -691,12 +814,13 @@ export default function OnlineOrders() {
                 </div>
               </div>
 
-              {/* Fulfillment Information */}
+              {/* Fulfillment */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
                 <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
                   <Truck className="w-4 h-4 text-blue-600" />
                   {t("FulfillmentInformation") || "Fulfillment Information"}
                 </h3>
+
                 {selectedOrder.orderType === "pickup" ||
                 !selectedOrder.shippingAddress ? (
                   <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800">
@@ -712,68 +836,194 @@ export default function OnlineOrders() {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                    <div className="bg-gray-50 p-2.5 rounded-xl">
-                      <span className="block text-xs text-gray-400">
-                        {t("City") || "City"}
-                      </span>
-                      <span className="font-medium text-gray-800">
-                        {selectedOrder.shippingAddress.city || "N/A"}
-                      </span>
-                    </div>
-                    <div className="bg-gray-50 p-2.5 rounded-xl">
-                      <span className="block text-xs text-gray-400">
-                        {t("Zone") || "Zone"}
-                      </span>
-                      <span className="font-medium text-gray-800">
-                        {selectedOrder.shippingAddress.zone || "N/A"}
-                      </span>
-                    </div>
-                    <div className="bg-gray-50 p-2.5 sm:col-span-3 rounded-xl">
-                      <span className="block text-xs text-gray-400">
-                        {t("AddressDetails") || "Address Details"}
-                      </span>
-                      <span className="font-medium text-gray-800">
-                        {selectedOrder.shippingAddress.details || "N/A"}
-                      </span>
-                    </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    {/* City */}
+                    {selectedOrder.shippingAddress.city && (
+                      <div className="bg-gray-50 p-2.5 rounded-xl">
+                        <span className="block text-xs text-gray-400">
+                          {t("City") || "City"}
+                        </span>
+                        <span className="font-medium text-gray-800">
+                          {selectedOrder.shippingAddress.city}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Zone */}
+                    {selectedOrder.shippingAddress.zone && (
+                      <div className="bg-gray-50 p-2.5 rounded-xl">
+                        <span className="block text-xs text-gray-400">
+                          {t("Zone") || "Zone"}
+                        </span>
+                        <span className="font-medium text-gray-800">
+                          {selectedOrder.shippingAddress.zone}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Street */}
+                    {selectedOrder.shippingAddress.street && (
+                      <div className="bg-gray-50 p-2.5 rounded-xl">
+                        <span className="block text-xs text-gray-400">
+                          {t("Street") || "Street"}
+                        </span>
+                        <span className="font-medium text-gray-800">
+                          {selectedOrder.shippingAddress.street}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Building Number */}
+                    {selectedOrder.shippingAddress.buildingNumber != null && (
+                      <div className="bg-gray-50 p-2.5 rounded-xl">
+                        <span className="block text-xs text-gray-400">
+                          {t("BuildingNumber") || "Building Number"}
+                        </span>
+                        <span className="font-medium text-gray-800">
+                          {selectedOrder.shippingAddress.buildingNumber}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Floor Number */}
+                    {selectedOrder.shippingAddress.floorNumber != null && (
+                      <div className="bg-gray-50 p-2.5 rounded-xl">
+                        <span className="block text-xs text-gray-400">
+                          {t("FloorNumber") || "Floor Number"}
+                        </span>
+                        <span className="font-medium text-gray-800">
+                          {selectedOrder.shippingAddress.floorNumber}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Apartment Number */}
+                    {selectedOrder.shippingAddress.apartmentNumber != null && (
+                      <div className="bg-gray-50 p-2.5 rounded-xl">
+                        <span className="block text-xs text-gray-400">
+                          {t("ApartmentNumber") || "Apartment Number"}
+                        </span>
+                        <span className="font-medium text-gray-800">
+                          {selectedOrder.shippingAddress.apartmentNumber}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Unique Identifier */}
+                    {selectedOrder.shippingAddress.uniqueIdentifier && (
+                      <div className="bg-gray-50 p-2.5 rounded-xl">
+                        <span className="block text-xs text-gray-400">
+                          {t("UniqueIdentifier") || "Unique Identifier"}
+                        </span>
+                        <span className="font-medium text-gray-800">
+                          {selectedOrder.shippingAddress.uniqueIdentifier}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Address Details (full width) */}
+                    {selectedOrder.shippingAddress.details && (
+                      <div className="bg-gray-50 p-2.5 sm:col-span-2 rounded-xl">
+                        <span className="block text-xs text-gray-400">
+                          {t("AddressDetails") || "Address Details"}
+                        </span>
+                        <span className="font-medium text-gray-800">
+                          {selectedOrder.shippingAddress.details}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
 
-              {/* Status Update Section */}
-              <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4 space-y-3">
+              {/* Status Update */}
+              <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4 space-y-4">
                 <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">
                   {t("UpdateOrderStatus") || "Update Order Status"}
                 </h3>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <select
-                    value={newStatusValue}
-                    onChange={(e) => setNewStatusValue(e.target.value)}
-                    disabled={isUpdatingStatus}
-                    className="flex-grow px-3 py-2 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:opacity-50"
+
+                {/* Current Status Info */}
+                <div className="flex items-center gap-2 text-xs text-gray-500 bg-white px-3 py-2 rounded-lg border border-gray-200">
+                  <span className="font-medium">
+                    {t("OrderStatus") || "Order Status"}:
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${getStatusColor(selectedOrder.status)}`}
                   >
-                    {orderStatuses.map((st) => (
-                      <option key={st} value={st}>
-                        {t(st) || st.replace(/_/g, " ")}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={handleUpdateStatus}
-                    disabled={isUpdatingStatus}
-                    className="inline-flex items-center justify-center px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
-                  >
-                    {isUpdatingStatus ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        {t("Updating") || "Updating..."}
-                      </>
-                    ) : (
-                      t("UpdateStatus") || "Update Status"
-                    )}
-                  </button>
+                    {t(selectedOrder.status) ||
+                      selectedOrder.status?.replace(/_/g, " ")}
+                  </span>
                 </div>
+
+                {/* New Status Select */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-gray-600">
+                    {t("NewStatus") || "New Status"}
+                  </label>
+                  {getAvailableStatuses(selectedOrder.status).length === 0 ? (
+                    <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                      {t("NoTransitionsAvailable") ||
+                        "No status transitions available for this order."}
+                    </div>
+                  ) : (
+                    <select
+                      value={newStatusValue}
+                      onChange={(e) => setNewStatusValue(e.target.value)}
+                      disabled={isUpdatingStatus}
+                      className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-medium text-gray-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 transition-all cursor-pointer hover:border-gray-400"
+                    >
+                      <option value="">
+                        {t("SelectNewStatus") || "Select new status..."}
+                      </option>
+                      {getAvailableStatuses(selectedOrder.status).map((st) => (
+                        <option key={st} value={st}>
+                          {t(st) || st.replace(/_/g, " ")}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {/* Status Description */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-gray-600">
+                    {t("StatusDescription") || "Status Description"}{" "}
+                    <span className="text-gray-400 font-normal">
+                      ({t("Optional") || "Optional"})
+                    </span>
+                  </label>
+                  <textarea
+                    value={statusDescription}
+                    onChange={(e) => setStatusDescription(e.target.value)}
+                    disabled={isUpdatingStatus}
+                    rows={2}
+                    placeholder={
+                      t("StatusDescriptionPlaceholder") ||
+                      "Add a note about this status change..."
+                    }
+                    className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 transition-all resize-none placeholder:text-gray-400"
+                  />
+                </div>
+
+                {/* Update Button */}
+                <button
+                  onClick={handleUpdateStatus}
+                  disabled={
+                    isUpdatingStatus ||
+                    !newStatusValue ||
+                    newStatusValue === selectedOrder.status
+                  }
+                  className="w-full inline-flex items-center justify-center px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {isUpdatingStatus ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      {t("Updating") || "Updating..."}
+                    </>
+                  ) : (
+                    t("UpdateStatus") || "Update Status"
+                  )}
+                </button>
               </div>
             </div>
           </div>
