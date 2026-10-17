@@ -30,14 +30,21 @@ const ProductCard = ({ product, onAddToOrder, onOpenModal }) => {
     product.quantity !== undefined &&
     product.quantity <= 0;
 
-  // دالة للتعامل مع إضافة المنتج
+  const allVariantsOutOfStock =
+    hasVariants &&
+    variants.length > 0 &&
+    variants.every(
+      (v) => v.quantity !== null && v.quantity !== undefined && v.quantity <= 0
+    );
+
+  const isOutOfStock = isSimpleOutOfStock || allVariantsOutOfStock;
+
   const handleAddToOrder = async (product) => {
-    if (isSimpleOutOfStock) {
-      toast.error(t("ProductOutOfStock") || "هذا المنتج غير متوفر بالمخزن حالياً");
+    if (isOutOfStock) {
+      toast.error(t("ProductOutOfStock") || "Product is out of stock");
       return;
     }
 
-    // إذا كان للمنتج فاريشن أو إضافات إجبارية، نفتح المودال لاختيار الفاريشن
     if (hasVariants || hasExtras) {
       onOpenModal(product);
       return;
@@ -45,7 +52,7 @@ const ProductCard = ({ product, onAddToOrder, onOpenModal }) => {
 
     setIsCurrentItemLoading(true);
     try {
-      console.log("ProductCard → handleAddToOrder called", product.id);
+      console.log("ProductCard -> handleAddToOrder called", product.id);
       await onAddToOrder(product);
     } catch (error) {
       console.error("Error adding product:", error);
@@ -56,7 +63,6 @@ const ProductCard = ({ product, onAddToOrder, onOpenModal }) => {
 
   const src = resolveImageUrl(product.image);
 
-  // تحديد سعر العرض (إذا كان فاريشن نعرض سعر أول فاريشن)
   const displayPrice = hasVariants
     ? variants[0].price
     : product.price_after_discount !== null &&
@@ -67,7 +73,6 @@ const ProductCard = ({ product, onAddToOrder, onOpenModal }) => {
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-200 relative pb-16">
-      {/* Clickable image and name - Opens Modal */}
       <div onClick={() => onOpenModal(product)} className="cursor-pointer">
         <div className="relative">
           <img
@@ -77,8 +82,15 @@ const ProductCard = ({ product, onAddToOrder, onOpenModal }) => {
           />
           {hasVariants && (
             <span className="absolute top-2 right-2 bg-purple-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs">
-              {variants.length} {t("Variations") || "خيارات"}
+              {variants.length} {t("Variations") || "Variations"}
             </span>
+          )}
+          {isOutOfStock && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+              <span className="bg-red-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow">
+                {t("OutOfStock") || "Out of Stock"}
+              </span>
+            </div>
           )}
         </div>
         <div className="p-3">
@@ -89,7 +101,6 @@ const ProductCard = ({ product, onAddToOrder, onOpenModal }) => {
         </div>
       </div>
 
-      {/* Description button that opens modal */}
       {product.description && product.description !== "null" && (
         <div className="px-3 -mt-2">
           <Dialog>
@@ -108,7 +119,6 @@ const ProductCard = ({ product, onAddToOrder, onOpenModal }) => {
         </div>
       )}
 
-      {/* Price */}
       <div className="px-3">
         <div className="mt-1 text-sm font-bold text-bg-primary flex items-center gap-1.5 flex-wrap">
           {hasVariants ? (
@@ -130,13 +140,12 @@ const ProductCard = ({ product, onAddToOrder, onOpenModal }) => {
         </div>
       </div>
 
-      {/* Add to Order Button */}
       <div className="absolute bottom-0 left-0 right-0 p-3 bg-white">
         <button
           onClick={() => handleAddToOrder(product)}
-          disabled={isCurrentItemLoading || isSimpleOutOfStock}
+          disabled={isCurrentItemLoading || isOutOfStock}
           className={`w-full py-1 px-2 text-sm rounded transition-colors font-medium cursor-pointer ${
-            isSimpleOutOfStock
+            isOutOfStock
               ? "bg-gray-300 text-gray-500 cursor-not-allowed"
               : isCurrentItemLoading
               ? "bg-gray-400 text-gray-200 cursor-not-allowed"
@@ -145,12 +154,12 @@ const ProductCard = ({ product, onAddToOrder, onOpenModal }) => {
               : "bg-bg-primary text-white hover:bg-purple-700"
           }`}
         >
-          {isSimpleOutOfStock
-            ? (t("OutOfStock") || "غير متوفر")
+          {isOutOfStock
+            ? (t("OutOfStock") || "Out of Stock")
             : isCurrentItemLoading
             ? t("Adding")
             : hasVariants
-            ? (t("ChooseVariation") || "اختر الفاريشن")
+            ? (t("ChooseVariation") || "Choose Variation")
             : t("AddToOrder")}
         </button>
       </div>
