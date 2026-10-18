@@ -111,7 +111,7 @@ export default function AllOrders() {
       <html>
         <head>
           <meta charset="UTF-8">
-          <title>Print Order ${data.order_number}</title>
+          <title>Print Order ${data.reference}</title>
           <style>
             @page { margin: 0; size: auto; }
             body {
@@ -196,7 +196,7 @@ export default function AllOrders() {
               <tr>
                 <td width="50%" style="border-${isArabic ? "left" : "right"}: 1px dotted #000; padding: 0 5px;">
                   <div class="meta-label">${isArabic ? "رقم الفاتورة" : "ORDER NO"}</div>
-                  <div class="meta-value" style="font-size: 18px;">#${data.order_number}</div>
+                  <div class="meta-value" style="font-size: 18px;">#${data.reference}</div>
                 </td>
                 <td width="50%" style="padding: 0 5px; text-align: ${isArabic ? "left" : "right"};">
                   <div class="meta-label">${isArabic ? "التاريخ / الوقت" : "DATE / TIME"}</div>
@@ -500,7 +500,7 @@ const filteredOrders = useMemo(() => {
           setSelectedOrder(null);
         }}
         orderId={selectedOrder?.id}
-        orderNumber={selectedOrder?.order_number}
+        orderNumber={selectedOrder?.reference}
         onSuccess={handleVoidSuccess}
       />
     </div>

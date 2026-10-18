@@ -651,18 +651,19 @@ const CheckOut = ({
             // مع طباعة
             printReceiptSilently(receiptData, response, () => {
               completeOrder();
-              toast.success(t("OrderCompletedSuccessfully"));
+              toast.success(`${t("OrderCompletedSuccessfully")} — Ref: ${response?.sale?.reference || receiptData?.referenceNumber || ""}`);
             });
           } else {
             // بدون طباعة
             completeOrder();
             toast.success(
-              t("OrderCompletedSuccessfully") + " (" + t("NoPrint") + ")",
+              `${t("OrderCompletedSuccessfully")} (${t("NoPrint")}) — Ref: ${response?.sale?.reference || receiptData?.referenceNumber || ""}`,
             );
           }
         } else {
           // طلب آجل → بدون طباعة عادةً
           completeOrder();
+          toast.success(`${t("OrderCompletedSuccessfully")} — Ref: ${response?.sale?.reference || ""}`);
         }
       } else {
         // فشل من الـ API
