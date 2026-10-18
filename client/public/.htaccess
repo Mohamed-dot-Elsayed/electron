@@ -1,0 +1,11 @@
+# SPA fallback for point-of-sale (Vite base: /point-of-sale)
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /point-of-sale/
+
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  RewriteRule ^ /point-of-sale/index.html [L]
+</IfModule>
