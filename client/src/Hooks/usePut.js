@@ -7,7 +7,7 @@ export function usePut() {
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
 
-  const putData = async (endpoint, body, options = {}) => {
+  const executeRequest = async (method, endpoint, body, options = {}) => {
     setLoading(true);
     setError(null);
 
@@ -21,7 +21,8 @@ export function usePut() {
       const token = sessionStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-      const response = await axiosInstance.put(url, body, { headers });
+      const httpMethod = (options.method || method || "put").toLowerCase();
+      const response = await axiosInstance[httpMethod](url, body, { headers });
       setData(response.data);
 
       setLoading(false);
@@ -42,5 +43,8 @@ export function usePut() {
     }
   };
 
-  return { data, loading, error, putData };
+  const putData = (endpoint, body, options = {}) => executeRequest("put", endpoint, body, options);
+  const patchData = (endpoint, body, options = {}) => executeRequest("patch", endpoint, body, options);
+
+  return { data, loading, error, putData, patchData };
 }

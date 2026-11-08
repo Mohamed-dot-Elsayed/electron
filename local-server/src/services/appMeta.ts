@@ -18,6 +18,13 @@ export function setMeta(key: string, value: string) {
 export const isBootstrapDone = () => getMeta("bootstrap_completed") === "true";
 export const markBootstrapComplete = () => setMeta("bootstrap_completed", "true");
 
+export function resetBootstrapFlags() {
+  const db = getDB();
+  db.run("DELETE FROM app_meta WHERE key = 'bootstrap_completed'");
+  db.run("DELETE FROM app_meta WHERE key LIKE 'bootstrap_done:%'");
+  saveDB();
+}
+
 // per-table bootstrap flags — key must include the table name or every table
 // shares the same "bootstrap_done" row
 export const isTableBootstrapped = (table: string) =>

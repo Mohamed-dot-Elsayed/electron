@@ -35,9 +35,7 @@ export const getAllCategorys = async (req: Request, res: Response) => {
   const jwtUser = req.user as any;
   const warehouseId = jwtUser?.warehouse_id;
 
-  if (!warehouseId) {
-    throw new BadRequest("Warehouse is not assigned to this user");
-  }
+  // Allow missing warehouse: buildWarehouseProductList aggregates all warehouses.
 
   // Return all categories regardless of warehouse stock
   const category = await CategoryModel.find();
@@ -52,9 +50,7 @@ export const getAllBrands = async (req: Request, res: Response) => {
   const jwtUser = req.user as any;
   const warehouseId = jwtUser?.warehouse_id;
 
-  if (!warehouseId) {
-    throw new BadRequest("Warehouse is not assigned to this user");
-  }
+  // Allow missing warehouse: buildWarehouseProductList aggregates all warehouses.
 
   // Return all brands regardless of warehouse stock
   const brand = await BrandModel.find();
@@ -75,10 +71,32 @@ const buildWarehouseProductList = async (
   const productIds = products.map((product: any) => product._id);
 
   // Get warehouse stock only for the selected products
-  const stocks = Product_WarehouseModel.find({
-    productId: { $in: productIds },
-    warehouseId: warehouseId,
-  });
+  // Resolve the effective warehouse: if the assigned one has no stock for
+  // these products, fall back to the warehouse that actually has stock.
+  let effectiveWarehouseId = warehouseId;
+  if (warehouseId) {
+    const assignedStocks = Product_WarehouseModel.find({
+      productId: { $in: productIds },
+      warehouseId: warehouseId,
+    });
+    const hasStock = (assignedStocks as any[]).some((s: any) => (s.quantity || 0) > 0);
+    if (!hasStock) {
+      // find a warehouse with stock for any of these products
+      const allStocks = Product_WarehouseModel.find({
+        productId: { $in: productIds },
+      });
+      const whWithStock = (allStocks as any[]).find((s: any) => (s.quantity || 0) > 0);
+      if (whWithStock) {
+        effectiveWarehouseId = whWithStock.warehouseId;
+      }
+    }
+  }
+
+  const stockFilter: any = { productId: { $in: productIds } };
+  if (effectiveWarehouseId) {
+    stockFilter.warehouseId = effectiveWarehouseId;
+  }
+  const stocks = Product_WarehouseModel.find(stockFilter);
 
   // Store product-level stock
   const stockByProduct: Record<string, number> = {};
@@ -87,7 +105,7 @@ const buildWarehouseProductList = async (
   const stockByVariant: Record<string, number> = {};
 
   stocks.forEach((stock: any) => {
-    if (stock.productPriceId) {
+    if (stock.productPriceId && stock.productPriceId !== "null") {
       const key = stock.productPriceId.toString();
 
       stockByVariant[key] =
@@ -178,12 +196,37 @@ const buildWarehouseProductList = async (
             )
           : stockByProduct[product._id.toString()] ?? 0;
 
+      // variation_attributes: one entry per distinct variation name used
+      // by this product, listing every option value seen across its SKUs.
+      const optionValuesByVariation: Record<string, Set<string>> = {};
+      for (const v of formattedVariations) {
+        for (const opt of (v.options || [])) {
+          if (!opt?.variation_name) continue;
+          if (!optionValuesByVariation[opt.variation_name]) {
+            optionValuesByVariation[opt.variation_name] = new Set();
+          }
+          optionValuesByVariation[opt.variation_name].add(opt.option_name);
+        }
+      }
+      const variation_attributes = Object.entries(optionValuesByVariation).map(
+        ([name, values]) => ({
+          name,
+          options: Array.from(values),
+        })
+      );
+
+      const distinctPrices = new Set(formattedVariations.map((v: any) => v.price));
+      const different_price = distinctPrices.size > 1;
+
       return {
-        ...product,
-        categoryId: categories,
-        brandId: brandData,
-        quantity,
+        _id: product._id,
+        name: product.ar_name || product.name,
+        price: product.price,
+        image: product.image,
+        different_price,
+        variation_attributes,
         variations: formattedVariations,
+        quantity,
       };
     })
   );
@@ -200,9 +243,7 @@ export const getProductsByCategory = async (
   const warehouseId = jwtUser?.warehouse_id;
   const { categoryId } = req.params;
 
-  if (!warehouseId) {
-    throw new BadRequest("Warehouse is not assigned to this user");
-  }
+  // Allow missing warehouse: buildWarehouseProductList aggregates all warehouses.
 
   const category = await CategoryModel.findById(categoryId);
 
@@ -233,9 +274,7 @@ export const getProductsByBrand = async (
   const warehouseId = jwtUser?.warehouse_id;
   const { brandId } = req.params;
 
-  if (!warehouseId) {
-    throw new BadRequest("Warehouse is not assigned to this user");
-  }
+  // Allow missing warehouse: buildWarehouseProductList aggregates all warehouses.
 
   const brand = await BrandModel.findById(brandId);
 
@@ -266,9 +305,7 @@ export const getFeaturedProducts = async (
   const jwtUser = req.user as any;
   const warehouseId = jwtUser?.warehouse_id;
 
-  if (!warehouseId) {
-    throw new BadRequest("Warehouse is not assigned to this user");
-  }
+  // Allow missing warehouse: buildWarehouseProductList aggregates all warehouses.
 
   const result = await buildWarehouseProductList(
     {
@@ -412,9 +449,7 @@ export const getActiveBundles = async (req: Request, res: Response) => {
   const jwtUser = req.user as any;
   const warehouseId = jwtUser?.warehouse_id;
 
-  if (!warehouseId) {
-    throw new BadRequest("Warehouse is not assigned to this user");
-  }
+  // Allow missing warehouse: buildWarehouseProductList aggregates all warehouses.
   const bundles = PandelModel.find({ status: true }).filter((bundle) => {
     // Check date validity
     const isActive =
@@ -558,7 +593,7 @@ export const getCashiers = async (req: Request, res: Response) => {
   const warehouseId = req.user?.warehouse_id;
 
   if (!warehouseId) {
-    throw new NotFound("Warehouse ID is required");
+    throw new BadRequest("Warehouse ID is required. Please assign a warehouse to this user.");
   }
 
   // ✅ في تطبيق الديسكتوب (Offline POS)، نجلب الكاشيرات النشطة للمخزن
@@ -581,7 +616,7 @@ export const selectCashier = async (req: Request, res: Response) => {
   const warehouseId = (req.user as any)?.warehouse_id;
 
   if (!warehouseId) {
-    throw new NotFound("Warehouse ID is required");
+    throw new BadRequest("Warehouse ID is required. Please assign a warehouse to this user.");
   }
 
   const { cashier_id } = req.body;
@@ -870,4 +905,35 @@ export const getServiceFees = async (req: Request, res: Response) => {
       warehouseId: fee.warehouseId,
     }));
   SuccessResponse(res, { message: "Service fees list", data: serviceFees });
+};
+export const getWarehouseProducts = async (req: Request, res: Response) => {
+  const warehouseId = req.user?.warehouse_id;
+  const products = await buildWarehouseProductList({}, warehouseId);
+  const warehouse = warehouseId ? WarehouseModel.findById(warehouseId) : null;
+  SuccessResponse(res, {
+    message: "Warehouse products",
+    data: { warehouse, products },
+  });
+};
+export const getOfflineTransfers = async (req: Request, res: Response) => {
+  SuccessResponse(res, { message: "Transfers list", data: { transfers: [] } });
+};
+
+export const getOfflineTransferById = async (req: Request, res: Response) => {
+  SuccessResponse(res, { message: "Transfer details", data: null });
+};
+
+export const getOfflineInstallmentsDue = async (req: Request, res: Response) => {
+  SuccessResponse(res, { message: "Installments due", data: { installments: [] } });
+};
+export const createOfflineTransfer = async (req: Request, res: Response) => {
+  throw new BadRequest("Warehouse transfers are not available in offline mode");
+};
+
+export const updateOfflineTransfer = async (req: Request, res: Response) => {
+  throw new BadRequest("Warehouse transfers are not available in offline mode");
+};
+
+export const payOfflineInstallment = async (req: Request, res: Response) => {
+  throw new BadRequest("Installment payments are not available in offline mode");
 };

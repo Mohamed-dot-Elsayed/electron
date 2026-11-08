@@ -105,6 +105,8 @@ export function useOrderCalculations(
 
     // 4. حساب amountToPay (المبلغ المطلوب دفعه حاليًا)
     let amountToPay = totalAmountDisplay;
+    // ✅ أساس حساب الخصم = سعر المنتجات فقط (من غير ضريبة/خدمة) — نفس الباك إند
+    let discountBase = subTotal;
 
     if (orderType === "dine_in" && selectedPaymentItems.length > 0) {
       const selectedItems = orderItems.filter(
@@ -142,6 +144,7 @@ export function useOrderCalculations(
       }
 
       amountToPay = selectedSubTotal + selectedTax + selectedServiceCharge;
+      discountBase = selectedSubTotal;
     }
 
     // 5. العناصر الجاهزة
@@ -165,6 +168,7 @@ export function useOrderCalculations(
       totalOtherCharge: Number(serviceChargeFull.toFixed(2)), // Service Fee
       totalAmountDisplay: Number(totalAmountDisplay.toFixed(2)),
       amountToPay: Number(amountToPay.toFixed(2)),
+      discountBase: Number(discountBase.toFixed(2)),
       taxDetails,
       doneItems,
       checkoutItems,

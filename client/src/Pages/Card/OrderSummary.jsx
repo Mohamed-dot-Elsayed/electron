@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import SummaryRow from "./SummaryRow";
 import Loading from "@/components/Loading";
 import { Phone, CreditCard, PrinterIcon, ChevronDown, ChevronRight, Tag } from "lucide-react";
+import { FaWhatsapp } from "react-icons/fa";
 import { useGet } from "@/Hooks/useGet";
 import { usePost } from "@/Hooks/usePost";
 import { toast } from "react-toastify";
@@ -277,6 +278,7 @@ function CheckoutDiscountPanel({
   amountToPay,
   onSetFreeDiscount,
   onSetDiscountId,
+  onSetDiscountData,
   onSetAppliedDiscount,
   onSetDiscountCode,
   t,
@@ -291,7 +293,7 @@ function CheckoutDiscountPanel({
   const [selectedDiscountLocal, setSelectedDiscountLocal] = useState("0");
 
   // Fetch discount list for Select tab
-  const { data: discountListData } = useGet("api/discount");
+  const { data: discountListData } = useGet("api/admin/discount");
   const discountList = discountListData?.data?.discounts || [];
 
   // Coupon API for By Company
@@ -303,17 +305,22 @@ function CheckoutDiscountPanel({
     (orderType === "dine_in" && selectedPaymentCount === 0);
 
   const handleCheckoutMain = () => {
-    onCheckout(false);
+    onCheckout({ print: false, whatsapp: false });
     setShowCheckoutDropdown(false);
   };
 
   const handleCheckoutWithPrint = () => {
-    onCheckout(true);
+    onCheckout({ print: true, whatsapp: false });
     setShowCheckoutDropdown(false);
   };
 
   const handleCheckoutWithoutPrint = () => {
-    onCheckout(false);
+    onCheckout({ print: false, whatsapp: false });
+    setShowCheckoutDropdown(false);
+  };
+
+  const handleCheckoutWithWhatsapp = () => {
+    onCheckout({ print: false, whatsapp: true });
     setShowCheckoutDropdown(false);
   };
 
@@ -331,19 +338,25 @@ function CheckoutDiscountPanel({
   const handleByCompanyApply = async () => {
     if (!discountCodeInput.trim()) return toast.error(t("PleaseEnterDiscountCode"));
     try {
-      const response = await validateCoupon("api/pos/apply-coupon", {
+      const response = await validateCoupon("api/admin/pos/apply-coupon", {
         coupon_code: discountCodeInput.trim(),
-        grand_total: amountToPay,
+        grand_total: discountBase || subTotal || amountToPay,
       });
       if (response?.success) {
         const couponData = response.data?.coupon;
         if (couponData) {
+          // ✅ نسبة الخصم بتتحسب على سعر المنتجات فقط (نفس الباك إند)
+          const base = Number(discountBase || subTotal || amountToPay) || 0;
           let discountPercentage = 0;
           if (couponData.type === "percentage") {
-            discountPercentage = couponData.amount;
+            discountPercentage = Number(couponData.amount) || 0;
           } else {
-            discountPercentage = (couponData.amount / amountToPay) * 100;
+            discountPercentage = base > 0 ? (Number(couponData.amount) / base) * 100 : 0;
           }
+          // الكوبون والخصم المختار من القائمة ما يشتغلوش مع بعض
+          onSetDiscountId?.(null);
+          onSetDiscountData?.(null);
+          setSelectedDiscountLocal("0");
           onSetAppliedDiscount?.(discountPercentage);
           onSetDiscountCode?.(discountCodeInput.trim());
           toast.success(t("DiscountAppliedSuccess", { appliedDiscount: couponData.amount }));
@@ -360,6 +373,20 @@ function CheckoutDiscountPanel({
 
   const handleSelectChange = (val) => {
     setSelectedDiscountLocal(val);
+
+    // ✅ نبعت بيانات الخصم نفسه للـ Checkout (نفس القيمة اللي الكارت حسبها)
+    const selected = discountList.find((d) => String(d._id) === String(val));
+    if (selected) {
+      let amount = Number(selected.amount) || 0;
+      if (selected.type === "percentage" && amount > 1) amount = amount / 100;
+      onSetDiscountData?.({ type: selected.type, amount });
+    } else {
+      onSetDiscountData?.(null);
+    }
+
+    // اختيار خصم من القائمة يلغي الكوبون
+    onSetAppliedDiscount?.(0);
+    onSetDiscountCode?.("");
     onSetDiscountId?.(val === "0" ? null : val);
   };
 
@@ -391,20 +418,27 @@ function CheckoutDiscountPanel({
 
           {/* Dropdown Menu */}
           {showCheckoutDropdown && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-20 overflow-hidden">
+            <div className="absolute top-full start-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-20 overflow-hidden min-w-full w-max">
               <button
                 onClick={handleCheckoutWithPrint}
-                className="w-full flex items-center gap-2 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-all border-b border-gray-100"
+                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all border-b border-gray-100 whitespace-nowrap text-start"
               >
-                <PrinterIcon size={15} className="text-gray-500" />
-                <span>{t("Checkout&Print") || "Checkout & Print"}</span>
+                <PrinterIcon size={15} className="text-gray-500 shrink-0" />
+                <span className="whitespace-nowrap">{t("Checkout&Print") || "Checkout & Print"}</span>
               </button>
               <button
                 onClick={handleCheckoutWithoutPrint}
-                className="w-full flex items-center gap-2 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-all"
+                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all border-b border-gray-100 whitespace-nowrap text-start"
               >
-                <CreditCard size={15} className="text-gray-500" />
-                <span>{t("CheckoutOnly") || "Checkout Only"}</span>
+                <CreditCard size={15} className="text-gray-500 shrink-0" />
+                <span className="whitespace-nowrap">{t("CheckoutOnly") || "Checkout Only"}</span>
+              </button>
+              <button
+                onClick={handleCheckoutWithWhatsapp}
+                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all whitespace-nowrap text-start"
+              >
+                <FaWhatsapp size={16} className="text-green-600 shrink-0" />
+                <span className="whitespace-nowrap">{t("Checkout&Whatsapp") || "Checkout & WhatsApp"}</span>
               </button>
             </div>
           )}
@@ -544,6 +578,7 @@ export default function OrderSummary({
   taxDetails,
   totalAmountDisplay,
   amountToPay,
+  discountBase,
   selectedPaymentCount,
   onCheckout,
   onSaveAsPending,
@@ -557,6 +592,7 @@ export default function OrderSummary({
   onPrint: externalOnPrint,
   onSetFreeDiscount,
   onSetDiscountId,
+  onSetDiscountData,
   onSetAppliedDiscount,
   onSetDiscountCode,
   // discount preview props
@@ -619,7 +655,8 @@ export default function OrderSummary({
     amountToPay,
     presetDiscountId,
     presetAppliedDiscount,
-    presetFreeDiscount
+    presetFreeDiscount,
+    discountBase
   );
 
   const restaurantInfo = {
@@ -662,7 +699,7 @@ export default function OrderSummary({
 
         {["dine_in", "take_away"].includes(orderType) && totalOtherCharge > 0 && (
           <SummaryRow
-            label={`${t("Service Fee")} (${serviceFeeData?.amount || 0}${serviceFeeData?.type === "fixed" ? " EGP" : "%"
+            label={`${t("ServiceFee")} (${serviceFeeData?.amount || 0}${serviceFeeData?.type === "fixed" ? " EGP" : "%"
               })`}
             value={totalOtherCharge}
           />
@@ -718,7 +755,7 @@ export default function OrderSummary({
               className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold h-11 rounded-xl flex-1 transition-all"
               disabled={isLoading}
             >
-              {isLoading ? <Loading /> : <><CreditCard size={15} className="mr-1.5" />Apply Offer & Checkout</>}
+              {isLoading ? <Loading /> : <><CreditCard size={15} className="mr-1.5" />{t("ApplyOfferAndCheckout")}</>}
             </Button>
             <Button
               onClick={offerManagement.cancelApprovedOffer}
@@ -740,6 +777,7 @@ export default function OrderSummary({
           amountToPay={amountToPay}
           onSetFreeDiscount={onSetFreeDiscount}
           onSetDiscountId={onSetDiscountId}
+          onSetDiscountData={onSetDiscountData}
           onSetAppliedDiscount={onSetAppliedDiscount}
           onSetDiscountCode={onSetDiscountCode}
           t={t}

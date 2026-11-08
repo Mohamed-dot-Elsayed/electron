@@ -75,9 +75,7 @@ const VoidItemModal = ({
               value={managerPassword}
               onChange={(e) => setManagerPassword(e.target.value)}
               className="col-span-3"
-              placeholder={t(
-                "Enterpassword"
-              )}
+              placeholder={t("EnterPassword")}
               disabled={isLoading}
             />
           </div>

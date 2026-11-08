@@ -26,9 +26,22 @@ export const getTenantInfoController = catchAsync(async (req: Request, res: Resp
 
 export const refreshTenantInfoController = catchAsync(async (req: Request, res: Response) => {
     clearCache();
-    const tenantInfo = await getTenantInfo();
-    return SuccessResponse(res, {
-        message: "Tenant info refreshed successfully",
-        ...tenantInfo,
-    }, 200);
+    try {
+        const tenantInfo = await getTenantInfo();
+        return SuccessResponse(res, {
+            message: "Tenant info refreshed successfully",
+            ...tenantInfo,
+        }, 200);
+    } catch (error: any) {
+        if (error.message?.includes("not configured")) {
+            return SuccessResponse(res, {
+                message: "Tenant verification not configured — all features enabled by default",
+                tenant: null,
+                features: { haveEcommerce: true, haveMobileApp: true, havePOS: true, haveReports: true, haveStockTake: true },
+                package: null,
+                locked: false,
+            }, 200);
+        }
+        throw error;
+    }
 });

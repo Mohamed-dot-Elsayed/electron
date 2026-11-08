@@ -17,13 +17,14 @@ import ProfileRouter from './profile'
 import WastedRouter from './wastedRoutes'
 
 export const route = Router();
-route.use("/", tenantInfoRouter);
+route.use("/tenant-info", tenantInfoRouter);
 route.use("/sync",syncRouter);
 route.use("/auth", authRouter);
 route.use(authenticated, authorizeRoles("admin", "superadmin"));
 route.use(enforceWarehouseScope);
 route.use("/pos-home", PosHomeRouter)
-route.use("/online-order",OnlineOrdersRouter)
+route.use("/online-order", OnlineOrdersRouter);
+route.use("/pos-online-orders", OnlineOrdersRouter);
 route.use("/pos", SaleRouter)
 route.use("/admin/pos",SaleRouter)   
 route.use("/expense", ExpensesRouter)

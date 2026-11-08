@@ -21,7 +21,7 @@ export const startcashierShift = async (req: Request, res: Response) => {
   const { cashier_id } = req.body;
 
   if (!cashierman_id) throw new NotFound("User not found");
-  if (!warehouseId) throw new NotFound("Warehouse ID is required");
+  if (!warehouseId) throw new BadRequest("Warehouse ID is required. Please assign a warehouse to this user.");
 
   // ✅ هل اليوزر عنده شيفت مفتوح؟
   const openShifts = await CashierShift.find(

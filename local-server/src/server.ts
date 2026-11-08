@@ -33,7 +33,10 @@ export function createServer() {
   app.set("headersTimeout", 2000);
 
   // 🚀 Routes
-  app.use(["/api", "/api/admin"], ApiRoute);
+  // Mount the more specific prefix first so /api/admin/* is handled by
+  // ApiRoute with the /admin segment stripped (offline compatibility).
+  app.use("/api/admin", ApiRoute);
+  app.use("/api", ApiRoute);
   app.use(uploadsRouter);
 
   app.use((req, res, next) => {

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { FaClock, FaUser, FaWhatsapp, FaCopy } from "react-icons/fa";
 import { Dialog, DialogBackdrop, DialogPanel } from "@headlessui/react";
@@ -20,11 +20,12 @@ const [showTransferModal, setShowTransferModal] = useState(false);
 const [selectedBranchId, setSelectedBranchId] = useState(null);
 
 // 🟢 جلب قائمة الـ Branches
-const { 
-  data: branchesData, 
-  isLoading: loadingBranches, 
-  refetch: fetchBranches 
-} = useGet(null, { useCache: true });
+// ملاحظة: من غير كاش عشان أي فرع جديد أو فرع اتفتح يظهر فوراً عند فتح المودال
+const {
+  data: branchesData,
+  isLoading: loadingBranches,
+  refetch: fetchBranches
+} = useGet(null);
 
 // 🟢 جلب الـ branches عند فتح الـ Modal
 
@@ -42,11 +43,20 @@ useEffect(() => {
   }
 }, [showTransferModal, fetchBranches]);
 
-const branches = branchesData?.branches || branchesData?.data || [];
+// 🟢 دعم كل أشكال الـ response المحتملة: { branches } / { data } / { data: { branches } }
+const branches = useMemo(() => {
+  const raw =
+    branchesData?.branches ??
+    branchesData?.data?.branches ??
+    branchesData?.data ??
+    branchesData;
+  return Array.isArray(raw) ? raw : [];
+}, [branchesData]);
 
   const { postData, loadingPost, response } = usePost();
 
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isArabic = i18n.language === "ar";
 
   const { putData: updateStatus, loading: updating } = usePut();
 
@@ -190,7 +200,7 @@ const handleAssignDelivery = async (deliveryID, orderID, deliveryNumber) => {
   try {
     await postData(`cashier/orders/delivery`, formData);
 
-    toast.success("Delivery person assigned successfully!");
+    toast.success(t("Delivery person assigned successfully!"));
 
     // UI updates
     handleCloseDeliveries();
@@ -331,7 +341,7 @@ const handleChangeStaus = async (id,orderStatus, reason) => {
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       navigator.clipboard.writeText(text).then(() => {
-        toast.success("Phone number copied!"); // Use auth.toastSuccess()
+        toast.success(t("Phone number copied!")); // Use auth.toastSuccess()
       });
       setTimeout(() => setCopied(false), 2000); // Reset after 2 seconds
     });
@@ -409,7 +419,9 @@ const handleChangeStaus = async (id,orderStatus, reason) => {
                               <span className="font-TextFontSemiBold">
                                 {t("Source")}:
                               </span>{" "}
-                              {detailsData?.source || "-"}
+                              {detailsData?.source
+                                ? t(detailsData.source)
+                                : "-"}
                             </p>
                           </div>
                         </div>
@@ -421,13 +433,19 @@ const handleChangeStaus = async (id,orderStatus, reason) => {
                               <span className="font-TextFontSemiBold text-bg-primary">
                                 {t("Status")}:
                               </span>{" "}
-                              {detailsData?.order_status || ""}
+                              {detailsData?.order_status
+                                ? t(detailsData.order_status)
+                                : ""}
                             </p>
                             <p className="text-gray-800 text-md">
                               <span className="font-TextFontSemiBold text-bg-primary">
                                 {t("PaymentMethod")}:
                               </span>{" "}
-                              {detailsData?.payment_method?.name || ""}
+                              {isArabic
+                                ? detailsData?.payment_method?.ar_name ||
+                                  detailsData?.payment_method?.name ||
+                                  ""
+                                : detailsData?.payment_method?.name || ""}
                             </p>
                             {detailsData?.payment_method?.name ===
                               "Visa Master Card" && (
@@ -436,7 +454,9 @@ const handleChangeStaus = async (id,orderStatus, reason) => {
                                   <span className="font-TextFontSemiBold text-bg-primary">
                                     {t("PaymentStatus")}:
                                   </span>{" "}
-                                  {detailsData?.status_payment || ""}
+                                  {detailsData?.status_payment
+                                    ? t(detailsData.status_payment)
+                                    : ""}
                                 </p>
                                 <p className="text-gray-800 text-md">
                                   <span className="font-TextFontSemiBold text-bg-primary">
@@ -459,14 +479,16 @@ const handleChangeStaus = async (id,orderStatus, reason) => {
                                     : "text-blue-700 bg-blue-100" // Adjust for delivery (blue as example)
                                 }`}
                               >
-                                {detailsData?.order_type || ""}
+                                {detailsData?.order_type
+                                  ? t(detailsData.order_type)
+                                  : ""}
                               </span>{" "}
                             </p>
                             <p className="text-gray-800 text-md">
                               <span className="font-TextFontSemiBold text-bg-primary">
                                 {t("OrderNote")}:
                               </span>{" "}
-                              {detailsData?.notes || "No Notes"}
+                              {detailsData?.notes || t("No notes")}
                             </p>
                             {detailsData?.payment_method?.id !== 2 && (
                               <p className="text-gray-800 text-md">
@@ -502,7 +524,7 @@ const handleChangeStaus = async (id,orderStatus, reason) => {
                                                       : ""
                                                   }
                                                   className="max-h-[80vh] object-center object-contain shadow-md rounded-2xl"
-                                                  alt="Receipt"
+                                                  alt={t("Receipt")}
                                                 />
                                               </div>
                                               <div className="px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-x-3">
@@ -1160,7 +1182,7 @@ const handleChangeStaus = async (id,orderStatus, reason) => {
                           type="text"
                           value={cancelReason}
                           onChange={(e) => setCancelReason(e.target.value)}
-                          placeholder="Enter reason for cancellation"
+                          placeholder={t("Enter reason for cancellation")}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-bg-primary"
                         />
                         <div className="flex gap-2 mt-3">
@@ -1243,7 +1265,7 @@ const handleChangeStaus = async (id,orderStatus, reason) => {
                           <textarea
                             value={cancelReason}
                             onChange={(e) => setCancelReason(e.target.value)}
-                            placeholder="Enter cancellation reason..."
+                            placeholder={t("Enter cancellation reason...")}
                             className="w-full p-2 border border-gray-300 rounded-md focus:border-bg-primary focus:ring-bg-primary"
                             rows={3}
                           />

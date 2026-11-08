@@ -75,7 +75,7 @@ export default function Item({ onAddToOrder }) {
   // ✅ 1. جلب Categories
   const { data: categoriesData, isLoading: categoriesLoading } = useQuery({
     queryKey: ["categories"],
-    queryFn: () => apiFetcher("api/pos-home/categories"),
+    queryFn: () => apiFetcher("api/admin/pos-home/categories"),
     staleTime: 30 * 1000,
   });
 
@@ -105,7 +105,7 @@ export default function Item({ onAddToOrder }) {
   // ✅ 2. جلب Brands
   const { data: brandsData, isLoading: brandsLoading } = useQuery({
     queryKey: ["brands"],
-    queryFn: () => apiFetcher("api/pos-home/brands"),
+    queryFn: () => apiFetcher("api/admin/pos-home/brands"),
     staleTime: 30 * 1000,
   });
 
@@ -116,7 +116,7 @@ export default function Item({ onAddToOrder }) {
   // ✅ 3. جلب Featured Products
   const { data: featuredData, isLoading: featuredLoading } = useQuery({
     queryKey: ["featured"],
-    queryFn: () => apiFetcher("api/pos-home/featured"),
+    queryFn: () => apiFetcher("api/admin/pos-home/featured"),
     enabled: activeTab === "feature",
     staleTime: 0,
     refetchOnMount: "always",
@@ -129,7 +129,7 @@ export default function Item({ onAddToOrder }) {
   // ✅ 4. جلب Products حسب Category
   const { data: categoryProductsData, isLoading: categoryProductsLoading } = useQuery({
     queryKey: ["categoryProducts", selectedCategory],
-    queryFn: () => apiFetcher(`api/pos-home/categories/${selectedCategory}/products`),
+    queryFn: () => apiFetcher(`api/admin/pos-home/categories/${selectedCategory}/products`),
     enabled: activeTab === "category" && selectedCategory !== "all",
     staleTime: 0,
     refetchOnMount: "always",
@@ -147,7 +147,7 @@ export default function Item({ onAddToOrder }) {
   const categoryQueries = useQueries({
     queries: categories.map((cat) => ({
       queryKey: ["categoryProducts", cat._id],
-      queryFn: () => apiFetcher(`api/pos-home/categories/${cat._id}/products`),
+      queryFn: () => apiFetcher(`api/admin/pos-home/categories/${cat._id}/products`),
       staleTime: 10 * 1000,
       enabled: globalSearchActive && categories.length > 0,
     })),
@@ -171,7 +171,7 @@ export default function Item({ onAddToOrder }) {
   // ✅ 5. جلب Products حسب Brand
   const { data: brandProductsData, isLoading: brandProductsLoading } = useQuery({
     queryKey: ["brandProducts", selectedBrand],
-    queryFn: () => apiFetcher(`api/pos-home/brands/${selectedBrand}/products`),
+    queryFn: () => apiFetcher(`api/admin/pos-home/brands/${selectedBrand}/products`),
     enabled: activeTab === "brand" && selectedBrand !== "all",
     staleTime: 0,
     refetchOnMount: "always",
@@ -183,7 +183,7 @@ export default function Item({ onAddToOrder }) {
 
   // ✅ 6. Bundles
   const { data: bundlesData, isLoading: bundlesLoading } = useGet(
-    "api/pos-home/bundles",
+    "api/admin/pos-home/bundles",
     { useCache: false }
   );
   const bundles = useMemo(() => bundlesData?.data?.bundles || [], [bundlesData]);

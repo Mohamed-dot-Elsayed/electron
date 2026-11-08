@@ -6,7 +6,7 @@ import { useShift } from "@/context/ShiftContext";
 import { toast } from "react-toastify";
 import {
   User,
-  Settings,
+  UserPlus,
   ListOrdered,
   Users,
   DollarSign,
@@ -14,6 +14,10 @@ import {
   XCircle,
   Languages,
   Menu,
+  PackageX,
+  Warehouse,
+  ArrowLeftRight,
+  CreditCard,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -55,7 +59,8 @@ import { useGet } from "@/Hooks/useGet";
 import { usePosSelections } from "@/Hooks/usePosSelections";
 import AddCustomer from "@/Pages/Customer/AddCustomer";
 import logo from "@/assets/logo.png";
-import { FaListAlt, FaUsers } from "react-icons/fa";
+import { FaListAlt, FaUsers, FaUndo } from "react-icons/fa";
+import AddWasted from "@/Pages/Wasted/AddWasted";
 
 // ===============================================
 // 🚀 المكون الجديد: Combobox للبحث في العملاء (مُخصص)
@@ -65,7 +70,7 @@ function CustomerSearchCombobox({ customers, selectedCustomer, onSelect, onClear
   const [open, setOpen] = useState(false);
 
   const selectedCustomerObj = customers.find(
-    (customer) => customer._id === selectedCustomer
+    (customer) => customer._id === selectedCustomer,
   );
 
   return (
@@ -79,26 +84,27 @@ function CustomerSearchCombobox({ customers, selectedCustomer, onSelect, onClear
           >
             <span className="truncate">
               {selectedCustomerObj
-                ? `${selectedCustomerObj.name}${selectedCustomerObj.phone_number
-                  ? ` (${selectedCustomerObj.phone_number})`
-                  : ""
-                }`
-                : t("Select Customer")}
+                ? `${selectedCustomerObj.name}${
+                    selectedCustomerObj.phone_number
+                      ? ` (${selectedCustomerObj.phone_number})`
+                      : ""
+                  }`
+                : t("SelectCustomer")}
             </span>
             <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 shrink-0" />
           </Button>
         </PopoverTrigger>
 
-        <PopoverContent className="w-[260px] p-0">
+        <PopoverContent className="w-[260px] p-0" dir="ltr">
           <Command
             filter={(value, search) => {
               if (!search) return 1;
               return value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
             }}
           >
-            <CommandInput placeholder={t("Search by name or phone")} />
+            <CommandInput placeholder={t("SearchByNameOrPhone")} />
             <CommandList>
-              <CommandEmpty>{t("No customer found")}</CommandEmpty>
+              <CommandEmpty>{t("NoCustomerFound")}</CommandEmpty>
 
               <CommandGroup className="max-h-[200px] overflow-y-auto">
                 {selectedCustomer && (
@@ -110,7 +116,7 @@ function CustomerSearchCombobox({ customers, selectedCustomer, onSelect, onClear
                     }}
                     className="text-red-500 font-medium cursor-pointer"
                   >
-                    ✕ {t("Clear Customer", "Clear Customer")}
+                    ✕ {t("ClearCustomer")}
                   </CommandItem>
                 )}
                 {customers.map((customer) => (
@@ -127,7 +133,7 @@ function CustomerSearchCombobox({ customers, selectedCustomer, onSelect, onClear
                         "mr-2 h-4 w-4",
                         selectedCustomer === customer._id
                           ? "opacity-100"
-                          : "opacity-0"
+                          : "opacity-0",
                       )}
                     />
                     <div className="flex flex-col">
@@ -149,7 +155,7 @@ function CustomerSearchCombobox({ customers, selectedCustomer, onSelect, onClear
         <button
           type="button"
           onClick={onClear}
-          title={t("Clear Customer", "Clear Customer")}
+          title={t("ClearCustomer")}
           className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500 hover:bg-gray-100 transition-colors text-xs font-bold shrink-0"
         >
           ✕
@@ -158,8 +164,6 @@ function CustomerSearchCombobox({ customers, selectedCustomer, onSelect, onClear
     </div>
   );
 }
-
-
 
 // ===============================================
 // 🏠 المكون الرئيسي: Navbar
@@ -172,12 +176,13 @@ export default function Navbar() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const { t, i18n } = useTranslation();
   const [language, setLanguage] = useState(
-    localStorage.getItem("language") || "en"
+    localStorage.getItem("language") || "en",
   );
   const [loading, setLoading] = useState(false);
 
   // حالات المودالز الجديدة
   const [showExpensesModal, setShowExpensesModal] = useState(false);
+  const [showWastedModel, setShowWastedModel] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [endShiftReport, setEndShiftReport] = useState(null);
@@ -192,7 +197,7 @@ export default function Navbar() {
 
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(
-    sessionStorage.getItem("selected_customer_id") || ""
+    sessionStorage.getItem("selected_customer_id") || "",
   );
 
   useEffect(() => {
@@ -219,11 +224,10 @@ export default function Navbar() {
   }, [isShiftOpen]);
 
   const toggleLanguage = () => {
-    const newLang = language === "en" ? "ar" : "en";
+    const newLang = i18n.language === "ar" ? "en" : "ar";
     i18n.changeLanguage(newLang);
     setLanguage(newLang);
     localStorage.setItem("language", newLang);
-    document.documentElement.dir = newLang === "ar" ? "rtl" : "ltr";
   };
 
   const formatElapsedTime = () => {
@@ -260,13 +264,17 @@ export default function Navbar() {
   };
 
   const handleDueUsers = () => navigate("/due");
+  const handleInstallments = () => navigate("/installments");
   const handleAllOrders = () => navigate("/all-orders");
+  const handleWarehouseReport = () => navigate("/reports/warehouse");
+  const handleWarehouseTransfers = () => navigate("/transfers");
   const handleExpenses = () => setShowExpensesModal(true);
+  const handleWasted = () => setShowWastedModel(true);
 
   // ===== إغلاق الشيفت بكل الخطوات =====
   const handleCloseShift = () => {
     if (!isShiftOpen) {
-      toast.error(t("No active shift found"));
+      toast.error(t("NoActiveShift"));
       return;
     }
     setShowPasswordModal(true);
@@ -282,19 +290,19 @@ export default function Navbar() {
 
       // API واحدة بتعمل كل حاجة: تحقق الباسورد + تجيب التقرير
       const response = await axios.put(
-        `${baseUrl}api/cashier-shift/end/report/`,
+        `${baseUrl}api/admin/cashier-shift/end/report/`,
         { password },
         {
           headers: { Authorization: `Bearer ${token}` },
-        }
+        },
       );
-
 
       // الـ API دي لازم ترجع التقرير جاهز
       setEndShiftReport(response.data);
       setShowReportModal(true);
     } catch (err) {
-      const msg = err.response?.data?.message || t("Invalid password or error occurred");
+      const msg =
+        err.response?.data?.message || t("InvalidPasswordOrError");
       toast.error(msg);
     } finally {
       setReportLoading(false);
@@ -304,18 +312,12 @@ export default function Navbar() {
   const handleClose = async () => {
     try {
       const cashierIdForClose = sessionStorage.getItem("cashier_id");
-      const shiftId = sessionStorage.getItem("shift_id");
-      const endpoint = `api/cashier-shift/end/${cashierIdForClose || ""}`;
-      await putData(endpoint, {
-        shift_id: shiftId,
-        cashier_id: cashierIdForClose,
-      });
+      const endpoint = `api/admin/cashier-shift/close/${cashierIdForClose}`;
+      await putData(endpoint, {});
 
       closeShift();
       sessionStorage.removeItem("shift_start_time");
       sessionStorage.removeItem("shift_data");
-      sessionStorage.removeItem("shift_id");
-      sessionStorage.removeItem("cashier_id");
       sessionStorage.clear();
 
       toast.success(t("ShiftClosedSuccessfully"));
@@ -326,17 +328,16 @@ export default function Navbar() {
     }
   };
 
-
-
-
   const handleLogout = async () => {
     try {
-      await postData("api/cashier-shift/logout", {});
+      await postData("api/admin/cashier-shift/logout", {});
       sessionStorage.clear();
-      toast.success(t("Logged out successfully"));
+      localStorage.removeItem("shiftStatus");
+      localStorage.removeItem("shiftStartTime");
+      toast.success(t("LoggedOutSuccessfully"));
       navigate("/login");
     } catch (err) {
-      toast.error(err?.message || t("Error while logging out"));
+      toast.error(err?.message || t("ErrorWhileLoggingOut"));
     }
   };
 
@@ -345,9 +346,8 @@ export default function Navbar() {
   return (
     <>
       {/* الحاوية الرئيسية للخلفية الرمادية الباهتة */}
-      <div className="w-full shadow-md px-2 py-3 sm:px-4 sm:py-5 md:px-6 z-50 border-b border-gray-100">
+      <div dir="ltr" className="w-full shadow-md px-2 py-3 sm:px-4 sm:py-5 md:px-6 z-50 border-b border-gray-100">
         <div className="flex items-center justify-between gap-1.5 sm:gap-4 max-w-[1920px] mx-auto">
-
           {/* --- الجزء الأيسر: الأزرار والعملاء --- */}
           <div className="flex items-center gap-4">
             <button
@@ -368,7 +368,9 @@ export default function Navbar() {
                     <div className="w-8 h-8 rounded-full border border-current flex items-center justify-center mb-1 opacity-80">
                       <FaListAlt className="text-sm" />
                     </div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider">{t("POS")}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider">
+                      {t("POS")}
+                    </span>
                   </TabsTrigger>
 
                   <TabsTrigger
@@ -378,7 +380,9 @@ export default function Navbar() {
                     <div className="w-8 h-8 rounded-full border border-current flex items-center justify-center mb-1 opacity-80">
                       <FaUsers className="text-sm" />
                     </div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider">{t("OnlineOrders")}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider">
+                      {t("OnlineOrders")}
+                    </span>
                   </TabsTrigger>
 
                   <TabsTrigger
@@ -386,9 +390,11 @@ export default function Navbar() {
                     className="flex flex-col items-center justify-center w-[110px] py-3 rounded-[22px] border border-gray-50 bg-white text-gray-400 data-[state=active]:bg-[#7b61ff] data-[state=active]:text-white transition-all shadow-sm"
                   >
                     <div className="w-8 h-8 rounded-full border border-current flex items-center justify-center mb-1 opacity-80">
-
+                      <FaUndo className="text-sm" />
                     </div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider">{t("Return")}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider">
+                      {t("Return")}
+                    </span>
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -402,14 +408,27 @@ export default function Navbar() {
                     <Menu size={24} />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-48 bg-white rounded-xl shadow-xl border-gray-100 p-2">
-                  <DropdownMenuItem onClick={() => handleTabChange("take_away")} className={`flex px-3 py-3 rounded-lg cursor-pointer ${currentTab === "take_away" ? "bg-[#7b61ff] text-white font-bold" : "hover:bg-gray-50 text-gray-700"}`}>
-                    {t("take_away")}
+                <DropdownMenuContent
+                  align="start"
+                  dir="ltr"
+                  className="w-48 bg-white rounded-xl shadow-xl border-gray-100 p-2"
+                >
+                  <DropdownMenuItem
+                    onClick={() => handleTabChange("take_away")}
+                    className={`flex px-3 py-3 rounded-lg cursor-pointer ${currentTab === "take_away" ? "bg-[#7b61ff] text-white font-bold" : "hover:bg-gray-50 text-gray-700"}`}
+                  >
+                    {t("POS")}
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleTabChange("online-order")} className={`flex px-3 py-3 rounded-lg cursor-pointer ${currentTab === "online-order" ? "bg-[#7b61ff] text-white font-bold" : "hover:bg-gray-50 text-gray-700"}`}>
+                  <DropdownMenuItem
+                    onClick={() => handleTabChange("online-order")}
+                    className={`flex px-3 py-3 rounded-lg cursor-pointer ${currentTab === "online-order" ? "bg-[#7b61ff] text-white font-bold" : "hover:bg-gray-50 text-gray-700"}`}
+                  >
                     {t("OnlineOrders")}
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleTabChange("return")} className={`flex px-3 py-3 rounded-lg cursor-pointer ${currentTab === "return" ? "bg-[#7b61ff] text-white font-bold" : "hover:bg-gray-50 text-gray-700"}`}>
+                  <DropdownMenuItem
+                    onClick={() => handleTabChange("return")}
+                    className={`flex px-3 py-3 rounded-lg cursor-pointer ${currentTab === "return" ? "bg-[#7b61ff] text-white font-bold" : "hover:bg-gray-50 text-gray-700"}`}
+                  >
                     {t("Return")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -435,6 +454,7 @@ export default function Navbar() {
             />
             <button
               onClick={() => setShowCustomerModal(true)}
+              title={t("AddCustomer")}
               className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-2xl bg-white border border-gray-100 text-[#7b61ff] shadow-sm hover:bg-gray-50 transition-all flex-shrink-0"
             >
               <span className="text-2xl font-light">+</span>
@@ -442,11 +462,12 @@ export default function Navbar() {
           </div>
           {/* --- الجزء الأيمن: العداد والقائمة المنسدلة للمستخدم --- */}
           <div className="flex items-center gap-2 sm:gap-3">
-
             <div className="hidden sm:flex bg-white px-5 py-2 rounded-[22px] border border-gray-100 shadow-sm flex-col items-center min-w-[120px]">
               <div className="flex items-center gap-1.5 mb-0.5">
                 <span className="text-gray-400 text-xs">🕒</span>
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{t("shift")}</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">
+                  {t("shift")}
+                </span>
               </div>
               <span className="text-[#ff3b3b] font-mono font-bold text-lg leading-none tracking-widest">
                 {formatElapsedTime()}
@@ -464,65 +485,161 @@ export default function Navbar() {
                   <div className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 group-hover:text-[#7b61ff] group-hover:border-[#7b61ff] transition-all">
                     <User className="w-5 h-5" />
                   </div>
-                  <span className="text-[9px] font-bold text-gray-400 uppercase mt-1 group-hover:text-[#7b61ff]">User</span>
+                  <span className="text-[9px] font-bold text-gray-400 uppercase mt-1 group-hover:text-[#7b61ff]">
+                    {t("User")}
+                  </span>
                 </button>
               </DropdownMenuTrigger>
 
-              <DropdownMenuContent className="w-64 bg-white rounded-xl shadow-xl border-gray-100 p-2" align="end">
+              <DropdownMenuContent
+                className="w-64 bg-white rounded-xl shadow-xl border-gray-100 p-2"
+                align="end"
+                dir="ltr"
+              >
                 <div className="px-3 py-2">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Authenticated as</p>
-                  <p className="text-sm font-extrabold text-[#1a1a1a]">Administrator</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                    {t("AuthenticatedAs")}
+                  </p>
+                  <p className="text-sm font-extrabold text-[#1a1a1a]">
+                    {t("Administrator")}
+                  </p>
                 </div>
 
                 <DropdownMenuSeparator className="bg-gray-50" />
 
-                <DropdownMenuItem onClick={() => navigate("/profile")} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50">
+                <DropdownMenuItem
+                  onClick={() => navigate("/profile")}
+                  className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50"
+                >
                   <User className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm font-semibold text-gray-600">Profile</span>
+                  <span className="text-sm font-semibold text-gray-600">
+                    {t("profile")}
+                  </span>
                 </DropdownMenuItem>
 
-                <DropdownMenuItem onClick={toggleLanguage} className="flex items-center justify-between p-3 rounded-lg cursor-pointer hover:bg-gray-50">
+                <DropdownMenuItem
+                  onClick={() => setShowCustomerModal(true)}
+                  className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50"
+                >
+                  <UserPlus className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm font-semibold text-gray-600">
+                    {t("AddCustomer")}
+                  </span>
+                </DropdownMenuItem>
+
+                <DropdownMenuItem
+                  onClick={toggleLanguage}
+                  className="flex items-center justify-between p-3 rounded-lg cursor-pointer hover:bg-gray-50"
+                >
                   <div className="flex items-center gap-3">
                     <Languages className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm font-semibold text-gray-600">تغيير للعربية</span>
+                    <span className="text-sm font-semibold text-gray-600">
+                      {isArabic ? t("SwitchToEnglish") : t("SwitchToArabic")}
+                    </span>
                   </div>
                 </DropdownMenuItem>
 
-                <DropdownMenuItem onClick={handleAllOrders} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50">
+                <DropdownMenuItem
+                  onClick={handleAllOrders}
+                  className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50"
+                >
                   <ListOrdered className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm font-semibold text-gray-600">AllOrders</span>
+                  <span className="text-sm font-semibold text-gray-600">
+                    {t("AllOrders")}
+                  </span>
                 </DropdownMenuItem>
 
-                <DropdownMenuItem onClick={handleDueUsers} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50">
+                <DropdownMenuItem
+                  onClick={handleDueUsers}
+                  className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50"
+                >
                   <Users className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm font-semibold text-gray-600">Due Users</span>
+                  <span className="text-sm font-semibold text-gray-600">
+                    {t("DueUsers")}
+                  </span>
                 </DropdownMenuItem>
 
-                <DropdownMenuItem onClick={handleExpenses} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50">
+                <DropdownMenuItem
+                  onClick={handleInstallments}
+                  className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50"
+                >
+                  <CreditCard className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm font-semibold text-gray-600">
+                    {t("Installments")}
+                  </span>
+                </DropdownMenuItem>
+
+                <DropdownMenuItem
+                  onClick={handleWarehouseReport}
+                  className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50"
+                >
+                  <Warehouse className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm font-semibold text-gray-600">
+                    {t("WarehouseReport")}
+                  </span>
+                </DropdownMenuItem>
+
+                <DropdownMenuItem
+                  onClick={handleWarehouseTransfers}
+                  className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50"
+                >
+                  <ArrowLeftRight className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm font-semibold text-gray-600">
+                    {t("WarehouseTransfers")}
+                  </span>
+                </DropdownMenuItem>
+
+                <DropdownMenuItem
+                  onClick={handleExpenses}
+                  className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50"
+                >
                   <DollarSign className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm font-semibold text-gray-600">Expenses</span>
+                  <span className="text-sm font-semibold text-gray-600">
+                    {t("Expenses")}
+                  </span>
+                </DropdownMenuItem>
+
+                <DropdownMenuItem
+                  onClick={handleWasted}
+                  className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50"
+                >
+                  <PackageX className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm font-semibold text-gray-600">
+                    {t("AddWasted")}
+                  </span>
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator className="bg-gray-50" />
 
-                <DropdownMenuItem onClick={handleCloseShift} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-red-50 group">
+                <DropdownMenuItem
+                  onClick={handleCloseShift}
+                  className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-red-50 group"
+                >
                   <XCircle className="w-4 h-4 text-red-500" />
-                  <span className="text-sm font-bold text-red-600">Close Shift</span>
+                  <span className="text-sm font-bold text-red-600">
+                    {t("closeshift")}
+                  </span>
                 </DropdownMenuItem>
 
-                <DropdownMenuItem onClick={handleLogout} className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50">
+                <DropdownMenuItem
+                  onClick={handleLogout}
+                  className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50"
+                >
                   <LogOut className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm font-semibold text-gray-500">Logout</span>
+                  <span className="text-sm font-semibold text-gray-500">
+                    {t("logout")}
+                  </span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-
           </div>
         </div>
       </div>
 
       {/* --- المودالز تظل كما هي --- */}
-      {showExpensesModal && <ExpensesModal onClose={() => setShowExpensesModal(false)} />}
+      {showExpensesModal && (
+        <ExpensesModal onClose={() => setShowExpensesModal(false)} />
+      )}
       {showPasswordModal && (
         <PasswordConfirmModal
           onConfirm={handlePasswordConfirmed}
@@ -537,7 +654,12 @@ export default function Navbar() {
           onConfirmClose={handleClose}
         />
       )}
-      {showCustomerModal && <AddCustomer onClose={() => setShowCustomerModal(false)} />}
+      {showCustomerModal && (
+        <AddCustomer onClose={() => setShowCustomerModal(false)} />
+      )}
+      {showWastedModel && (
+        <AddWasted onClose={() => setShowWastedModel(false)} />
+      )}
     </>
   );
 }

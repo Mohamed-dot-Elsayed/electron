@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { format } from "date-fns"; // اختياري لو عايز تنسيق تاريخ أحلى
 
 export default function OrdersView() {
-  const { data: apiResponse, error, isLoading } = useGet("api/pos/sales/complete");
+  const { data: apiResponse, error, isLoading } = useGet("api/admin/pos/sales/complete");
   const [search, setSearch] = useState("");
   const { t } = useTranslation();
 
@@ -101,6 +101,15 @@ export default function OrdersView() {
                   <p className="text-sm text-gray-500">
                     {orderDate} — {orderTime}
                   </p>
+
+                  {Number(order.discount ?? order.discount_amount ?? 0) > 0 && (
+                    <div className="flex items-center justify-between text-sm bg-rose-50 text-rose-600 rounded-lg px-3 py-1.5">
+                      <span className="font-semibold">{t("Discount")}</span>
+                      <span className="font-bold">
+                        -{Number(order.discount ?? order.discount_amount).toFixed(2)} EGP
+                      </span>
+                    </div>
+                  )}
 
                   <div className="space-y-1">
                     <p className="text-sm font-semibold text-gray-700">

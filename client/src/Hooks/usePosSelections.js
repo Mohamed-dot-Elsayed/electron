@@ -19,15 +19,15 @@ import { useGet } from "./useGet";
 import { useMemo } from "react";
 
 export function usePosSelections() {
-  const { data: customersData,      isLoading: l1 } = useGet("api/pos-home/customers");
-  const { data: customerGroupsData, isLoading: l2 } = useGet("api/pos-home/customer-groups");
-  const { data: countriesData,      isLoading: l3 } = useGet("api/pos-home/countries");
-  const { data: warehousesData,     isLoading: l4 } = useGet("api/pos-home/warehouses");
-  const { data: accountsData,       isLoading: l5 } = useGet("api/pos-home/accounts");
-  const { data: taxesData,          isLoading: l6 } = useGet("api/pos-home/taxes");
-  const { data: discountsData,      isLoading: l7 } = useGet("api/pos-home/discounts");
-  const { data: couponsData,        isLoading: l8 } = useGet("api/pos-home/coupons");
-  const { data: paymentMethodsData, isLoading: l9 } = useGet("api/pos-home/payment-methods");
+  const { data: customersData,      isLoading: l1 } = useGet("api/admin/pos-home/customers");
+  const { data: customerGroupsData, isLoading: l2 } = useGet("api/admin/pos-home/customer-groups");
+  const { data: countriesData,      isLoading: l3 } = useGet("api/admin/pos-home/countries");
+  const { data: warehousesData,     isLoading: l4 } = useGet("api/admin/pos-home/warehouses");
+  const { data: accountsData,       isLoading: l5 } = useGet("api/admin/pos-home/accounts");
+  const { data: taxesData,          isLoading: l6 } = useGet("api/admin/pos-home/taxes");
+  const { data: discountsData,      isLoading: l7 } = useGet("api/admin/pos-home/discounts");
+  const { data: couponsData,        isLoading: l8 } = useGet("api/admin/pos-home/coupons");
+  const { data: paymentMethodsData, isLoading: l9 } = useGet("api/admin/pos-home/payment-methods");
 
   const isLoading = l1 || l2 || l3 || l4 || l5 || l6 || l7 || l8 || l9;
 

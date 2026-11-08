@@ -81,7 +81,7 @@ export default function ProductDetailModalWrapper({ children, product, updateOrd
 
     const enhancedProduct = enhancedProductOrProducts;
 
-    // فحص نفاذ الكمية
+    // فحص نفاذ الكمية للمنتج الفردي
     if (
       enhancedProduct.selectedVariant &&
       enhancedProduct.selectedVariant.quantity !== null &&

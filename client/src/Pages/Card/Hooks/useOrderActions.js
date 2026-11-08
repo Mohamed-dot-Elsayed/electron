@@ -269,7 +269,7 @@ const handleSaveAsPending = async (amountToPay, order_tax) => {
   });
 
   try {
-    await postData("api/pos/sales", payload, {
+    await postData("api/admin/pos/sales", payload, {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${sessionStorage.getItem("token")}`,

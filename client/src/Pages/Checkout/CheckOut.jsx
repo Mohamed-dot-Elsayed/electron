@@ -15,7 +15,6 @@ import { usePost } from "@/Hooks/usePost";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import Loading from "@/components/Loading";
-import qz from "qz-tray";
 import CustomerSelectionModal from "./CustomerSelectionModal";
 import {
   buildFinancialsPayload,
@@ -33,6 +32,77 @@ import { useQueryClient } from "@tanstack/react-query";
 import FreeDiscountPasswordModal from "./FreeDiscountPasswordModal";
 import { useDiscountCalculation } from "@/Hooks/useDiscountCalculation";
 
+const roundCurrency = (v) =>
+  Math.round((Number(v) + Number.EPSILON) * 100) / 100;
+
+const computeBackendGrandTotal = ({
+  subtotal,
+  discountData,
+  couponData,
+  taxData,
+  giftCardAmount = 0,
+  freeDiscountAmount = 0,
+  serviceFeeTotal = 0,
+  shipping = 0,
+}) => {
+  const sub = Number(subtotal) || 0;
+
+  let discountAmount = 0;
+  if (discountData) {
+    discountAmount =
+      discountData.type === "percentage"
+        ? roundCurrency(sub * Number(discountData.amount || 0))
+        : roundCurrency(Number(discountData.amount || 0));
+  }
+
+  let couponAmount = 0;
+  if (couponData) {
+    couponAmount =
+      couponData.type === "percentage"
+        ? roundCurrency((sub * Number(couponData.amount || 0)) / 100)
+        : roundCurrency(Number(couponData.amount || 0));
+  }
+
+  // ✅ الخصم اليدوي (Free discount) — نفس منطق الباك إند
+  const requestedFreeDiscount = roundCurrency(
+    Math.max(0, Number(freeDiscountAmount) || 0),
+  );
+  const maxFreeDiscount = Math.max(
+    0,
+    roundCurrency(sub - discountAmount - couponAmount),
+  );
+  const appliedFreeDiscount = roundCurrency(
+    Math.min(requestedFreeDiscount, maxFreeDiscount),
+  );
+
+  let taxAmount = 0;
+  if (taxData) {
+    taxAmount =
+      taxData.type === "percentage"
+        ? roundCurrency(sub * Number(taxData.amount || 0))
+        : roundCurrency(Number(taxData.amount || 0));
+  }
+
+  const raw =
+    sub -
+    discountAmount -
+    couponAmount -
+    appliedFreeDiscount -
+    Number(giftCardAmount || 0) +
+    Number(serviceFeeTotal || 0) +
+    taxAmount +
+    Number(shipping || 0);
+
+  return {
+    discountAmount,
+    freeDiscountAmount: appliedFreeDiscount,
+    totalDiscountAmount: roundCurrency(discountAmount + appliedFreeDiscount),
+    couponAmount,
+    taxAmount,
+    grandTotal: roundCurrency(Math.max(0, raw)),
+  };
+};
+
 const CheckOut = ({
   amountToPay,
   orderItems,
@@ -42,17 +112,16 @@ const CheckOut = ({
   selectedPaymentItemIds = [],
   onClearCart,
   shouldPrintReceipt = true,
+  shouldSendWhatsapp = false,
   initialFreeDiscount = "",
   initialDiscountId = null,
+  initialDiscountData = null,
   initialAppliedDiscount = 0,
   initialDiscountCode = "",
 }) => {
   const cashierId = sessionStorage.getItem("cashier_id");
-  const baseUrl = import.meta.env.VITE_API_BASE_URL;
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
-
-  const lastSelectedGroup = sessionStorage.getItem("last_selected_group");
 
   const { data: groupData } = useGet("cashier/group_product");
   const groupProducts = groupData?.group_product || [];
@@ -62,132 +131,111 @@ const CheckOut = ({
 
   const isDueModuleAllowed = (() => {
     if (!groupProducts || groupProducts.length === 0) return false;
-
     const lastSelectedGroupId = sessionStorage.getItem("last_selected_group");
     if (!lastSelectedGroupId || lastSelectedGroupId === "all") return false;
-
     const groupId = parseInt(lastSelectedGroupId);
     if (isNaN(groupId)) return false;
-
     const selectedGroup = groupProducts.find((g) => g.id === groupId);
     return selectedGroup?.Due === 1;
   })();
 
-  const { data: taxesData } = useGet("api/taxes");
-
-  // ✅ جلب الـ service fees من الـ API
-  const { data: serviceFeesData } = useGet("api/pos-home/service-fees");
-
+  const { data: taxesData } = useGet("api/admin/pos-home/taxes");
   const { data: nextInvoiceRes } = useGet(
     "api/admin/pos/sales/next-invoice-number",
   );
   const nextInvoiceNumber =
     nextInvoiceRes?.data?.dailyOrderNumber || nextInvoiceRes?.dailyOrderNumber;
 
+  // ═══════════════════════════════════════════════════════════
+  // ✅ جلب الـ Service Fees من الباك (إجبارية من الأدمن)
+  // ═══════════════════════════════════════════════════════════
+  const { data: serviceFeesData } = useGet("api/admin/pos-home/service-fees");
+  const availableServiceFees = useMemo(() => {
+    const raw = serviceFeesData?.data?.data || serviceFeesData?.data || [];
+    return Array.isArray(raw) ? raw : [];
+  }, [serviceFeesData]);
+
+  // ═══════════════════════════════════════════════════════════
+  // ✅ جلب قائمة Discounts
+  // ═══════════════════════════════════════════════════════════
+  const { data: discountsData } = useGet("api/admin/discount");
+  const availableDiscounts = useMemo(() => {
+    // الـ API بيرجّع { success, data: { message, discounts: [...] } }
+    const raw =
+      discountsData?.data?.discounts ||
+      discountsData?.data?.data ||
+      discountsData?.discounts ||
+      (Array.isArray(discountsData?.data) ? discountsData.data : null) ||
+      [];
+    return Array.isArray(raw) ? raw : [];
+  }, [discountsData]);
+
   const [selectedDiscountId, setSelectedDiscountId] =
     useState(initialDiscountId);
   const [selectedTaxId, setSelectedTaxId] = useState(null);
   const [freeDiscount, setFreeDiscount] = useState(initialFreeDiscount);
-  const [appliedDiscount, setAppliedDiscount] = useState(
-    initialAppliedDiscount,
-  );
   const [discountCode, setDiscountCode] = useState(initialDiscountCode);
 
-  // ✅ حساب مجموع الـ service fees من الـ API
-  const serviceFeesTotal = useMemo(() => {
-    const fees = serviceFeesData?.data?.data || serviceFeesData?.data || [];
-    return fees.reduce((sum, fee) => sum + Number(fee.amount || 0), 0);
-  }, [serviceFeesData]);
+  const [appliedCouponData, setAppliedCouponData] = useState(null);
+  const [appliedDiscountData, setAppliedDiscountData] = useState(null);
 
-  // === QZ Tray Connection ===
+  // ═══════════════════════════════════════════════════════════
+  // ✅ استخراج بيانات الـ Discount
+  // ═══════════════════════════════════════════════════════════
   useEffect(() => {
-    if (window.electronAPI) {
-      // لو شغالين جوة إلكترون بنستخدم الطباعة النيتف ومش محتاجين كيو زد تراي
+    if (!selectedDiscountId) {
+      setAppliedDiscountData(null);
       return;
     }
-    if (!shouldPrintReceipt) {
-      // لو مش هنطبع → متعملش اتصال بـ QZ خالص
-      return;
-    }
-    // 1. جلب التوكين (تأكد من اسم المفتاح الصحيح سواء token أو access_token)
-    const token = sessionStorage.getItem("token");
 
-    // إعداد الهيدر للإرسال
-    const authHeaders = {
-      Authorization: `Bearer ${token}`, // إضافة التوكين هنا
-    };
+    const found = availableDiscounts.find(
+      (d) => String(d._id) === String(selectedDiscountId),
+    );
 
-    // 2. إعداد الـ Certificate
-    qz.security.setCertificatePromise(function (resolve, reject) {
-      fetch(`${baseUrl}api/qztray/cert`, {
-        method: "GET",
-        headers: authHeaders, // <--- إرسال التوكين هنا
-      })
-        .then((response) => {
-          if (!response.ok) {
-            // إذا كان الخطأ 401، فهذا يعني أن التوكين غير صحيح أو منتهي
-            if (response.status === 401) {
-              throw new Error("401 Unauthorized: Please check login status.");
-            }
-            throw new Error(`Certificate Error: ${response.status}`);
-          }
-          return response.text();
-        })
-        .then(resolve)
-        .catch((err) => {
-          console.error("❌ Failed to fetch certificate:", err);
-          reject(err);
-        });
-    });
-
-    qz.security.setSignatureAlgorithm("SHA512");
-
-    // 3. إعداد الـ Signature
-    qz.security.setSignaturePromise(function (toSign) {
-      return function (resolve, reject) {
-        const apiUrl = `${baseUrl}api/qztray/sign?request=${toSign}`;
-
-        fetch(apiUrl, {
-          method: "GET",
-          headers: authHeaders, // <--- إرسال التوكين هنا أيضاً
-        })
-          .then((response) => {
-            if (!response.ok) {
-              if (response.status === 401) {
-                throw new Error("401 Unauthorized: Signature rejected.");
-              }
-              throw new Error(`Signature Error: ${response.status}`);
-            }
-            return response.text();
-          })
-          .then(resolve)
-          .catch((err) => {
-            console.error("❌ Failed to sign request:", err);
-            reject(err);
-          });
-      };
-    });
-
-    // 4. الاتصال
-    if (!qz.websocket.isActive()) {
-      qz.websocket
-        .connect()
-        .then(() => {
-          console.log("✅ Connected to QZ Tray");
-        })
-        .catch((err) => {
-          console.error("❌ QZ Tray connection error:", err);
-          // تجاهل الخطأ إذا كان بسبب التكرار، لكن اعرضه إذا كان اتصالاً فعلياً
-          // toast.error(t("QZTrayNotRunning"));
-        });
-    }
-
-    return () => {
-      if (qz.websocket.isActive()) {
-        qz.websocket.disconnect();
+    if (found) {
+      let normalizedAmount = Number(found.amount);
+      if (found.type === "percentage" && normalizedAmount > 1) {
+        normalizedAmount = normalizedAmount / 100;
       }
-    };
-  }, [baseUrl, t, shouldPrintReceipt]); // تمت إزالة token من الاعتماديات لتجنب إعادة الاتصال المتكررة إذا لم يكن ضرورياً
+      setAppliedDiscountData({
+        type: found.type,
+        amount: normalizedAmount,
+      });
+      console.log("✅ Discount loaded from list:", found);
+      return;
+    }
+
+    // ✅ لو القائمة لسه بتحمّل: استخدم نفس بيانات الخصم المختار من الكارت
+    if (initialDiscountData?.type) {
+      setAppliedDiscountData(initialDiscountData);
+      console.log("✅ Discount loaded from cart selection:", initialDiscountData);
+      return;
+    }
+
+    if (initialAppliedDiscount && Number(initialAppliedDiscount) > 0) {
+      let normalizedAmount = Number(initialAppliedDiscount);
+      if (normalizedAmount > 1) normalizedAmount = normalizedAmount / 100;
+
+      setAppliedDiscountData({
+        type: "percentage",
+        amount: normalizedAmount,
+      });
+      console.log(
+        "✅ Discount loaded from initialAppliedDiscount:",
+        normalizedAmount,
+      );
+      return;
+    }
+
+    // مفيش بيانات خصم → مفيش خصم (مش بنفترض 10% غلط)
+    console.warn("⚠️ Discount not found in list:", selectedDiscountId);
+    setAppliedDiscountData(null);
+  }, [
+    selectedDiscountId,
+    availableDiscounts,
+    initialAppliedDiscount,
+    initialDiscountData,
+  ]);
 
   const { postData, loading } = usePost();
 
@@ -199,105 +247,281 @@ const CheckOut = ({
   const [customerSearchQuery, setCustomerSearchQuery] = useState("");
 
   const {
-    data: dueUsersData,
+    data: customersData,
     isLoading: customerSearchLoading,
-    refetch: refetchDueUsers,
-  } = useGet("api/pos-home/due-customers");
+    refetch: refetchCustomers,
+  } = useGet("api/admin/pos-home/customers");
+
+  // 🔎 بحث في كل العملاء (اسم / تليفون) مع debounce
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      refetchCustomers(
+        `api/admin/pos-home/customers?search=${encodeURIComponent(
+          customerSearchQuery,
+        )}`,
+      ).catch(() => {});
+    }, 300);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerSearchQuery]);
 
   const searchResults = useMemo(() => {
-    // استخرج الـ array من الشكل الجديد: { success, data: { message, data: [...] } }
-    const customers =
-      dueUsersData?.data?.data || dueUsersData?.data?.dueCustomers || [];
+    const customers = customersData?.data?.data || [];
+    if (!Array.isArray(customers)) return [];
+
     return customers.filter(
       (c) =>
+        !customerSearchQuery ||
         c.name?.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
         c.phone_number?.includes(customerSearchQuery),
     );
-  }, [dueUsersData, customerSearchQuery]);
+  }, [customersData, customerSearchQuery]);
 
-  // ──── حساب الخصم من الـ shared hook ────
-  const {
-    totalDiscountDisplay: totalDiscountValue,
-    finalAmountToPay: discountedAmount,
-  } = useDiscountCalculation(
-    amountToPay,
-    selectedDiscountId,
-    appliedDiscount,
-    freeDiscount,
-  );
-  // taxableAmount = discountedAmount (المبلغ بعد كل الخصومات)
-  const taxableAmount = discountedAmount;
+  // POS-home taxes endpoint returns { data: [...] }; the admin taxes
+  // endpoint returns { data: { taxes: [...] } }. Normalize both shapes.
+  const taxesList = useMemo(() => {
+    const payload = taxesData?.data;
+    if (Array.isArray(payload)) return payload;
+    return payload?.taxes || [];
+  }, [taxesData]);
 
-  const [isDueOrder, setIsDueOrder] = useState(false);
-  const [discountError, setDiscountError] = useState(null);
-  const [isCheckingDiscount, setIsCheckingDiscount] = useState(false);
-  const selectedTaxAmount = useMemo(() => {
-    if (!selectedTaxId || !taxesData?.data?.taxes) return 0;
+  const selectedTaxData = useMemo(() => {
+    if (!selectedTaxId) return null;
+    const tax = taxesList.find((t) => t._id === selectedTaxId);
+    if (!tax) return null;
 
-    const selectedTax = taxesData.data.taxes.find(
-      (t) => t._id === selectedTaxId,
-    );
-    if (!selectedTax) return 0;
-
-    console.log("Selected Tax raw amount:", selectedTax.amount);
-    console.log("Selected Tax type:", selectedTax.type);
-
-    if (selectedTax.type === "percentage") {
-      let rate = selectedTax.amount;
-      if (rate <= 1) rate *= 100; // fix common admin mistake
-      const taxValue = taxableAmount * (rate / 100);
-      console.log(
-        `Calculated tax: ${taxValue} (from ${taxableAmount} × ${rate}%)`,
-      );
-      return taxValue;
-    } else {
-      return selectedTax.amount;
+    let normalizedAmount = Number(tax.amount);
+    if (tax.type === "percentage" && normalizedAmount > 1) {
+      normalizedAmount = normalizedAmount / 100;
     }
-  }, [selectedTaxId, taxesData, taxableAmount]);
+    return { type: tax.type, amount: normalizedAmount };
+  }, [selectedTaxId, taxesList]);
 
-  const requiredTotal = useMemo(() => {
+  const rawSubtotal = useMemo(() => {
     if (selectedPaymentItemIds.length > 0) {
       const selectedItems = orderItems.filter((item) =>
         selectedPaymentItemIds.includes(item.temp_id),
       );
-      return selectedItems.reduce((acc, item) => {
-        const quantity = item.count ?? item.quantity ?? 1;
-        return acc + item.price * quantity;
-      }, 0);
+      return roundCurrency(
+        selectedItems.reduce((acc, item) => {
+          const quantity = item.count ?? item.quantity ?? 1;
+          return acc + item.price * quantity;
+        }, 0),
+      );
     }
 
-    // المجموع بعد الخصومات + الضريبة اليدوية
-    return discountedAmount + selectedTaxAmount;
-  }, [orderItems, discountedAmount, selectedPaymentItemIds, selectedTaxAmount]);
-  console.log("===== CheckOut component LOADED =====");
-  console.log("amountToPay:", amountToPay);
-  console.log("discountedAmount:", discountedAmount);
-  console.log("taxableAmount:", taxableAmount);
-  console.log("selectedTaxAmount:", selectedTaxAmount);
-  console.log("requiredTotal:", requiredTotal);
-  console.log("Tax id selected:", selectedTaxId);
+    if (Array.isArray(orderItems) && orderItems.length > 0) {
+      const fromItems = roundCurrency(
+        orderItems.reduce((acc, item) => {
+          const quantity = Number(item.count ?? item.quantity ?? 1);
+          const price = Number(item.price) || 0;
+          return acc + price * quantity;
+        }, 0),
+      );
+      if (fromItems > 0) return fromItems;
+    }
+
+    return roundCurrency(Number(amountToPay) || 0);
+  }, [amountToPay, orderItems, selectedPaymentItemIds]);
+
+  // ═══════════════════════════════════════════════════════════
+  // ✅ حساب الـ Service Fees Total
+  //    (إجبارية من الأدمن + بتتضاف على كل فاتورة)
+  // ═══════════════════════════════════════════════════════════
+  const serviceFeesTotal = useMemo(() => {
+    return roundCurrency(
+      availableServiceFees.reduce((sum, fee) => {
+        if (fee.type === "percentage") {
+          return (
+            sum + roundCurrency((rawSubtotal * Number(fee.amount || 0)) / 100)
+          );
+        }
+        return sum + roundCurrency(Number(fee.amount || 0));
+      }, 0),
+    );
+  }, [availableServiceFees, rawSubtotal]);
+
+  // ✅ IDs الـ service fees (هنبعتها للباك)
+  const serviceFeeIds = useMemo(() => {
+    return availableServiceFees.map((fee) => String(fee._id));
+  }, [availableServiceFees]);
+
+  // ═══════════════════════════════════════════════════════════
+  // ✅ compute — بنضيف service fees عشان requiredTotal = grand_total
+  // ═══════════════════════════════════════════════════════════
+  const computed = useMemo(() => {
+    const result = computeBackendGrandTotal({
+      subtotal: rawSubtotal,
+      discountData: appliedDiscountData,
+      couponData: appliedCouponData,
+      taxData: selectedTaxData,
+      giftCardAmount: 0,
+      freeDiscountAmount: freeDiscount, // ✅ الخصم اليدوي
+      serviceFeeTotal: serviceFeesTotal, // ✅ بنضيفها
+      shipping: 0,
+    });
+
+    return {
+      subtotal: rawSubtotal,
+      serviceFeesTotal,
+      ...result,
+      requiredTotal: result.grandTotal,
+    };
+  }, [
+    rawSubtotal,
+    appliedDiscountData,
+    appliedCouponData,
+    selectedTaxData,
+    serviceFeesTotal,
+    freeDiscount,
+  ]);
+
+  const requiredTotal = computed.requiredTotal;
+  const taxableAmount = roundCurrency(
+    Math.max(0, rawSubtotal - computed.discountAmount - computed.couponAmount),
+  );
+
+  const [isDueOrder, setIsDueOrder] = useState(false);
+  const [discountError, setDiscountError] = useState(null);
+  const [isCheckingDiscount, setIsCheckingDiscount] = useState(false);
+
+  // ═══════════════════════════════════════════════════════════
+  // 🆕 الدفع بالتقسيط
+  // ═══════════════════════════════════════════════════════════
+  const [isInstallmentOrder, setIsInstallmentOrder] = useState(false);
+  const [installmentMonths, setInstallmentMonths] = useState(3);
+  const [installmentDownPayment, setInstallmentDownPayment] = useState("");
+  const [installmentSchedule, setInstallmentSchedule] = useState(null);
+  const [installmentPreviewError, setInstallmentPreviewError] = useState(null);
+  const { postData: previewInstallmentPost } = usePost();
+
+  const { data: installmentSettingsRes } = useGet(
+    "api/admin/pos/installments/settings",
+  );
+  const installmentSettings = installmentSettingsRes?.data?.settings;
+  const installmentEnabled = installmentSettings?.enabled !== false;
+  const maxInstallmentMonths = Number(
+    installmentSettings?.max_installments || 12,
+  );
+  const minDownPaymentPercent = Number(
+    installmentSettings?.min_down_payment_percent || 0,
+  );
+
+  // المبلغ المطلوب تحصيله الآن (مقدم التقسيط، أو إجمالي الفاتورة في الدفع الكامل)
+  const installmentPayTarget = useMemo(() => {
+    if (!isInstallmentOrder) return roundCurrency(requiredTotal);
+    const down = Number(installmentDownPayment) || 0;
+    return roundCurrency(
+      Math.max(0, Math.min(down, Math.max(0, requiredTotal - 0.01))),
+    );
+  }, [isInstallmentOrder, installmentDownPayment, requiredTotal]);
+
+  // 🧮 معاينة الخطة من الباك (نفس الحساب اللي هيتطبق فعلاً)
+  useEffect(() => {
+    if (!isInstallmentOrder) {
+      setInstallmentSchedule(null);
+      setInstallmentPreviewError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await previewInstallmentPost(
+          "api/admin/pos/installments/preview",
+          {
+            total: requiredTotal,
+            months: Number(installmentMonths),
+            down_payment: Number(installmentDownPayment) || 0,
+          },
+        );
+
+        if (!cancelled) {
+          setInstallmentSchedule(res?.data?.plan || null);
+          setInstallmentPreviewError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setInstallmentSchedule(null);
+          setInstallmentPreviewError(
+            err?.response?.data?.error?.message ||
+              err?.response?.data?.message ||
+              t("installments.checkout.previewFailed"),
+          );
+        }
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isInstallmentOrder,
+    installmentMonths,
+    installmentDownPayment,
+    requiredTotal,
+  ]);
+
+  const totalDiscountValue = useMemo(
+    () => roundCurrency(rawSubtotal - taxableAmount),
+    [rawSubtotal, taxableAmount],
+  );
+
+  // 🐛 DEBUG
+  useEffect(() => {
+    console.log("=== CHECKOUT COMPUTED ===", {
+      amountToPay_from_parent: amountToPay,
+      rawSubtotal_calculated: rawSubtotal,
+      discountAmount: computed.discountAmount,
+      couponAmount: computed.couponAmount,
+      taxAmount: computed.taxAmount,
+      serviceFeesTotal: computed.serviceFeesTotal,
+      serviceFeeIds,
+      requiredTotal,
+      appliedDiscountData,
+      appliedCouponData,
+      selectedTaxData,
+      selectedDiscountId,
+      initialAppliedDiscount,
+    });
+  }, [
+    computed,
+    rawSubtotal,
+    requiredTotal,
+    amountToPay,
+    appliedDiscountData,
+    appliedCouponData,
+    selectedTaxData,
+    selectedDiscountId,
+    initialAppliedDiscount,
+    serviceFeeIds,
+  ]);
 
   const { totalScheduled, remainingAmount, changeAmount } = useMemo(() => {
     const sum = paymentSplits.reduce(
       (acc, split) => acc + (parseFloat(split.amount) || 0),
       0,
     );
-    const calculatedRemaining = requiredTotal - sum;
-    const calculatedChange = sum - requiredTotal;
-
+    const calculatedRemaining = installmentPayTarget - sum;
+    const calculatedChange = sum - installmentPayTarget;
     return {
-      totalScheduled: sum,
-      remainingAmount: calculatedRemaining > 0 ? calculatedRemaining : 0,
-      changeAmount: calculatedChange > 0 ? calculatedChange : 0,
+      totalScheduled: roundCurrency(sum),
+      remainingAmount:
+        calculatedRemaining > 0 ? roundCurrency(calculatedRemaining) : 0,
+      changeAmount: calculatedChange > 0 ? roundCurrency(calculatedChange) : 0,
     };
-  }, [paymentSplits, requiredTotal]);
+  }, [paymentSplits, installmentPayTarget]);
 
   const calculatedChange = useMemo(() => {
     const paid = parseFloat(customerPaid) || 0;
-    return paid > requiredTotal ? paid - requiredTotal : 0;
+    return paid > requiredTotal ? roundCurrency(paid - requiredTotal) : 0;
   }, [customerPaid, requiredTotal]);
 
-  const isTotalMet = totalScheduled >= requiredTotal;
+  const isTotalMet = totalScheduled >= installmentPayTarget;
 
   const { accounts: fetchedAccounts } = usePosSelections();
 
@@ -315,140 +539,105 @@ const CheckOut = ({
 
   const financialAccounts = useMemo(() => {
     const item = sessionStorage.getItem("financial_accounts");
-
     if (item) {
       try {
         const parsed = JSON.parse(item);
-
-        // الحالة 1: لو array (الطبيعي)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-
-        // الحالة 2: لو object واحد بس
-        if (parsed && parsed._id && parsed.name) {
-          return [parsed];
-        }
-
-        // الحالة 3: لو كان object فيه مفتاح واحد بس
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (parsed && parsed._id && parsed.name) return [parsed];
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-          const values = Object.values(parsed);
-          const flat = values.flat();
-          if (flat.length > 0 && flat[0]._id) {
-            return flat;
-          }
+          const flat = Object.values(parsed).flat();
+          if (flat.length > 0 && flat[0]._id) return flat;
         }
       } catch (e) {
         console.error("Failed to parse financial_accounts:", e);
       }
     }
-
-    // Fallback إذا لم تكن مخزنة بعد في sessionStorage
-    if (Array.isArray(fetchedAccounts) && fetchedAccounts.length > 0) {
+    if (Array.isArray(fetchedAccounts) && fetchedAccounts.length > 0)
       return fetchedAccounts;
-    }
-
     return [];
   }, [fetchedAccounts]);
 
-  // Initialize default payment split
+  // Init default split
   useEffect(() => {
     if (
       financialAccounts?.length > 0 &&
       paymentSplits.length === 0 &&
-      requiredTotal > 0
+      installmentPayTarget > 0
     ) {
-      const visaAccount = financialAccounts.find((acc) =>
-        acc.name?.toLowerCase().includes("visa"),
-      );
-
-      const defaultAccountId = visaAccount
-        ? visaAccount._id
-        : financialAccounts[0]._id;
-
+      // الأولوية لحساب Cash في كل الفروع
+      const defaultAccount =
+        financialAccounts.find((acc) =>
+          /cash|كاش|نقدي/i.test(`${acc.name || ""} ${acc.ar_name || ""}`),
+        ) || financialAccounts[0];
+      const defaultAccountId = defaultAccount._id;
       setPaymentSplits([
         {
           _id: "split-1",
-          account_id: defaultAccountId, // ← هنا
-          amount: requiredTotal,
+          account_id: defaultAccountId,
+          amount: installmentPayTarget,
           checkout: "",
           transition_id: "",
         },
       ]);
     }
-  }, [financialAccounts, requiredTotal, paymentSplits.length]);
+  }, [financialAccounts, installmentPayTarget, paymentSplits.length]);
 
-  // Auto-update single split amount
+  // Auto-update single split
   useEffect(() => {
     if (paymentSplits.length === 1 && paymentSplits[0]._id === "split-1") {
       setPaymentSplits((prev) => {
         if (
           prev.length === 1 &&
           prev[0]._id === "split-1" &&
-          prev[0].amount !== requiredTotal
+          prev[0].amount !== installmentPayTarget
         ) {
           return prev.map((split) =>
             split._id === "split-1"
-              ? { ...split, amount: requiredTotal || 0 }
+              ? { ...split, amount: installmentPayTarget || 0 }
               : split,
           );
         }
         return prev;
       });
     }
-  }, [requiredTotal]);
+  }, [installmentPayTarget]);
 
   const handleApplyDiscount = async () => {
     if (!discountCode) {
       toast.error(t("PleaseEnterDiscountCode"));
       return;
     }
-
     setIsCheckingDiscount(true);
     setDiscountError(null);
 
     try {
-      // إرسال الكود والإجمالي للـ API الجديد
-      const response = await postData("api/pos/apply-coupon", {
+      const response = await postData("api/admin/pos/apply-coupon", {
         coupon_code: discountCode,
-        grand_total: amountToPay,
+        grand_total: rawSubtotal,
       });
 
       if (response.success) {
-        // الوصول للبيانات بناءً على الصورة (response.data.coupon)
         const couponData = response.data?.coupon;
-
         if (couponData) {
-          let discountValue = 0;
-          // لو النوع percentage نطبق النسبة، ولو ثابت نطبق القيمة مباشرة
-          if (couponData.type === "percentage") {
-            discountValue = couponData.amount; // هنا بنخزن النسبة (مثلاً 50)
-          } else {
-            // لو كان قيمة ثابتة، هنحوله لنسبة عشان الـ UI عندك شغال بالنسبة في الـ appliedDiscount
-            // أو تعدلي الحسبة في discountedAmount
-            discountValue = (couponData.amount / amountToPay) * 100;
-          }
-
-          setAppliedDiscount(discountValue);
+          setAppliedCouponData({
+            type: couponData.type,
+            amount: Number(couponData.amount),
+          });
           toast.success(
             t("DiscountAppliedSuccess", { appliedDiscount: couponData.amount }),
           );
         }
       } else {
-        // عرض الرسالة من الباك إند في حالة success: false
         const msg = response.error?.message || t("InvalidOrOffDiscountCode");
         setDiscountError(msg);
         toast.error(msg);
       }
     } catch (e) {
-      // جلب رسالة الخطأ المخصصة "Coupon not found" من الـ catch
-      // الباك إند باعتها في e.response.data.error.message
       const backendError =
         e.response?.data?.error?.message ||
         e.response?.data?.message ||
         e.message;
-
-      setAppliedDiscount(0);
+      setAppliedCouponData(null);
       setDiscountError(backendError);
       toast.error(backendError);
     } finally {
@@ -462,21 +651,18 @@ const CheckOut = ({
       toast.error(t("AmountCannotBeNegative"));
       return;
     }
-
     setPaymentSplits((prevSplits) => {
       const totalExcludingCurrent = prevSplits.reduce(
         (acc, s) => (s._id === _id ? acc : acc + s.amount),
         0,
       );
       const maxAllowed = requiredTotal - totalExcludingCurrent;
-
       if (newAmount > maxAllowed) {
         toast.error(t("AmountExceedsLimit", { amount: maxAllowed.toFixed(2) }));
         return prevSplits.map((split) =>
           split._id === _id ? { ...split, amount: maxAllowed } : split,
         );
       }
-
       return prevSplits.map((split) =>
         split._id === _id ? { ...split, amount: newAmount } : split,
       );
@@ -487,12 +673,7 @@ const CheckOut = ({
     setPaymentSplits((prev) =>
       prev.map((split) =>
         split._id === _id
-          ? {
-              ...split,
-              account_id: accountId,
-              checkout: "",
-              transition_id: "",
-            }
+          ? { ...split, account_id: accountId, checkout: "", transition_id: "" }
           : split,
       ),
     );
@@ -518,13 +699,12 @@ const CheckOut = ({
     if (!financialAccounts?.length) {
       return toast.error(t("NoFinancialAccounts"));
     }
-
     const defaultAccountId = financialAccounts[0]._id;
     setPaymentSplits((prev) => [
       ...prev,
       {
         _id: `split-${Date.now()}`,
-        accountId: defaultAccountId,
+        account_id: defaultAccountId,
         amount: remainingAmount > 0 ? remainingAmount : 0,
         checkout: "",
         transition_id: "",
@@ -536,10 +716,6 @@ const CheckOut = ({
     setPaymentSplits((prev) => prev.filter((s) => s._id !== _id));
   };
 
-  const getAccountNameById = (account_id) => {
-    const acc = financialAccounts?.find((a) => a._id == account_id);
-    return acc ? acc.name : "Select Account";
-  };
   const getDescriptionStatus = (accountId) => {
     const acc = financialAccounts?.find((a) => a._id === parseInt(accountId));
     return acc?.description_status === 1;
@@ -550,15 +726,86 @@ const CheckOut = ({
     return acc?.name?.toLowerCase().includes("visa");
   };
 
+  const handleSendWhatsappOrder = async (receiptData) => {
+    try {
+      if (!receiptData) return;
+      const isArabic = localStorage.getItem("language") === "ar";
+      const targetPhone = "201210724625";
+
+      const itemsText = (receiptData.items || [])
+        .map(
+          (item) =>
+            `• ${item.qty}x ${
+              isArabic ? item.nameAr || item.name : item.name
+            } - ${item.total} ${t("EGP") || "EGP"}`,
+        )
+        .join("\n");
+
+      const messageLines = [
+        `🧾 *${
+          receiptData.restaurantName || (isArabic ? "طلب جديد" : "New Order")
+        }*`,
+        `${isArabic ? "رقم الفاتورة" : "Invoice No"}: #${
+          receiptData.invoiceNumber || ""
+        }`,
+        `${isArabic ? "التاريخ" : "Date"}: ${receiptData.dateFormatted} ${receiptData.timeFormatted}`,
+        "-------------------------",
+        `*${isArabic ? "تفاصيل الطلب:" : "Order Items:"}*`,
+        itemsText,
+        "-------------------------",
+        `*${isArabic ? "الإجمالي الكلي" : "Grand Total"}: ${receiptData.total} ${t("EGP") || "EGP"}*`,
+      ].filter(Boolean);
+
+      const messageContent = messageLines.join("\n");
+
+      const whatsappUrl = `https://wa.me/${targetPhone}?text=${encodeURIComponent(
+        messageContent,
+      )}`;
+      window.open(whatsappUrl, "_blank");
+    } catch (err) {
+      console.error("Error sending WhatsApp order:", err);
+    }
+  };
+
+  const buildExactFinancials = () => {
+    const target = roundCurrency(installmentPayTarget);
+
+    const lines = paymentSplits
+      .filter((s) => Number(s.amount) > 0)
+      .map((s) => ({
+        account_id: s.account_id || s.accountId,
+        amount: roundCurrency(Number(s.amount)),
+      }));
+
+    if (lines.length === 0 && target > 0 && financialAccounts?.[0]?._id) {
+      return [{ account_id: financialAccounts[0]._id, amount: target }];
+    }
+
+    const totalLines = roundCurrency(
+      lines.reduce((sum, l) => sum + l.amount, 0),
+    );
+    const diff = roundCurrency(target - totalLines);
+
+    if (Math.abs(diff) > 0.001 && lines.length > 0) {
+      let maxIdx = 0;
+      for (let i = 1; i < lines.length; i++) {
+        if (lines[i].amount > lines[maxIdx].amount) maxIdx = i;
+      }
+      lines[maxIdx].amount = roundCurrency(lines[maxIdx].amount + diff);
+      console.warn("⚠️ Adjusted financials by diff:", diff, "target:", target);
+    }
+
+    return lines;
+  };
+
   const proceedWithOrderSubmission = async (
     Due = 0,
     customer_id = undefined,
     dueModuleValue = 0,
     forcedPassword = null,
   ) => {
-    const freeDiscountValue = parseFloat(freeDiscount) || 0;
+    const freeDiscountValue = Math.max(0, parseFloat(freeDiscount) || 0);
 
-    // طلب كلمة سر للخصم المجاني
     if (
       freeDiscountValue > 0 &&
       !forcedPassword &&
@@ -571,11 +818,7 @@ const CheckOut = ({
     const safeOrderItems = Array.isArray(orderItems) ? orderItems : [];
     const hasDealItems = safeOrderItems.some((item) => item.is_deal);
     const endpoint = getOrderEndpoint(null, safeOrderItems, hasDealItems);
-    const financialsPayload = buildFinancialsPayload(
-      paymentSplits,
-      financialAccounts,
-    );
-
+    const financialsPayload = buildExactFinancials();
     const moduleId = sessionStorage.getItem("module_id");
 
     let payload;
@@ -584,12 +827,9 @@ const CheckOut = ({
     } else {
       payload = buildOrderPayload({
         orderItems: safeOrderItems,
-        amountToPay: requiredTotal,
+        amountToPay: rawSubtotal,
         order_tax,
-        totalDiscount:
-          appliedDiscount > 0
-            ? amountToPay * (appliedDiscount / 100)
-            : totalDiscount,
+        totalDiscount,
         notes: orderNotes.trim() || "No special instructions",
         financialsPayload,
         cashierId,
@@ -600,11 +840,37 @@ const CheckOut = ({
         module_id: moduleId,
         free_discount: freeDiscountValue > 0 ? freeDiscountValue : undefined,
         due_module: dueModuleValue > 0 ? dueModuleValue.toFixed(2) : undefined,
-        selectedTaxAmount: selectedTaxAmount,
         password: forcedPassword || pendingFreeDiscountPassword || undefined,
-        coupon_code: appliedDiscount > 0 ? discountCode : undefined,
+        coupon_code: discountCode || undefined,
+        service_fee_ids: serviceFeeIds, // ✅ بنبعتها للباك
       });
     }
+
+    // 🆕 الدفع بالتقسيط
+    if (isInstallmentOrder && payload) {
+      payload.payment_type = "installment";
+      payload.installment = {
+        months: Number(installmentMonths),
+        down_payment: roundCurrency(Number(installmentDownPayment) || 0),
+      };
+    }
+
+    const financialsSum = roundCurrency(
+      financialsPayload.reduce((s, f) => s + Number(f.amount), 0),
+    );
+    console.log("=== SENDING PAYLOAD ===", {
+      rawSubtotal_used: rawSubtotal,
+      computed_discountAmount: computed.discountAmount,
+      computed_serviceFees: computed.serviceFeesTotal,
+      serviceFeeIds,
+      requiredTotal,
+      financialsSum,
+      match: Math.abs(financialsSum - requiredTotal) < 0.001,
+      appliedDiscountData,
+      appliedCouponData,
+      selectedTaxData,
+      payload,
+    });
 
     try {
       const response = await postData(endpoint, payload, {
@@ -612,11 +878,19 @@ const CheckOut = ({
       });
 
       if (response?.success) {
-        // نجاح الطلب
-        toast.success(Due === 1 ? t("DueOrderCreated") : t("OrderPlaced"));
+        const planNumber =
+          response?.data?.installment_plan?.plan_number ||
+          response?.installment_plan?.plan_number;
+
+        toast.success(
+          Due === 1
+            ? t("DueOrderCreated")
+            : planNumber
+              ? t("installments.checkout.created", { number: planNumber })
+              : t("OrderPlaced"),
+        );
         setPendingFreeDiscountPassword("");
 
-        // دالة التنظيف والإغلاق (مشتركة) مع تحديث الكاش والمنتجات فوراً
         const completeOrder = () => {
           sessionStorage.removeItem("selected_customer_id");
           window.dispatchEvent(new CustomEvent("reset_selected_customer"));
@@ -630,53 +904,59 @@ const CheckOut = ({
         };
 
         if (Due === 0) {
-          // طلب عادي (مش آجل)
-          // ✅ بنبعت selectedTaxAmount و serviceFeesTotal للـ prepareReceiptData
           const receiptData = prepareReceiptData(
             safeOrderItems,
-            amountToPay,
+            rawSubtotal,
             order_tax,
             totalDiscount,
-            appliedDiscount,
+            appliedDiscountData?.amount || 0,
             {},
             null,
             requiredTotal,
             response.success,
-            { ...response, nextInvoiceNumber },
-            selectedTaxAmount, // ✅ tax من الـ frontend
-            serviceFeesTotal, // ✅ service fees من الـ API
+            response,
+            0,
+            serviceFeesTotal,
           );
 
+          if (shouldSendWhatsapp) handleSendWhatsappOrder(receiptData);
+
           if (shouldPrintReceipt) {
-            // مع طباعة
             printReceiptSilently(receiptData, response, () => {
               completeOrder();
               toast.success(`${t("OrderCompletedSuccessfully")} — Ref: ${response?.sale?.reference || receiptData?.referenceNumber || ""}`);
             });
           } else {
-            // بدون طباعة
             completeOrder();
-            toast.success(
-              `${t("OrderCompletedSuccessfully")} (${t("NoPrint")}) — Ref: ${response?.sale?.reference || receiptData?.referenceNumber || ""}`,
-            );
+            toast.success(`${t("OrderCompletedSuccessfully")} — Ref: ${response?.sale?.reference || receiptData?.referenceNumber || ""}`);
           }
         } else {
-          // طلب آجل → بدون طباعة عادةً
           completeOrder();
           toast.success(`${t("OrderCompletedSuccessfully")} — Ref: ${response?.sale?.reference || ""}`);
         }
       } else {
-        // فشل من الـ API
+        // لو الخصم اليدوي اترفض، لازم المستخدم يدخل الباسورد تاني
+        setPendingFreeDiscountPassword("");
         toast.error(response?.message || t("FailedToProcessOrder"));
       }
     } catch (e) {
       console.error("Submit error:", e);
-      toast.error(e.message || t("SubmissionFailed"));
+      setPendingFreeDiscountPassword("");
+
+      // Permission errors already show a detailed toast from the axios
+      // interceptor (which module + which action is missing).
+      if (e?.isPermissionError) return;
+
+      const message =
+        e?.response?.data?.error?.message ||
+        e?.response?.data?.message ||
+        e?.message ||
+        t("SubmissionFailed");
+      toast.error(message);
     }
   };
 
   const handleSelectCustomer = async (customer) => {
-    // عرض تحذير بس مش منع (لو عايزة تسمحي بالدين حتى لو زاد)
     if (customer.amount_Due && requiredTotal > 0) {
       const newTotalDue = customer.amount_Due + requiredTotal;
       toast.info(
@@ -686,14 +966,19 @@ const CheckOut = ({
         }),
       );
     }
-
     setSelectedCustomer(customer);
     setCustomerSelectionOpen(false);
-
     await proceedWithOrderSubmission(1, customer._id);
   };
+
   const handleSubmitOrder = async () => {
-    if (!isTotalMet || totalScheduled === 0) {
+    if (!isTotalMet) {
+      return toast.error(
+        t("TotalMustEqual", { amount: installmentPayTarget.toFixed(2) }),
+      );
+    }
+
+    if (!isInstallmentOrder && totalScheduled === 0) {
       return toast.error(
         t("TotalMustEqual", { amount: requiredTotal.toFixed(2) }),
       );
@@ -706,39 +991,93 @@ const CheckOut = ({
     if (!validation.valid) {
       return toast.error(validation.error);
     }
-
     if (isDueOrder) {
       if (!selectedCustomer) {
         setCustomerSelectionOpen(true);
-        refetchDueUsers();
+        refetchCustomers();
         return;
       }
       return;
     }
 
+    // 🆕 التحقق قبل إنشاء فاتورة التقسيط
+    if (isInstallmentOrder) {
+      if (!selectedCustomer) {
+        setCustomerSelectionOpen(true);
+        refetchCustomers();
+        return;
+      }
+
+      if (!installmentEnabled) {
+        return toast.error(t("installments.checkout.notEnabled"));
+      }
+
+      if (!installmentMonths || Number(installmentMonths) < 1) {
+        return toast.error(t("installments.checkout.monthsRequired"));
+      }
+
+      const down = Number(installmentDownPayment) || 0;
+      if (down >= requiredTotal) {
+        return toast.error(t("installments.checkout.downPaymentTooHigh"));
+      }
+
+      const minDown = roundCurrency(
+        (requiredTotal * minDownPaymentPercent) / 100,
+      );
+      if (down < minDown) {
+        return toast.error(
+          t("installments.checkout.minDownPayment", {
+            amount: minDown.toFixed(2),
+            percent: minDownPaymentPercent,
+          }),
+        );
+      }
+
+      if (!installmentSchedule) {
+        return toast.error(t("installments.checkout.previewPending"));
+      }
+
+      return proceedWithOrderSubmission(0, selectedCustomer._id);
+    }
+
     await proceedWithOrderSubmission(0);
   };
 
-  // Determine the "active" / selected account method for display card-style
-  const selectedAccountId = paymentSplits[0]?.account_id;
-
   const handleCardSelect = (accountId) => {
-    // Special handling for Due
     if (accountId === "due") {
       setIsDueOrder(true);
+      setIsInstallmentOrder(false);
       return;
     }
     setIsDueOrder(false);
-    // For split: add a new split if not already in split mode
+
+    // 🆕 اختيار الدفع بالتقسيط
+    if (accountId === "installment") {
+      setIsInstallmentOrder(true);
+      setPaymentSplits([]);
+
+      if (!installmentDownPayment) {
+        const defaultDown =
+          minDownPaymentPercent > 0
+            ? String(
+                roundCurrency((requiredTotal * minDownPaymentPercent) / 100),
+              )
+            : "0";
+        setInstallmentDownPayment(defaultDown);
+      }
+      return;
+    }
+
     if (accountId === "split") {
       handleAddSplit();
       return;
     }
-    // Normal account select
+
+    setIsInstallmentOrder(false);
+
     if (paymentSplits.length === 1) {
       handleAccountChange(paymentSplits[0]._id, accountId);
     } else {
-      // reset to single split
       setPaymentSplits([
         {
           _id: "split-1",
@@ -751,7 +1090,6 @@ const CheckOut = ({
     }
   };
 
-  // Group accounts: first 3 as main row, rest + Due + Split in second row
   const mainAccounts = financialAccounts.slice(0, 3);
   const extraAccounts = financialAccounts.slice(3);
 
@@ -784,7 +1122,6 @@ const CheckOut = ({
       />
 
       <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[95vh]">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-3">
           <div className="flex items-center gap-3">
             <h2 className="text-2xl font-semibold text-gray-800">
@@ -805,7 +1142,6 @@ const CheckOut = ({
         </div>
 
         <div className="px-4 sm:px-6 pb-6 overflow-y-auto flex-1">
-          {/* Payment Method Cards - Row 1 */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 mb-3">
             {mainAccounts.map((acc) => (
               <button
@@ -826,7 +1162,6 @@ const CheckOut = ({
             ))}
           </div>
 
-          {/* Payment Method Cards - Row 2: extra accounts + Due + Split */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 mb-4">
             {extraAccounts.map((acc) => (
               <button
@@ -846,7 +1181,6 @@ const CheckOut = ({
               </button>
             ))}
 
-            {/* Due */}
             <button
               onClick={() => handleCardSelect("due")}
               className={`flex flex-col items-center justify-center gap-1 rounded-xl border-2 py-4 px-2 transition-all
@@ -860,7 +1194,23 @@ const CheckOut = ({
               <span className="text-xs font-medium">{t("Due") || "Due"}</span>
             </button>
 
-            {/* Split */}
+            {installmentEnabled && (
+              <button
+                onClick={() => handleCardSelect("installment")}
+                className={`flex flex-col items-center justify-center gap-1 rounded-xl border-2 py-4 px-2 transition-all
+                  ${
+                    isInstallmentOrder
+                      ? "border-amber-500 bg-amber-50 text-amber-700"
+                      : "border-gray-200 bg-white text-amber-600 hover:border-amber-300 hover:bg-amber-50"
+                  }`}
+              >
+                <span className="text-2xl">🧾</span>
+                <span className="text-xs font-medium">
+                  {t("installments.checkout.option")}
+                </span>
+              </button>
+            )}
+
             <button
               onClick={() => handleCardSelect("split")}
               className={`flex flex-col items-center justify-center gap-1 rounded-xl border-2 py-4 px-2 transition-all
@@ -877,7 +1227,157 @@ const CheckOut = ({
             </button>
           </div>
 
-          {/* Split Payment Details */}
+          {/* 🆕 خطة التقسيط */}
+          {isInstallmentOrder && (
+            <div className="mb-4 p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-amber-800">
+                  {t("installments.checkout.heading")}
+                </p>
+                <span className="text-[11px] text-amber-700">
+                  {installmentSettings?.interest_type === "fixed"
+                    ? t("installments.checkout.interestFixed", {
+                        value: installmentSettings?.interest_value || 0,
+                      })
+                    : t("installments.checkout.interestPercent", {
+                        value: installmentSettings?.interest_value || 0,
+                      })}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-600 w-24">
+                  {t("installments.checkout.months")}
+                </label>
+                <select
+                  value={installmentMonths}
+                  onChange={(e) =>
+                    setInstallmentMonths(Number(e.target.value))
+                  }
+                  className="flex-1 text-sm border border-gray-300 rounded-lg px-2 py-1.5 bg-white"
+                >
+                  {Array.from(
+                    { length: maxInstallmentMonths },
+                    (_, i) => i + 1,
+                  ).map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-600 w-24">
+                  {t("installments.checkout.downPayment")}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={installmentDownPayment}
+                  onChange={(e) => setInstallmentDownPayment(e.target.value)}
+                  className="flex-1 text-sm border border-gray-300 rounded-lg px-2 py-1.5"
+                  placeholder="0"
+                />
+                <span className="text-xs text-gray-500">{t("EGP")}</span>
+              </div>
+
+              {installmentPreviewError ? (
+                <p className="text-xs text-red-600">
+                  {installmentPreviewError}
+                </p>
+              ) : installmentSchedule ? (
+                <div className="text-xs text-gray-700 space-y-1">
+                  <div className="flex justify-between">
+                    <span>{t("installments.checkout.financed")}</span>
+                    <span>
+                      {Number(
+                        installmentSchedule.financed_amount || 0,
+                      ).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>{t("installments.checkout.interest")}</span>
+                    <span>
+                      {Number(
+                        installmentSchedule.interest_amount || 0,
+                      ).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between font-semibold text-amber-800">
+                    <span>{t("installments.checkout.totalPayable")}</span>
+                    <span>
+                      {Number(
+                        installmentSchedule.total_payable || 0,
+                      ).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>{t("installments.checkout.monthly")}</span>
+                    <span>
+                      {Number(
+                        installmentSchedule.installments?.[0]?.amount || 0,
+                      ).toFixed(2)}
+                      {installmentSchedule.installments?.length > 1 &&
+                        Math.abs(
+                          Number(installmentSchedule.installments[0].amount) -
+                            Number(
+                              installmentSchedule.installments[
+                                installmentSchedule.installments.length - 1
+                              ].amount,
+                            ),
+                        ) > 0.001 && (
+                          <span className="text-gray-500">
+                            {" "}
+                            → {Number(
+                              installmentSchedule.installments[
+                                installmentSchedule.installments.length - 1
+                              ].amount,
+                            ).toFixed(2)}
+                          </span>
+                        )}
+                    </span>
+                  </div>
+                  <div className="flex justify-between font-semibold text-teal-700">
+                    <span>{t("installments.checkout.dueNow")}</span>
+                    <span>{installmentPayTarget.toFixed(2)}</span>
+                  </div>
+
+                  {installmentSchedule.installments?.length > 0 && (
+                    <details className="pt-1">
+                      <summary className="cursor-pointer text-amber-700">
+                        {t("installments.checkout.showSchedule")}
+                      </summary>
+                      <ul className="mt-1 space-y-0.5 max-h-32 overflow-y-auto">
+                        {installmentSchedule.installments.map((item) => (
+                          <li
+                            key={item.sequence}
+                            className="flex justify-between"
+                          >
+                            <span>
+                              {t("installments.checkout.installmentItem", {
+                                number: item.sequence,
+                              })}{" "}
+                              —{" "}
+                              {new Date(item.due_date).toLocaleDateString(
+                                i18n.language === "ar" ? "ar-EG" : "en-GB",
+                              )}
+                            </span>
+                            <span>{Number(item.amount).toFixed(2)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500">
+                  {t("installments.checkout.calculating")}
+                </p>
+              )}
+            </div>
+          )}
+
           {paymentSplits.length > 1 && (
             <div className="mb-4 space-y-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
               <p className="text-sm font-semibold text-gray-600">
@@ -915,14 +1415,12 @@ const CheckOut = ({
                       className="w-full pl-10 pr-2 py-1.5 text-sm border border-gray-300 rounded-lg"
                     />
                   </div>
-                  {paymentSplits.length > 1 && (
-                    <button
-                      onClick={() => handleRemoveSplit(split._id)}
-                      className="w-7 h-7 flex items-center justify-center bg-red-500 text-white rounded-full text-xs hover:bg-red-600 transition-all"
-                    >
-                      ✕
-                    </button>
-                  )}
+                  <button
+                    onClick={() => handleRemoveSplit(split._id)}
+                    className="w-7 h-7 flex items-center justify-center bg-red-500 text-white rounded-full text-xs hover:bg-red-600 transition-all"
+                  >
+                    ✕
+                  </button>
                 </div>
               ))}
               {remainingAmount > 0 && (
@@ -936,7 +1434,6 @@ const CheckOut = ({
             </div>
           )}
 
-          {/* Visa Transaction ID */}
           {paymentSplits.length === 1 &&
             isVisaAccount(paymentSplits[0]?.account_id) && (
               <div className="mb-4 flex items-center gap-2">
@@ -958,7 +1455,6 @@ const CheckOut = ({
               </div>
             )}
 
-          {/* Description field */}
           {paymentSplits.length === 1 &&
             getDescriptionStatus(paymentSplits[0]?.account_id) && (
               <div className="mb-4">
@@ -978,7 +1474,6 @@ const CheckOut = ({
               </div>
             )}
 
-          {/* Amount by Customer */}
           <div className="mb-3">
             <label className="block text-sm text-gray-600 mb-1">
               {t("AmountPaidByCustomer") || "Amount by Customer"}
@@ -1003,7 +1498,6 @@ const CheckOut = ({
             )}
           </div>
 
-          {/* Due Module Banner */}
           {isDueModuleAllowed && remainingAmount > 0.01 && (
             <div className="mb-3 p-3 bg-purple-50 border border-purple-200 rounded-xl">
               <p className="text-sm font-bold text-purple-600 text-center mb-2">
@@ -1025,45 +1519,56 @@ const CheckOut = ({
             </div>
           )}
 
-          {/* Summary: discounts + amounts info */}
-          {totalDiscountValue > 0 && (
+          {(computed.discountAmount > 0 ||
+            computed.freeDiscountAmount > 0 ||
+            computed.couponAmount > 0 ||
+            computed.serviceFeesTotal > 0) && (
             <div className="mb-3 p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm space-y-1">
-              {appliedDiscount > 0 && (
+              {computed.discountAmount > 0 && (
                 <div className="flex justify-between">
                   <span className="text-gray-600">
-                    {t("Discount")} ({appliedDiscount}%)
+                    {t("Discount")}
+                    {appliedDiscountData?.type === "percentage" &&
+                      ` (${(appliedDiscountData.amount * 100).toFixed(2)}%)`}
                   </span>
                   <span className="text-red-500">
-                    -{(amountToPay * (appliedDiscount / 100)).toFixed(2)}{" "}
-                    {t("EGP")}
+                    -{computed.discountAmount.toFixed(2)} {t("EGP")}
                   </span>
                 </div>
               )}
-              {appliedDiscount === 0 &&
-                totalDiscountValue > (parseFloat(freeDiscount) || 0) && (
-                  <div className="flex justify-between text-blue-600">
-                    <span>{t("ListDiscount")}</span>
-                    <span>
-                      -
-                      {(
-                        totalDiscountValue - (parseFloat(freeDiscount) || 0)
-                      ).toFixed(2)}{" "}
-                      {t("EGP")}
-                    </span>
-                  </div>
-                )}
-              {freeDiscount && parseFloat(freeDiscount) > 0 && (
-                <div className="flex justify-between text-purple-600">
-                  <span>{t("FreeDiscount")}</span>
+              {computed.freeDiscountAmount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">
+                    {i18n.language === "ar" ? "خصم يدوي" : "Manual Discount"}
+                  </span>
+                  <span className="text-red-500">
+                    -{computed.freeDiscountAmount.toFixed(2)} {t("EGP")}
+                  </span>
+                </div>
+              )}
+              {computed.couponAmount > 0 && (
+                <div className="flex justify-between text-orange-600">
                   <span>
-                    -{parseFloat(freeDiscount).toFixed(2)} {t("EGP")}
+                    {t("Coupon")}
+                    {appliedCouponData?.type === "percentage" &&
+                      ` (${appliedCouponData.amount}%)`}
+                  </span>
+                  <span>
+                    -{computed.couponAmount.toFixed(2)} {t("EGP")}
+                  </span>
+                </div>
+              )}
+              {computed.serviceFeesTotal > 0 && (
+                <div className="flex justify-between text-indigo-600">
+                  <span>{t("ServiceFees") || "Service Fees"}</span>
+                  <span>
+                    +{computed.serviceFeesTotal.toFixed(2)} {t("EGP")}
                   </span>
                 </div>
               )}
             </div>
           )}
 
-          {/* Big Total Amount */}
           <div className="bg-gray-50 rounded-xl py-4 mb-4 text-center">
             <span className="text-4xl font-bold text-[#8B2635]">
               {requiredTotal.toFixed(2)} {t("EGP")}
@@ -1080,7 +1585,6 @@ const CheckOut = ({
             )}
           </div>
 
-          {/* PAY NOW Button */}
           <Button
             className="w-full bg-[#8B2635] hover:bg-[#7a2030] text-white text-lg font-bold py-6 rounded-xl transition-all shadow-md"
             disabled={loading || (!isTotalMet && !isDueOrder)}
@@ -1092,7 +1596,11 @@ const CheckOut = ({
                 ? selectedCustomer
                   ? t("DueOrderReady")
                   : t("SelectCustomer") || "Select Customer"
-                : t("PayNow") || "PAY NOW"}
+                : isInstallmentOrder
+                  ? selectedCustomer
+                    ? t("installments.checkout.confirm")
+                    : t("SelectCustomer") || "Select Customer"
+                  : t("PayNow") || "PAY NOW"}
           </Button>
         </div>
       </div>
@@ -1107,7 +1615,6 @@ const CheckOut = ({
         onConfirm={(password) => {
           setPendingFreeDiscountPassword(password);
           setPasswordModalOpen(false);
-          toast.success(t("PasswordAccepted"));
 
           proceedWithOrderSubmission(
             isDueOrder ? 1 : 0,

@@ -3,6 +3,7 @@ import { verifyToken } from "../utils/auth";
 import { UnauthorizedError } from "../Errors/unauthorizedError";
 import { RoleModel } from "../models/roles";
 import { UserModel } from "../models/user";
+import { WarehouseModel } from "../models/warehouse";
 import { UserPermission } from "../types/custom";
 import { MODULES, ACTION_NAMES } from "../types/constant";
 
@@ -62,8 +63,27 @@ export async function authenticated(
     }
 
     // ✅ حط الـ user + permissions في الـ request
+    let resolvedWarehouseId = decoded.warehouse_id;
+    if (!resolvedWarehouseId || resolvedWarehouseId === "null") {
+      try {
+        const dbUser = await UserModel.findById(decoded.id);
+        resolvedWarehouseId = dbUser?.warehouse_id || null;
+      } catch {
+        resolvedWarehouseId = null;
+      }
+    }
+    if (!resolvedWarehouseId || resolvedWarehouseId === "null") {
+      try {
+        const warehouses = WarehouseModel.find();
+        resolvedWarehouseId = warehouses?.[0]?._id || null;
+      } catch {
+        resolvedWarehouseId = null;
+      }
+    }
+
     req.user = {
       ...decoded,
+      warehouse_id: resolvedWarehouseId,
       permissions,
     };
 

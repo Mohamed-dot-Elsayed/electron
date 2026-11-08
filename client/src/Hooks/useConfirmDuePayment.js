@@ -31,7 +31,7 @@ export const useConfirmDuePayment = ({
 
     try {
       // نبعت كـ JSON عادي (مش FormData)
-      await postData("api/pos/sales/pay-due", payload);
+      await postData("api/admin/pos/sales/pay-due", payload);
 
       toast.success("Payment successful. Remaining: " + remainingDue.toFixed(2) + " EGP");
 

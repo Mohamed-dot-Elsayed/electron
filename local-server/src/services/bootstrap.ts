@@ -115,8 +115,8 @@ export async function runBootstrapAll() {
   }
 }
 
-async function bootstrapTable(table: string) {
-  if (isTableBootstrapped(table)) {
+export async function bootstrapTable(table: string, force = false) {
+  if (!force && isTableBootstrapped(table)) {
     console.log(`Skipping ${table}, already bootstrapped`);
     return;
   }
@@ -212,7 +212,7 @@ function insertRow(
     columns.push(key);
 
     let value = row[key];
-    if (value === undefined) {
+    if (value === undefined || value === null) {
       value = null;
     } else if (typeof value === "object") {
       value = JSON.stringify(value);

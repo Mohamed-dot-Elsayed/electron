@@ -70,66 +70,64 @@ const generateRulerHTML = (widthPx) => {
   `;
 };
 
+// ═══════════════════════════════════════════════════════════
+// ✅ دالة الطباعة المركزية — iframe مخفي
+// ═══════════════════════════════════════════════════════════
+const printHTMLViaIframe = (htmlContent, { onDone } = {}) => {
+  const oldFrame = document.getElementById("__receipt_print_iframe__");
+  if (oldFrame) oldFrame.remove();
+
+  const iframe = document.createElement("iframe");
+  iframe.id = "__receipt_print_iframe__";
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.style.visibility = "hidden";
+  document.body.appendChild(iframe);
+
+  const cleanup = () => {
+    setTimeout(() => {
+      try {
+        iframe.remove();
+      } catch (_) {}
+      onDone?.();
+    }, 500);
+  };
+
+  const doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write(htmlContent);
+  doc.close();
+
+  const triggerPrint = () => {
+    setTimeout(() => {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      } catch (err) {
+        console.error("iframe print failed:", err);
+        toast.error("❌ فشل الطباعة");
+      } finally {
+        cleanup();
+      }
+    }, 400);
+  };
+
+  if (iframe.contentWindow.document.readyState === "complete") {
+    triggerPrint();
+  } else {
+    iframe.onload = triggerPrint;
+  }
+};
+
 export const printTestRuler = async () => {
   try {
-    let widthPx = 576;
-    if (window.electronAPI?.getReceiptImageWidthPx) {
-      widthPx = await window.electronAPI.getReceiptImageWidthPx();
-    }
-
+    const widthPx = 576;
     const rulerHtml = generateRulerHTML(widthPx);
-
-    if (window.electronAPI) {
-      const printers = await window.electronAPI.getPrinters();
-
-      if (!printers || printers.length === 0) {
-        const result = await window.electronAPI.printReceiptImage(
-          rulerHtml,
-          "",
-        );
-        if (result?.savedToPdf) {
-          toast.info("📄 مفيش طابعة متسجلة — اتحفظت مسطرة الاختبار كـ PDF");
-        } else {
-          toast.error(`❌ ${result?.error || "فشل الحفظ"}`);
-        }
-        return;
-      }
-
-      const defaultPrinter =
-        printers.find((p) => p.isDefault)?.name || printers[0]?.name;
-
-      const result = await window.electronAPI.printReceiptImage(
-        rulerHtml,
-        defaultPrinter,
-      );
-
-      if (result?.success && !result?.savedToPdf) {
-        toast.success("✅ اتطبعت مسطرة الاختبار");
-      } else if (result?.savedToPdf) {
-        toast.info(
-          `🖨️ الطباعة فشلت${result?.escposError ? ` (${result.escposError})` : ""} — اتحفظت مسطرة الاختبار كـ PDF`,
-        );
-      } else if (result?.reason === "canceled") {
-        toast.info("⚠️ تم الإلغاء");
-      } else {
-        toast.error(`❌ فشلت طباعة مسطرة الاختبار: ${result?.error || "?"}`);
-      }
-    } else {
-      const printWindow = window.open("", "_blank", "width=400,height=600");
-      if (!printWindow) {
-        toast.error("برجاء تفعيل النوافذ المنبثقة (Pop-ups) للطباعة");
-        return;
-      }
-      printWindow.document.write(rulerHtml);
-      printWindow.document.close();
-      printWindow.onload = () => {
-        setTimeout(() => {
-          printWindow.focus();
-          printWindow.print();
-          printWindow.close();
-        }, 500);
-      };
-    }
+    printHTMLViaIframe(rulerHtml);
   } catch (err) {
     console.error("Test ruler print failed:", err);
     toast.error("❌ فشل طباعة مسطرة الاختبار");
@@ -168,7 +166,7 @@ const scaledFontSizePx = (
 };
 
 // ===================================================================
-// 3. تصميم إيصال الكاشير
+// 3. تصميم إيصال الكاشير (بدون Shipping)
 // ===================================================================
 const formatCashierReceipt = (receiptData) => {
   const isArabic = localStorage.getItem("language") === "ar";
@@ -204,10 +202,33 @@ const formatCashierReceipt = (receiptData) => {
   <html>
     <head>
       <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Receipt</title>
       <style>
-        @page { margin: 0; size: 80mm auto; }
-        * { box-sizing: border-box; }
-        html { width: 100%; margin: 0; padding: 0; }
+        @page {
+          margin: 0 !important;
+          padding: 0 !important;
+          size: 80mm auto;
+        }
+
+        @page :first { margin: 0 !important; }
+        @page :left { margin: 0 !important; }
+        @page :right { margin: 0 !important; }
+
+        * {
+          box-sizing: border-box;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+          color-adjust: exact !important;
+        }
+
+        html {
+          width: 100%;
+          margin: 0 !important;
+          padding: 0 !important;
+          -webkit-text-size-adjust: 100%;
+        }
+
         body {
           margin: 0 !important;
           padding: 0 !important;
@@ -218,13 +239,16 @@ const formatCashierReceipt = (receiptData) => {
           color: #000;
           direction: ${isArabic ? "rtl" : "ltr"};
           font-size: 13px;
+          -webkit-font-smoothing: antialiased;
         }
+
         .container {
           width: 100% !important;
           padding: 0;
           margin: 0;
           box-sizing: border-box;
         }
+
         .header { text-align: center; margin-bottom: 6px; }
         .header h1 {
             font-size: 22px;
@@ -379,17 +403,36 @@ const formatCashierReceipt = (receiptData) => {
         }
 
         @media print {
-          @page { margin: 0; size: 80mm auto; }
+          @page {
+            margin: 0 !important;
+            padding: 0 !important;
+            size: 80mm auto;
+          }
+
           html, body {
             width: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
+            background: #fff !important;
           }
+
           .container {
             width: 100% !important;
             padding: 0 !important;
             margin: 0 !important;
+          }
+
+          .items-table tr,
+          .totals-row,
+          .grand-total {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
+          .no-print,
+          .print-hidden {
+            display: none !important;
           }
         }
       </style>
@@ -520,26 +563,42 @@ const formatCashierReceipt = (receiptData) => {
 
         <div class="totals-section">
 
+            <!-- ✅ Subtotal -->
             <div class="totals-row">
                 <span>${isArabic ? "المجموع الفرعي" : "Subtotal"}</span>
                 <span>${Number(receiptData.subtotal || 0).toFixed(2)}</span>
             </div>
 
+            <!-- ✅ Discount — دايماً بيظهر -->
             <div class="totals-row" style="color: #000;">
                 <span>${isArabic ? "الخصم" : "Discount"}</span>
                 <span>${Number(receiptData.discount || 0) > 0 ? "-" : ""}${Number(receiptData.discount || 0).toFixed(2)}</span>
             </div>
 
+            ${Number(receiptData.coupon || 0) > 0
+              ? `
+            <!-- ✅ Coupon Discount -->
+            <div class="totals-row" style="color: #000;">
+                <span>${isArabic ? "خصم الكوبون" : "Coupon Discount"}</span>
+                <span>-${Number(receiptData.coupon || 0).toFixed(2)}</span>
+            </div>`
+              : ""}
+
+            <!-- ✅ Tax — دايماً بيظهر -->
             <div class="totals-row">
                 <span>${isArabic ? "الضريبة" : "Tax"}</span>
                 <span>${Number(receiptData.tax || 0).toFixed(2)}</span>
             </div>
 
+            <!-- ✅ Service Fees — دايماً بيظهر -->
             <div class="totals-row">
                 <span>${isArabic ? "رسوم الخدمة" : "Service Fees"}</span>
                 <span>${Number(receiptData.serviceFees || 0).toFixed(2)}</span>
             </div>
 
+            <!-- ❌ Shipping — اتشال -->
+
+            <!-- ✅ Grand Total -->
             <div class="grand-total">
                 <span class="grand-total-label">${isArabic ? "الإجمالي الكلي" : "GRAND TOTAL"}</span>
                 <span class="grand-total-value" style="font-size:${grandTotalFontSize}px;">${grandTotalText}</span>
@@ -613,25 +672,18 @@ export const prepareReceiptData = (
     hour12: true,
   });
 
-  let detectedType = orderType || "sale";
-  if (Number(saleData.shipping) > 0) {
-    detectedType = "delivery";
-  }
-
-  // =========================================================
-  // ✅ استخراج القيم المالية
-  // =========================================================
-  // ✅ discount: من pricing_details.discount_amount أو sale.discount
   const discountValue = Number(
     pricingDetails.discount_amount || saleData.discount || 0,
   );
 
-  // ✅ tax: من API أولاً، بعدين من frontend
   const taxValue = Number(
     pricingDetails.tax_amount || saleData.tax_amount || frontendTaxAmount || 0,
   );
 
-  // ✅ service fees: من API أولاً، بعدين من service fees API
+  const couponValue = Number(
+    pricingDetails.coupon_amount || saleData.coupon_amount || 0,
+  );
+
   const serviceFeesValue = Number(
     pricingDetails.service_fee_total ||
       saleData.service_fee_total ||
@@ -720,7 +772,7 @@ export const prepareReceiptData = (
     referenceNumber: refNum,
     dateFormatted: dateFormatted,
     timeFormatted: timeFormatted,
-    orderType: detectedType,
+    orderType: orderType || "sale",
 
     restaurantName: storeData.name || "اسم المتجر",
     restaurantAddress: storeData.address || "",
@@ -736,9 +788,9 @@ export const prepareReceiptData = (
 
     items: formattedItems,
 
-    // ✅ القيم المالية
     subtotal: calculatedSubtotal.toFixed(2),
     discount: discountValue.toFixed(2),
+    coupon: couponValue.toFixed(2),
     tax: taxValue.toFixed(2),
     serviceFees: serviceFeesValue.toFixed(2),
 
@@ -757,7 +809,7 @@ export const prepareReceiptData = (
 };
 
 // ===================================================================
-// 6. دالة الطباعة (printReceiptSilently)
+// 6. دالة الطباعة (Web — iframe مخفي)
 // ===================================================================
 export const printReceiptSilently = async (
   receiptData,
@@ -770,73 +822,9 @@ export const printReceiptSilently = async (
       type: "cashier",
     });
 
-    const fallbackToBrowserPrint = () => {
-      const printWindow = window.open("", "_blank", "width=400,height=600");
-      if (!printWindow) {
-        toast.error("برجاء تفعيل النوافذ المنبثقة (Pop-ups) للطباعة");
-        callback?.();
-        return;
-      }
-      printWindow.document.write(cashierHtml);
-      printWindow.document.close();
-      printWindow.onload = () => {
-        setTimeout(() => {
-          printWindow.focus();
-          printWindow.print();
-          printWindow.close();
-        }, 500);
-      };
-      callback?.();
-    };
-
-    if (window.electronAPI) {
-      try {
-        const printers = await window.electronAPI.getPrinters();
-
-        if (!printers || printers.length === 0) {
-          const result = await window.electronAPI.printReceiptImage(
-            cashierHtml,
-            "",
-          );
-          if (result?.savedToPdf) {
-            toast.success("📄 تم حفظ الرسيت كـ PDF بنجاح");
-          } else if (result?.reason === "canceled") {
-            toast.info("⚠️ تم إلغاء حفظ الـ PDF");
-          } else {
-            toast.error(`❌ ${result?.error || "فشل الحفظ"}`);
-          }
-        } else {
-          const defaultPrinter =
-            printers.find((p) => p.isDefault)?.name || printers[0]?.name;
-
-          const result = await window.electronAPI.printReceiptImage(
-            cashierHtml,
-            defaultPrinter,
-          );
-
-          if (result?.success && !result?.savedToPdf) {
-            toast.success("✅ تم الطباعة");
-          } else if (result?.savedToPdf) {
-            toast.info(
-              `🖨️ الطابعة غير متاحة${result?.escposError ? ` (${result.escposError})` : ""} — تم حفظ الرسيت كـ PDF`,
-            );
-          } else if (result?.reason === "canceled") {
-            toast.info("⚠️ تم إلغاء الطباعة");
-          } else {
-            toast.error(`❌ فشل الطباعة: ${result?.error || "?"}`);
-          }
-        }
-      } catch (err) {
-        console.error("Electron print error:", err);
-        toast.error("❌ فشل الطباعة عبر النظام");
-      }
-      callback?.();
-      return;
-    }
-
-    fallbackToBrowserPrint();
+    printHTMLViaIframe(cashierHtml, { onDone: callback });
   } catch (err) {
-    console.error(err);
+    console.error("Print error:", err);
     toast.error("❌ فشل الطباعة");
     callback?.();
   }

@@ -11,18 +11,28 @@ import { usePost } from "@/Hooks/usePost";
 import logo from "@/assets/logo.png";
 import { useShift } from "@/context/ShiftContext";
 
-export function CashierButton({ cashierId, cashierName, icon: Icon, isActive, onSelect, loadingPost }) {
+export function CashierButton({
+  cashierId,
+  cashierName,
+  icon: Icon,
+  isActive,
+  onSelect,
+  loadingPost,
+}) {
   const bgColor = isActive ? "bg-green-600" : "bg-white";
   const textColor = isActive ? "text-white" : "text-gray-700";
   const hoverBg = isActive ? "hover:bg-green-700" : "hover:bg-[#7c5cc4]";
   const iconColor = isActive ? "text-white" : "text-[#910000]";
-  const circleColor = isActive ? "bg-white border-white" : "bg-gray-200 border-gray-300";
+  const circleColor = isActive
+    ? "bg-white border-white"
+    : "bg-gray-200 border-gray-300";
 
   return (
     <Button
       onClick={() => onSelect(cashierId)}
       disabled={loadingPost}
-      className={`w-full flex items-center justify-between p-4 h-auto rounded-xl shadow-md ${bgColor} ${textColor} ${hoverBg} text-lg font-semibold transition-colors duration-200 ease-in-out`}
+      className={`w-full flex items-center justify-between p-4 h-auto rounded-xl shadow-md
+        ${bgColor} ${textColor} ${hoverBg} text-lg font-semibold transition-colors duration-200 ease-in-out`}
     >
       <div className="flex items-center gap-4">
         {Icon && <Icon className={`w-6 h-6 ${iconColor}`} />}
@@ -38,65 +48,104 @@ export default function Cashier() {
   const isArabic = i18n.language === "ar";
   const { openShift } = useShift();
 
-  const { data, error, isLoading } = useGet(`api/pos-home/cashiers`);
+  const { data, error, isLoading, refetch } = useGet(`api/admin/pos-home/cashiers`);
   const [selectedCashierId, setSelectedCashierId] = useState(null);
   const [showHidden, setShowHidden] = useState(false);
-  const { postData, loading: postLoading } = usePost();
+  const { postData, loading: postLoading, error: postError } = usePost();
   const navigate = useNavigate();
 
+  // إذا وجد كاشير مفعل بالفعل في الجلسة أو شيفت مفتوح في السيرفر، يتم التحويل مباشرة للـ POS
   useEffect(() => {
-    // فقط إذا كان هناك كاشير مسجل في Session مسبقاً يتم توجيهه للرئيسية
     const existingCashierId = sessionStorage.getItem("cashier_id");
     if (existingCashierId) {
       navigate("/", { replace: true });
+      return;
     }
-  }, [navigate]);
+
+    // فحص تلقائي احتياطي: لو للمستخدم شيفت مفتوح، يتم استرجاعه فوراً وتخطي شاشة الكاشير
+    const autoRestoreExistingShift = async () => {
+      try {
+        const startCheck = await postData("api/admin/cashier-shift/start", {});
+        if (startCheck?.data?.isExisting && startCheck?.data?.shift) {
+          const shift = startCheck.data.shift;
+          const cashier = startCheck.data.cashier;
+          const cashierId = cashier?._id || shift.cashier_id;
+          const cashierName = cashier?.name || cashier?.ar_name || `POS ${cashierId}`;
+
+          sessionStorage.setItem("cashier_id", cashierId);
+          sessionStorage.setItem("cashier_name", cashierName);
+          sessionStorage.setItem("shift_id", shift._id);
+          sessionStorage.setItem("shift_start_time", shift.start_time);
+          sessionStorage.setItem("shift_data", JSON.stringify(shift));
+
+          if (startCheck.data.financialAccounts?.length > 0) {
+            sessionStorage.setItem(
+              "financial_accounts",
+              JSON.stringify(startCheck.data.financialAccounts)
+            );
+          }
+
+          openShift(shift.start_time);
+
+          navigate("/", {
+            replace: true,
+            state: {
+              showWelcomeBackModal: true,
+              cashierName,
+              shiftStartTime: shift.start_time,
+            },
+          });
+        }
+      } catch (e) {
+        // لا يوجد شيفت مفتوح، يظل المستخدم في صفحة اختيار الكاشير
+      }
+    };
+
+    autoRestoreExistingShift();
+  }, [navigate, openShift]);
 
   const handleCashierSelection = async (_id) => {
     setSelectedCashierId(_id);
 
     try {
-      // 1. اختيار وتفعيل الكاشير
-      const response = await postData(`api/pos-home/cashiers/select`, { cashier_id: _id });
+      // 1. تفعيل واختيار الكاشير لجلب الحسابات المالية والبيانات
+      const response = await postData(`api/admin/pos-home/cashiers/select`, { cashier_id: _id });
       const accounts = response?.data?.financialAccounts || [];
       const cashierDoc = response?.data?.cashier;
       const cashierName = cashierDoc?.name || cashierDoc?.ar_name || `POS ${_id}`;
 
       // 2. بدء الشيفت
-      const startRes = await postData(`api/cashier-shift/start`, { cashier_id: _id });
+      const startRes = await postData(`api/admin/cashier-shift/start`, { cashier_id: _id });
       const shiftData = startRes?.data?.shift;
       const shiftStartTime = shiftData?.start_time || new Date().toISOString();
+      const isExisting = !!startRes?.data?.isExisting;
 
-      // 3. تخزين البيانات
+      // 3. حفظ بيانات الجلسة في sessionStorage
       sessionStorage.setItem("cashier_id", _id);
       sessionStorage.setItem("cashier_name", cashierName);
       sessionStorage.setItem("financial_accounts", JSON.stringify(accounts));
-      localStorage.setItem("offline_pos_cashier_id", _id);
-
       if (shiftData) {
         sessionStorage.setItem("shift_id", shiftData._id);
         sessionStorage.setItem("shift_start_time", shiftStartTime);
         sessionStorage.setItem("shift_data", JSON.stringify(shiftData));
       }
 
+      // 4. تحديث الـ ShiftContext
       openShift(shiftStartTime);
 
-      // 4. ✅ التوجيه للرئيسية وإظهار مودال Shift Started
+      // 5. التوجيه المباشر إلى / مع تمرير حالة المودال
       navigate("/", {
         replace: true,
         state: {
-          showShiftStartedModal: true, // إظهار مودال بدء الشيفت
+          showShiftStartedModal: !isExisting,
+          showWelcomeBackModal: isExisting,
           cashierName,
           shiftStartTime,
         },
       });
     } catch (err) {
       console.error("Error activating cashier/starting shift:", err);
-      toast.error(
-        err?.response?.data?.error?.message ||
-        err?.response?.data?.message ||
-        t("FailedToStartShift", "Failed to start shift")
-      );
+      toast.error(err?.response?.data?.message || err?.message || t("FailedToStartShift", "Failed to start shift"));
       setSelectedCashierId(null);
     }
   };
@@ -108,9 +157,10 @@ export default function Cashier() {
       </div>
     );
   }
-
   if (error) {
-    return <div>Error loading cashiers: {error.message || "Unknown error"}</div>;
+    return (
+      <div>Error loading cashiers: {error.message || "Unknown error"}</div>
+    );
   }
 
   const cashiers = data?.data?.cashiers || [];
@@ -126,11 +176,12 @@ export default function Cashier() {
     >
       <div className="flex items-center justify-center p-8">
         <div className="w-full max-w-md space-y-8">
-          <h1 className="text-3xl md:text-4xl font-bold text-black">
+          <h1 className="text-3xl md:text-4xl font-bold text-black ">
             {t("SelectionCashier")}
           </h1>
 
           <div className="space-y-4 grid grid-cols-1 gap-3">
+            {/* Regular cashiers */}
             {cashiers.length > 0 ? (
               cashiers.map((cashier) => (
                 <CashierButton
@@ -147,6 +198,7 @@ export default function Cashier() {
               <div>{t("Nocashiersavailable")}</div>
             )}
 
+            {/* Show More Button */}
             {hiddenCashiers.length > 0 && !showHidden && (
               <Button
                 onClick={() => setShowHidden(true)}
@@ -156,6 +208,7 @@ export default function Cashier() {
               </Button>
             )}
 
+            {/* Hidden cashiers */}
             {showHidden &&
               hiddenCashiers.map((cashier) => (
                 <CashierButton
@@ -173,7 +226,11 @@ export default function Cashier() {
       </div>
 
       <div className="flex items-center justify-center p-6 bg-white">
-        <img src={logo} alt="Logo" className="w-full h-auto max-w-[378px] max-h-[311px] object-contain" />
+        <img
+          src={logo}
+          alt="Food2go Logo"
+          className="w-full h-auto max-w-[378px] max-h-[311px] object-contain"
+        />
       </div>
     </div>
   );

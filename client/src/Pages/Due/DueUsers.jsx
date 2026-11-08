@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import Loader from "@/components/Loading";
 
 const DueUsers = () => {
-  const { data, loading, error, refetch } = useGet("api/pos/sales/dues");
+  const { data, loading, error, refetch } = useGet("api/admin/pos/sales/dues");
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { t } = useTranslation();

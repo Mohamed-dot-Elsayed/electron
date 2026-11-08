@@ -16,13 +16,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Trash2, Plus } from "lucide-react";
 
 export default function ReturnSalePage() {
@@ -35,23 +28,24 @@ export default function ReturnSalePage() {
     data: accountsResponse,
     isLoading: accountsLoading,
     error: accountsError,
-  } = useGet("api/pos-home/accounts");
+  } = useGet("api/admin/pos-home/accounts");
 
-  const financialAccounts = accountsResponse?.success ? accountsResponse.data?.data || [] : [];
+  const financialAccounts = accountsResponse?.success
+    ? accountsResponse.data?.data || []
+    : [];
 
   useEffect(() => {
     if (accountsError) {
-      toast.error(t("Failed to load financial accounts"));
+      toast.error(t("Failed to load financial accounts", "Failed to load financial accounts"));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountsError]);
+  }, [accountsError, t]);
 
   const [reference, setReference] = useState("");
   const [saleData, setSaleData] = useState(null);
   const [returnItems, setReturnItems] = useState([]);
   const [returnNote, setReturnNote] = useState("");
   const [attachedFile, setAttachedFile] = useState(null);
-  const [fileName, setFileName] = useState("No file chosen");
+  const [fileName, setFileName] = useState("");
 
   const [financials, setFinancials] = useState([{ account_id: "", amount: "" }]);
 
@@ -59,12 +53,12 @@ export default function ReturnSalePage() {
   const handleSearch = async (e) => {
     e.preventDefault();
     if (!reference.trim()) {
-      toast.error(t("Please enter reference number"));
+      toast.error(t("Please enter reference number", "Please enter reference number"));
       return;
     }
 
     try {
-      const response = await postData("api/return-sale/sale-for-return", {
+      const response = await postData("api/admin/return-sale/sale-for-return", {
         reference: reference.trim(),
       });
 
@@ -94,10 +88,10 @@ export default function ReturnSalePage() {
 
         setSaleData(sale);
         setReturnItems(initializedItems);
-        toast.success(response.data.message || t("Sale found successfully"));
+        toast.success(response.data?.message || t("Sale found successfully", "Sale found successfully"));
       }
     } catch (err) {
-      const msg = err?.response?.data?.message || t("Sale not found");
+      const msg = err?.response?.data?.message || t("Sale not found", "Sale not found");
       toast.error(msg);
       setSaleData(null);
       setReturnItems([]);
@@ -173,14 +167,14 @@ export default function ReturnSalePage() {
     );
 
     if (validItems.length === 0) {
-      toast.error(t("Please select at least one item with quantity and reason"));
+      toast.error(t("Please select at least one item with quantity and reason", "Please select at least one item with quantity and reason"));
       return;
     }
 
     const validFinancials = financials.filter((f) => f.account_id);
 
     if (validFinancials.length === 0) {
-      toast.error(t("Please select at least one financial account"));
+      toast.error(t("Please select at least one financial account", "Please select at least one financial account"));
       return;
     }
 
@@ -212,14 +206,14 @@ export default function ReturnSalePage() {
     }
 
     try {
-      const response = await postData("api/return-sale/create-return", dataToSend, isFormData);
+      const response = await postData("api/admin/return-sale/create-return", dataToSend, isFormData);
 
       if (response.success) {
-        toast.success(t("Return created successfully"));
+        toast.success(t("Return created successfully", "Return created successfully"));
         navigate("/returns");
       }
     } catch (err) {
-      const msg = err?.response?.data?.message || t("Failed to create return");
+      const msg = err?.response?.data?.message || t("Failed to create return", "Failed to create return");
       toast.error(msg);
       navigate("/returns");
     }
@@ -236,19 +230,19 @@ export default function ReturnSalePage() {
 
   if (!saleData) {
     return (
-      <div className="min-h-screen bg-gray-50 py-8 px-4">
+      <div className="min-h-screen bg-gray-50 py-8 px-4" dir={isArabic ? "rtl" : "ltr"}>
         <div className="max-w-md mx-auto">
           <Card>
             <CardHeader>
-              <CardTitle className="text-center text-2xl">{t("Return Sale")}</CardTitle>
+              <CardTitle className="text-center text-2xl">{t("Return Sale", "Return Sale")}</CardTitle>
               <p className="text-center text-gray-600 mt-2">
-                {t("Enter the reference number to start return process")}
+                {t("Enter the reference number to start return process", "Enter the reference number to start return process")}
               </p>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSearch} className="space-y-6">
                 <div className="space-y-2">
-                  <Label htmlFor="reference">{t("Reference Number")} *</Label>
+                  <Label htmlFor="reference">{t("Reference Number", "Reference Number")} *</Label>
                   <Input
                     id="reference"
                     type="text"
@@ -261,8 +255,8 @@ export default function ReturnSalePage() {
                   />
                 </div>
                 <div className="flex gap-3">
-                  <Button type="submit" className="flex-1 bg-purple-600 hover:bg-purple-700" disabled={loading}>
-                    {loading ? t("Searching...") : t("Search Sale")}
+                  <Button type="submit" className="flex-1 bg-purple-600 hover:bg-purple-700 text-white" disabled={loading}>
+                    {loading ? t("Searching...", "Searching...") : t("Search Sale", "Search Sale")}
                   </Button>
                   <Button type="button" variant="outline" onClick={() => navigate("/returns")} disabled={loading}>
                     {t("Cancel")}
@@ -277,11 +271,11 @@ export default function ReturnSalePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
+    <div className="min-h-screen bg-gray-50 py-8 px-4" dir={isArabic ? "rtl" : "ltr"}>
       <div className="max-w-7xl mx-auto">
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl">{t("Return Sale")}</CardTitle>
+            <CardTitle className="text-2xl">{t("Return Sale", "Return Sale")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
@@ -292,7 +286,7 @@ export default function ReturnSalePage() {
               <div>
                 <Label>{t("Date")}</Label>
                 <Input
-                  value={saleData?.date ? new Date(saleData.date).toLocaleString() : "-"}
+                  value={saleData?.date ? new Date(saleData.date).toLocaleString(isArabic ? "ar-EG" : "en-GB") : "-"}
                   readOnly
                   className="bg-gray-100"
                 />
@@ -314,13 +308,13 @@ export default function ReturnSalePage() {
                 <Input value={cashierName} readOnly className="bg-gray-100" />
               </div>
               <div>
-                <Label>{t("Cashier Manager") || "Cashier Man"}</Label>
+                <Label>{t("Cashier Manager", "Cashier Manager")}</Label>
                 <Input value={cashiermanName} readOnly className="bg-gray-100" />
               </div>
             </div>
 
             <div>
-              <Label className="text-base font-medium">{t("Order Table")} *</Label>
+              <Label className="text-base font-medium">{t("Order Table", "Order Table")} *</Label>
               <div className="border rounded-lg overflow-hidden mt-2">
                 <Table>
                   <TableHeader>
@@ -328,11 +322,11 @@ export default function ReturnSalePage() {
                       <TableHead>{t("Product")}</TableHead>
                       <TableHead>{t("Code")}</TableHead>
                       <TableHead>{t("Quantity")}</TableHead>
-                      <TableHead>{t("Available to Return")}</TableHead>
-                      <TableHead>{t("Return Qty")}</TableHead>
+                      <TableHead>{t("Available to Return", "Available to Return")}</TableHead>
+                      <TableHead>{t("Return Qty", "Return Qty")}</TableHead>
                       <TableHead>{t("Reason")}</TableHead>
-                      <TableHead>{t("Unit Price")}</TableHead>
-                      <TableHead>{t("SubTotal")}</TableHead>
+                      <TableHead>{t("Unit Price", "Unit Price")}</TableHead>
+                      <TableHead>{t("SubTotal", "SubTotal")}</TableHead>
                       <TableHead className="w-10"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -340,7 +334,7 @@ export default function ReturnSalePage() {
                     {returnItems.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={9} className="text-center text-gray-500 py-8">
-                          {t("No items available")}
+                          {t("No items available", "No items available")}
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -399,31 +393,31 @@ export default function ReturnSalePage() {
             </div>
 
             <div>
-              <Label>{t("Attach Document")} ({t("Optional")})</Label>
+              <Label>{t("Attach Document", "Attach Document")} ({t("Optional")})</Label>
               <div className="flex items-center gap-3 mt-2">
                 <Button variant="outline" asChild>
                   <label htmlFor="file-upload" className="cursor-pointer">
-                    {t("Choose File")}
+                    {t("Choose File", "Choose File")}
                   </label>
                 </Button>
                 <input id="file-upload" type="file" className="hidden" onChange={handleFileChange} />
-                <span className="text-sm text-gray-600">{fileName}</span>
+                <span className="text-sm text-gray-600">{fileName || t("No file chosen")}</span>
               </div>
             </div>
 
             {/* Financial Accounts */}
             <div>
               <div className="flex items-center justify-between">
-                <Label className="text-base font-medium">{t("Refund Accounts")} *</Label>
+                <Label className="text-base font-medium">{t("Refund Accounts", "Refund Accounts")} *</Label>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={addFinancialRow}
-                  disabled={financials.length >= financialAccounts.length}
+                  disabled={financials.length >= (financialAccounts.length || 1)}
                 >
                   <Plus className="h-4 w-4 mr-1" />
-                  {t("Add Account")}
+                  {t("Add Account", "Add Account")}
                 </Button>
               </div>
 
@@ -439,20 +433,20 @@ export default function ReturnSalePage() {
                   return (
                     <div key={index} className="flex items-center gap-3">
                       <select
-  value={row.account_id}
-  onChange={(e) => updateFinancialRow(index, "account_id", e.target.value)}
-  disabled={accountsLoading}
-  className="flex-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
->
-  <option value="" disabled>
-    {accountsLoading ? t("Loading...") : t("Select account")}
-  </option>
-  {availableAccounts.map((account) => (
-    <option key={account._id} value={account._id}>
-      {account.name} ({account.balance})
-    </option>
-  ))}
-</select>
+                        value={row.account_id}
+                        onChange={(e) => updateFinancialRow(index, "account_id", e.target.value)}
+                        disabled={accountsLoading}
+                        className="flex-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        <option value="" disabled>
+                          {accountsLoading ? t("Loading...") : t("Select account", "Select account")}
+                        </option>
+                        {availableAccounts.map((account) => (
+                          <option key={account._id} value={account._id}>
+                            {account.name} ({account.balance})
+                          </option>
+                        ))}
+                      </select>
 
                       <Input
                         type="number"
@@ -480,13 +474,13 @@ export default function ReturnSalePage() {
             </div>
 
             <div>
-              <Label>{t("Return Note")}</Label>
+              <Label>{t("Return Note", "Return Note")}</Label>
               <textarea
                 className="w-full p-3 border rounded-md mt-2"
                 rows="4"
                 value={returnNote}
                 onChange={(e) => setReturnNote(e.target.value)}
-                placeholder={t("e.g. Customer returned because...")}
+                placeholder={t("e.g. Customer returned because...", "e.g. Customer returned because...")}
               />
             </div>
 
@@ -499,7 +493,7 @@ export default function ReturnSalePage() {
                   setReference("");
                   setReturnNote("");
                   setAttachedFile(null);
-                  setFileName("No file chosen");
+                  setFileName("");
                   setFinancials([{ account_id: "", amount: "" }]);
                 }}
                 disabled={loading}
@@ -508,11 +502,11 @@ export default function ReturnSalePage() {
               </Button>
               <Button
                 size="lg"
-                className="bg-purple-600 hover:bg-purple-700"
+                className="bg-purple-600 hover:bg-purple-700 text-white"
                 onClick={handleFinalSubmit}
                 disabled={loading}
               >
-                {loading ? t("Submitting...") : t("Submit Return")}
+                {loading ? t("Submitting...", "Submitting...") : t("Submit Return", "Submit Return")}
               </Button>
             </div>
           </CardContent>

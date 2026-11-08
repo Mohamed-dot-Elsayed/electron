@@ -12,21 +12,21 @@ export default function ExpensesModal({ onClose, expense = null, refetchParent }
 
   // 🔥 Base selection data (categories + accounts)
   const { data: selectionData, loading: selectionLoading } = useGet(
-    "api/expense/selection"
+    "api/admin/expense/selection"
   );
 
   // 🔥 Load the specific expense in edit mode
   const {
     data: editData,
     loading: editLoading,
-  } = useGet(isEditMode ? `api/expense/${expense._id}` : null);
+  } = useGet(isEditMode ? `api/admin/expense/${expense._id}` : null);
 
   const { postData } = usePost();
   const { putData } = usePut();
 
   const [expense_name, setExpenseName] = useState("");
   const [Category_id, setCategoryId] = useState("");
-  const [amount, setAmount] = useState(0);
+  const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [financial_accountId, setFinancialAccountId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -50,6 +50,18 @@ export default function ExpensesModal({ onClose, expense = null, refetchParent }
     }
   }, [isEditMode, editData, selectionData]); // ✅ أضف selectionData هنا
 
+  // منع الـ scroll لصفحة الخلفية أثناء فتح المودال
+  useEffect(() => {
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
+  }, []);
+
   // -----------------------------
   // SUBMIT
   // -----------------------------
@@ -72,11 +84,11 @@ export default function ExpensesModal({ onClose, expense = null, refetchParent }
 
     try {
       if (isEditMode) {
-        await putData(`api/expense/${expense._id}`, body);
+        await putData(`api/admin/expense/${expense._id}`, body);
         toast.success(t("ExpenseUpdated"));
         refetchParent?.();
       } else {
-        await postData("api/expense", body);
+        await postData("api/admin/expense", body);
         toast.success(t("ExpenseAdded"));
         refetchParent?.(); // أضيفي الريكول هنا أيضاً إذا كنتِ تحتاجي تحديث القائمة بعد الإضافة
       }

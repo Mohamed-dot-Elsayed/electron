@@ -3,11 +3,11 @@ import { UserModel } from "../models/user";
 import { RoleModel } from "../models/roles";
 import { CashierShift } from "../models/cashierShift";
 import { CashierModel } from "../models/cashier";
+import { WarehouseModel } from "../models/warehouse";
 import { generateToken } from "../utils/auth";
 import bcrypt from "bcryptjs";
 import { ConflictError, UnauthorizedError } from "../Errors";
 import { BadRequest } from "../Errors/BadRequest";
-import { NotFound } from "../Errors/NotFound";
 import { SuccessResponse } from "../utils/response";
 import { AppUser, UserPermission } from "../types/custom";
 import { MODULES, ACTION_NAMES } from "../types/constant";
@@ -23,7 +23,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
   const user = UserModel.findOne({ email });
 
   if (!user) {
-    throw new NotFound("User not found");
+    throw new UnauthorizedError("Invalid email or password");
   }
 
   if (user.status !== "active") {
@@ -102,7 +102,9 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     username: user.username,
     role: user.role,
     role_id: user.role_id || null,
-    warehouse_id: user.warehouse_id || null,
+    warehouse_id:
+      user.warehouse_id ||
+      (WarehouseModel.find()?.[0]?._id ?? null),
   });
 
   // ✅ الـ permissions في الـ Response بس
@@ -117,7 +119,9 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       role: user.role,
       role_id: user.role_id || null,
       role_name: roleName || (user.role === "superadmin" ? "Super Admin" : null),
-      warehouse_id: user.warehouse_id ? user.warehouse_id.toString() : null,
+      warehouse_id: user.warehouse_id
+        ? user.warehouse_id.toString()
+        : (WarehouseModel.find()?.[0]?._id?.toString() ?? null),
       permissions: mappedPermissions,
     },
     hasOpenShift: !!openShift,

@@ -9,7 +9,7 @@ export const useProductModal = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [selectedVariation, setSelectedVariation] = useState({});
-  const [selectedExtras, setSelectedExtras] = useState([]);
+  const [selectedExtras, setSelectedExtras] = useState([]); // Now supports multiple instances
   const [selectedExcludes, setSelectedExcludes] = useState([]);
   const [quantity, setQuantity] = useState(1);
   const [totalPrice, setTotalPrice] = useState(0);
@@ -20,7 +20,7 @@ export const useProductModal = () => {
     setSelectedProduct(product);
     const initialSelectedVariations = {};
 
-    // 1. فحص وجود فاريشن بالأسعار وتحديد أول فاريشن متوفر افتراضياً (الكمية > 0)
+    // 1. فحص وجود فاريشن بالأسعار وتحديد أول فاريشن متوفر افتراضياً
     const variants = getProductVariantsList(product);
     if (variants.length > 0) {
       const firstInStock =
@@ -72,24 +72,28 @@ export const useProductModal = () => {
       return [];
     }
 
+    // Count occurrences of each extra/addon ID
     const extraCounts = {};
     selectedExtras.forEach((extraId) => {
-      const id = extraId.toString();
+      const id = extraId.toString(); // Ensure string format
       extraCounts[id] = (extraCounts[id] || 0) + 1;
     });
 
+    // Transform to the desired format
     return Object.keys(extraCounts).map((addonId) => ({
       addon_id: addonId,
-      count: extraCounts[addonId].toString(),
+      count: extraCounts[addonId].toString(), // Convert to string if backend expects string
     }));
   };
 
   const handleVariationChange = (variationId, optionId, action = "toggle") => {
     setSelectedVariation((prev) => {
+      // إذا كان تغيير الفاريشن السعري الرئيسي
       if (variationId === "price_variation") {
         return { ...prev, price_variation: optionId };
       }
 
+      // إذا كان من مجموعات الخيارات العادية
       const allGroups = getProductVariationGroups(selectedProduct);
       const variation = allGroups.find((v) => v.id === variationId);
 
@@ -132,21 +136,33 @@ export const useProductModal = () => {
       return prev;
     });
   };
-
   const getGroupedExtras = () => {
     return groupExtrasForBackend(selectedExtras);
   };
 
+  // Updated to support multiple instances of the same extra/addon
   const handleExtraChange = (extraId) => {
-    setSelectedExtras((prev) => [...prev, extraId]);
+    console.log("handleExtraChange called with:", extraId);
+    console.log("Current selectedExtras:", selectedExtras);
+
+    setSelectedExtras((prev) => {
+      // Always add (for increment), removal is handled by decrement function
+      const newExtras = [...prev, extraId];
+      console.log("New selectedExtras:", newExtras);
+      return newExtras;
+    });
   };
 
+  // New function to handle decrementing extras
   const handleExtraDecrement = (extraId) => {
+    console.log("handleExtraDecrement called with:", extraId);
+
     setSelectedExtras((prev) => {
       const index = prev.indexOf(extraId);
       if (index > -1) {
         const newExtras = [...prev];
         newExtras.splice(index, 1);
+        console.log("Decremented selectedExtras:", newExtras);
         return newExtras;
       }
       return prev;
@@ -181,6 +197,7 @@ export const useProductModal = () => {
       variationGroups.forEach((variation) => {
         const selectedOptions = selectedVariation[variation.id] || [];
 
+        // Validation for required variations
         if (
           variation.required &&
           (!selectedOptions || (Array.isArray(selectedOptions) && selectedOptions.length === 0))
@@ -188,6 +205,7 @@ export const useProductModal = () => {
           newErrors[variation.id] = `Please select an option for ${variation.name}.`;
         }
 
+        // Validation for multiple type variations
         if (variation.type === "multiple") {
           const minRequired = variation.min || 0;
           const maxAllowed = variation.max;
@@ -205,11 +223,14 @@ export const useProductModal = () => {
     setTotalPrice(calculatedTotalPrice);
     setValidationErrors(newErrors);
   }, [
+    quantity,
+    selectedExtras,
+    selectedExcludes,
     selectedProduct,
     selectedVariation,
-    selectedExtras,
-    quantity,
   ]);
+
+  const hasErrors = Object.keys(validationErrors).length > 0;
 
   return {
     selectedProduct,
@@ -220,14 +241,14 @@ export const useProductModal = () => {
     quantity,
     totalPrice,
     validationErrors,
+    hasErrors,
     openProductModal,
     closeProductModal,
     handleVariationChange,
     handleExtraChange,
-    handleExtraDecrement,
+    handleExtraDecrement, // New function for decrementing
     handleExclusionChange,
     setQuantity,
     getGroupedExtras,
-    hasValidationErrors: Object.keys(validationErrors).length > 0,
   };
 };

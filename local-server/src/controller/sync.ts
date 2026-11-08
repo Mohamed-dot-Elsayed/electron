@@ -10,10 +10,14 @@ import {
   isBootstrapDone,
   getLastSyncCompletedAt,
   setLastSyncCompletedAt,
+  resetBootstrapFlags,
 } from "../services/appMeta";
 
 export async function testBootstrap(req: Request, res: Response) {
   try {
+    if (req.query?.force === "true") {
+      resetBootstrapFlags();
+    }
     await runBootstrapAll();
     res.json({ status: "done" });
   } catch (err: any) {

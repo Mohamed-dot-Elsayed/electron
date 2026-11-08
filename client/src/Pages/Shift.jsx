@@ -20,14 +20,13 @@ export default function Shift() {
 
   // 🧠 استرجاع بيانات المستخدم
   const userData = sessionStorage.getItem("user");
-  const user =
-    userData && userData !== "undefined" ? JSON.parse(userData) : null;
+  const user = userData && userData !== "undefined" ? JSON.parse(userData) : null;
   const userName = user?.user_name || "Cashier";
   const cashierId = sessionStorage.getItem("cashier_id");
 
   // ✅ فتح الشيفت (POST)
   const handleOpenShift = async () => {
-    const endpoint = `${import.meta.env.VITE_API_BASE_URL}api/cashier-shift/start`;
+    const endpoint = `${import.meta.env.VITE_API_BASE_URL}api/admin/cashier-shift/start`;
 
     try {
       setLoading(true);
@@ -46,13 +45,11 @@ export default function Shift() {
       openShift(serverStartTime);
       setShiftStatus("Shift is open.");
 
+
       // تنظيف الـ URL من ?action
       const params = new URLSearchParams(location.search);
       params.delete("action");
-      navigate(
-        { pathname: location.pathname, search: params.toString() },
-        { replace: true },
-      );
+      navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
 
       // بدء العد التنازلي للتحويل
       let timeLeft = 3;
@@ -76,7 +73,7 @@ export default function Shift() {
   // ✅ غلق الشيفت
   const handleCloseShiftAction = async () => {
     const cashierIdForClose = sessionStorage.getItem("cashier_id");
-    const endpoint = `${import.meta.env.VITE_API_BASE_URL}api/cashier-shift/end/${cashierIdForClose}`;
+    const endpoint = `${import.meta.env.VITE_API_BASE_URL}api/admin/cashier-shift/close/${cashierIdForClose}`;
 
     try {
       setLoading(true);
@@ -99,6 +96,7 @@ export default function Shift() {
       setTimeout(() => {
         navigate("/", { replace: true });
       }, 1500);
+
     } catch (err) {
       console.error("Close shift error:", err);
       toast.error(err?.response?.data?.message || t("FailedToCloseShift"));
@@ -120,19 +118,17 @@ export default function Shift() {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
+
       <div className="max-w-md w-full m-auto pb-20">
         <div className="text-center mb-6">
           <h1 className="text-2xl text-gray-800">
-            {t("WelcomeBack")},{" "}
-            <span className="text-bg-primary font-semibold">{userName}</span>
+            {t("WelcomeBack")}, <span className="text-bg-primary font-semibold">{userName}</span>
           </h1>
         </div>
 
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
           <div className="p-6 text-center">
-            <h2 className="text-xl font-semibold text-gray-800 mb-2">
-              {t("ShiftStatus")}
-            </h2>
+            <h2 className="text-xl font-semibold text-gray-800 mb-2">{t("ShiftStatus")}</h2>
             <p className="text-gray-500 text-sm">
               {isShiftOpen ? t("CurrentlyOnShift") : t("UpForShift")}
             </p>
@@ -172,9 +168,7 @@ export default function Shift() {
             <div className="px-6 pb-4 text-center">
               <div
                 className={`flex items-center justify-center gap-2 text-lg font-medium ${
-                  shiftStatus.includes("open")
-                    ? "text-green-600"
-                    : "text-bg-primary"
+                  shiftStatus.includes("open") ? "text-green-600" : "text-bg-primary"
                 }`}
               >
                 {shiftStatus.includes("open") ? (
@@ -199,15 +193,13 @@ export default function Shift() {
             </div>
           )}
 
-          {countdown !== null &&
-            countdown > 0 &&
-            shiftStatus?.includes("open") && (
-              <div className="px-6 pb-6 text-center">
-                <div className="text-4xl font-bold text-bg-primary">
-                  {countdown}
-                </div>
+          {countdown !== null && countdown > 0 && shiftStatus?.includes("open") && (
+            <div className="px-6 pb-6 text-center">
+              <div className="text-4xl font-bold text-bg-primary">
+                {countdown}
               </div>
-            )}
+            </div>
+          )}
         </div>
       </div>
     </div>

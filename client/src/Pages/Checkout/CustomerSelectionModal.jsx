@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "react-toastify";
@@ -13,14 +14,18 @@ const CustomerSelectionModal = ({
   loading,
   requiredTotal,
 }) => {
+  const { t } = useTranslation();
+
   if (!isOpen) return null;
 
   // عرض معلومات المديونية الحالية فقط (بدون حد ائتماني لأنه مش موجود في الـ API)
   const handleCustomerClick = (customer) => {
     // إما نسمح بالاختيار دائمًا، أو نعرض تحذير ودي
-    if (customer.amount_Due > 0) {
+    if (Number(customer.amount_Due) > 0) {
       toast.info(
-        `العميل مدين حاليًا بـ ${(customer.amount_Due ?? 0).toFixed(2)} ج.م`
+        t("customerSelect.currentDue", {
+          amount: Number(customer.amount_Due ?? 0).toFixed(2),
+        }),
       );
     }
 
@@ -38,23 +43,26 @@ const CustomerSelectionModal = ({
         </button>
 
         <h2 className="text-xl font-semibold mb-4 text-center text-purple-600">
-          اختر العميل للطلب الآجل
+          {t("customerSelect.title")}
         </h2>
 
         <p className="text-center text-sm mb-4 text-gray-700">
-          إجمالي الطلب: <strong>{(requiredTotal ?? 0).toFixed(2)} ج.م</strong>
+          {t("customerSelect.orderTotal")}{" "}
+          <strong>{(requiredTotal ?? 0).toFixed(2)}</strong> {t("EGP")}
         </p>
 
         {/* حقل البحث */}
         <Input
-          placeholder="ابحث بالاسم أو رقم التليفون..."
+          placeholder={t("customerSelect.searchPlaceholder")}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="mb-4"
         />
 
         {loading && (
-          <p className="text-center text-sm text-gray-500 my-4">جاري البحث...</p>
+          <p className="text-center text-sm text-gray-500 my-4">
+            {t("customerSelect.searching")}
+          </p>
         )}
 
         {/* قائمة العملاء */}
@@ -68,32 +76,34 @@ const CustomerSelectionModal = ({
               >
                 <div className="flex flex-col">
                   <span className="font-semibold text-gray-900">
-                    {customer.name || "غير محدد"}
+                    {customer.name || t("customerSelect.noName")}
                   </span>
                   <span className="text-sm text-gray-600">
-                    {customer.phone_number || "لا يوجد تليفون"}
+                    {customer.phone_number || t("customerSelect.noPhone")}
                   </span>
-                  {customer.amount_Due !== undefined && (
+                  {Number(customer.amount_Due) > 0 && (
                     <span className="text-xs mt-1 text-red-600 font-medium">
-                      مدين حاليًا: {(customer.amount_Due ?? 0).toFixed(2)} ج.م
+                      {t("customerSelect.currentDue", {
+                        amount: Number(customer.amount_Due ?? 0).toFixed(2),
+                      })}
                     </span>
                   )}
                 </div>
                 <Button size="sm" className="bg-purple-600 hover:bg-purple-700">
-                  اختيار
+                  {t("customerSelect.select")}
                 </Button>
               </div>
             ))
           ) : (
             <p className="text-center text-sm text-gray-500 py-8">
-              لا توجد عملاء مطابقة للبحث.
+              {t("customerSelect.empty")}
             </p>
           )}
         </div>
 
         <div className="mt-4 text-center">
           <Button variant="outline" onClick={onClose} className="w-full">
-            إلغاء
+            {t("Cancel")}
           </Button>
         </div>
       </div>

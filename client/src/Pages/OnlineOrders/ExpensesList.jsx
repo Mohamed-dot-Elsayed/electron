@@ -1,11 +1,13 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useGet } from "@/Hooks/useGet";
 import { Edit } from "lucide-react";
 import EditExpenseModal from "../ExpensesModal";
 import Loading from "@/components/Loading";
 
 export default function ExpensesList() {
-  const { data, loading, refetch } = useGet("api/expense");
+  const { t } = useTranslation();
+  const { data, loading, refetch } = useGet("api/admin/expense");
   const [selectedExpense, setSelectedExpense] = useState(null);
 
   if (loading) return <Loading />;
@@ -15,7 +17,7 @@ export default function ExpensesList() {
 
   return (
     <div className="p-4">
-      <h1 className="text-xl font-bold mb-4">Expenses</h1>
+      <h1 className="text-xl font-bold mb-4">{t("Expenses")}</h1>
 
       <div className="space-y-3">
         {expenses.map((item) => (
@@ -25,17 +27,17 @@ export default function ExpensesList() {
           >
             <div>
               <p className="font-bold">{item.name}</p>
-              <p>Price: {item.amount}</p>
+              <p>{t("Price")}: {item.amount}</p>
 
               <p>
-                Category: {item.Category_id?.name || "-"}
+                {t("Category")}: {item.Category_id?.name || "-"}
               </p>
 
               <p>
-                Financial Account: {item.financial_accountId?.name || "-"}
+                {t("FinancialAccount")}: {item.financial_accountId?.name || "-"}
               </p>
 
-              <p>Note: {item.note || "-"}</p>
+              <p>{t("Note")}: {item.note || "-"}</p>
             </div>
 
             <Edit

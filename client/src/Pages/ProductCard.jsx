@@ -1,4 +1,4 @@
-//page for product card component that displays product details and allows adding to order (products div)
+﻿//page for product card component that displays product details and allows adding to order (products div)
 import React, { useState } from "react";
 import {
   Dialog,
@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/dialog";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
-import { resolveImageUrl } from "./utils/imageUrl";
 import { getProductVariantsList } from "./ProductModal";
 
 const ProductCard = ({ product, onAddToOrder, onOpenModal }) => {
@@ -61,8 +60,6 @@ const ProductCard = ({ product, onAddToOrder, onOpenModal }) => {
     }
   };
 
-  const src = resolveImageUrl(product.image);
-
   const displayPrice = hasVariants
     ? variants[0].price
     : product.price_after_discount !== null &&
@@ -76,7 +73,7 @@ const ProductCard = ({ product, onAddToOrder, onOpenModal }) => {
       <div onClick={() => onOpenModal(product)} className="cursor-pointer">
         <div className="relative">
           <img
-            src={src}
+            src={product.image}
             alt={product.name}
             className="w-full h-32 object-cover"
           />

@@ -21,204 +21,230 @@ import OnlineTabs from "./Pages/OnlineOrders/OnlineTabs";
 import ReturnSalePage from "./Pages/Return/ReturnSalePage";
 import ReturnsListPage from "./Pages/Return/returns";
 import ProductDetails from "./Pages/Details/Productdetails";
+import WarehouseReport from "./Pages/Reports/WarehouseReport";
+import WarehouseTransfers from "./Pages/Transfers/WarehouseTransfers";
+import InstallmentsPage from "./Pages/Installments/InstallmentsPage";
 
 const routes = [
-  {
-    element: <AuthLayout />,
-    children: [
-      {
-        path: "login",
-        element: (
-          <ProtAuth>
-            <Login />
-          </ProtAuth>
-        ),
-      },
-    ],
-  },
+    {
+      element: <AuthLayout />,
+      children: [
+        {
+          path: "login",
+          element: (
+            <ProtAuth>
+              <Login />
+            </ProtAuth>
+          ),
+        },
 
-  {
-    element: (
-      <ProtectedRoute>
-        <MainLayouts />
-      </ProtectedRoute>
-    ),
-    children: [
-      // for take away
-      {
-        path: "/",
-        element: (
-          <ProtectedRoute>
-            <Home />
-          </ProtectedRoute>
-        ),
-      },
+      ],
+    },
 
-      // for dine in
-      {
-        path: "/order-page",
-        element: (
-          <ProtectedRoute>
-            {" "}
-            {/* نفس permission الـ Home */}
-            <Home />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "/profile",
-        element: (
-          <ProtectedRoute>
-            <Profile />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "/delivery-order",
-        element: (
-          <ProtectedRoute>
-            <Home />
-          </ProtectedRoute>
-        ),
-      },
+    {
+      element: <MainLayouts />,
+      children: [
+        // for take away
+        {
+          path: "/",
+          element: (
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          ),
+        },
 
-      {
-        path: "cashier",
-        children: [
-          {
-            index: true,
-            element: (
-              <ProtectedRoute>
-                <Cashier />
-              </ProtectedRoute>
-            ),
-          },
-        ],
-      },
 
-      {
-        path: "item",
-        children: [
-          {
-            index: true,
-            element: (
-              <ProtectedRoute>
-                <Item />
-              </ProtectedRoute>
-            ),
-          },
-        ],
-      },
-      {
-        path: "product-details/:id",
-        children: [
-          {
-            index: true,
-            element: (
-              <ProtectedRoute>
-                <ProductDetails />
-              </ProtectedRoute>
-            ),
-          },
-        ],
-      },
+        // for dine in
+        {
+          path: "/order-page",
+          element: (
+            <ProtectedRoute>
+              {" "}
+              {/* نفس permission الـ Home */}
+              <Home />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "/profile",
+          element: (
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "/delivery-order",
+          element: (
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          ),
+        },
 
-      {
-        path: "order",
-        children: [
-          {
-            index: true,
-            element: (
-              <ProtectedRoute>
-                <Orders />
-              </ProtectedRoute>
-            ),
-          },
-        ],
-      },
-      {
-        path: "take",
-        children: [
-          {
-            index: true,
-            element: (
-              <ProtectedRoute>
-                <TakeAway />
-              </ProtectedRoute>
-            ),
-          },
-        ],
-      },
+        {
+          path: "cashier",
+          children: [
+            {
+              index: true,
+              element: (
+                <ProtectedRoute>
+                  <Cashier />
+                </ProtectedRoute>
+              ),
+            },
+          ],
+        },
 
-      {
-        path: "orders",
-        element: <OrdersView />,
-      },
-      {
-        path: "shift",
-        element: (
-          <ProtectedRoute>
-            <Shift />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "pending-orders",
-        element: (
-          <ProtectedRoute>
-            <PendingOrders />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "due",
-        element: (
-          <ProtectedRoute>
-            <DueUsers />
-          </ProtectedRoute>
-        ),
-      },
+        {
+          path: "item",
+          children: [
+            {
+              index: true,
+              element: (
+                <ProtectedRoute>
+                  <Item />
+                </ProtectedRoute>
+              ),
+            },
+          ],
+        },
+        {
+          path: "product-details/:id",
+          children: [
+            {
+              index: true,
+              element: (
+                <ProtectedRoute>
+                  <ProductDetails />
+                </ProtectedRoute>
+              ),
+            },
+          ],
+        },
 
-      {
-        path: "*",
-        element: <NotFound />,
-      },
+        {
+          path: "order",
+          children: [
+            {
+              index: true,
+              element: (
+                <ProtectedRoute>
+                  <Orders />
+                </ProtectedRoute>
+              ),
+            },
+          ],
+        },
+        {
+          path: "take",
+          children: [
+            {
+              index: true,
+              element: (
+                <ProtectedRoute>
+                  <TakeAway />
+                </ProtectedRoute>
+              ),
+            },
+          ],
+        },
 
-      {
-        path: "/all-orders",
-        element: (
-          <ProtectedRoute>
-            <AllOrders />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "/online-orders",
-        element: (
-          <ProtectedRoute>
-            <OnlineTabs />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "/online-orders/:id",
-        element: (
-          <ProtectedRoute>
-            <SinglePage />
-          </ProtectedRoute>
-        ),
-      },
-      { path: "/return-sale", element: <ReturnSalePage /> },
-      {
-        path: "/returns",
-        element: (
-          <ProtectedRoute>
-            <ReturnsListPage />
-          </ProtectedRoute>
-        ),
-      },
-    ],
-  },
+
+        {
+          path: "orders",
+          element: <OrdersView />,
+        },
+        {
+          path: "shift",
+          element: (
+            <ProtectedRoute>
+              <Shift />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "pending-orders",
+          element: (
+            <ProtectedRoute>
+              <PendingOrders />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "due",
+          element: (
+            <ProtectedRoute>
+              <DueUsers />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "installments",
+          element: (
+            <ProtectedRoute>
+              <InstallmentsPage />
+            </ProtectedRoute>
+          ),
+        },
+
+        {
+          path: "*",
+          element: <NotFound />,
+        },
+
+                {
+          path:"/all-orders"
+          ,          element:(
+            <ProtectedRoute>
+              <AllOrders/>
+            </ProtectedRoute>
+          )
+        },
+        {
+          path:"/online-orders",
+          element:(
+            <ProtectedRoute>
+              <OnlineTabs/>
+            </ProtectedRoute>
+          )
+        },
+                {
+          path:"/online-orders/:id",
+          element:(
+            <ProtectedRoute>
+              <SinglePage/>
+            </ProtectedRoute>
+          )
+        },
+       { path:"/return-sale" ,element:(<ReturnSalePage />)},
+       {
+         path: "/returns",
+         element: (
+           <ProtectedRoute>
+             <ReturnsListPage />
+           </ProtectedRoute>
+         ),
+       },
+       {
+         path: "/reports/warehouse",
+         element: (
+           <ProtectedRoute>
+             <WarehouseReport />
+           </ProtectedRoute>
+         ),
+       },
+       {
+         path: "/transfers",
+         element: (
+           <ProtectedRoute>
+             <WarehouseTransfers />
+           </ProtectedRoute>
+         ),
+       }
+      ],
+    },
 ];
 
 const isElectron =

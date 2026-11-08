@@ -15,6 +15,7 @@ import { enqueuePendingImages } from "../db/imageCache";
 import { extractImageUrls } from "./imageExtract";
 import { triggerImageDownload } from "./imageDownloader";
 import { emitSyncProgress } from "../socket";
+import { bootstrapTable } from "./bootstrap";
 
 const REMOTE_BASE = process.env.REMOTE_API_URL;
 const SYNC_CURSOR_KEY = "_global";
@@ -210,6 +211,13 @@ export async function pullAllTables(): Promise<Record<string, number>> {
     } finally {
       installTriggersForTable(db, table);
     }
+  }
+
+  // Refresh Product_Warehouse stock from online (not tracked by ChangeLog)
+  try {
+    await bootstrapTable("Product_Warehouse", true);
+  } catch (err: any) {
+    console.warn("Product_Warehouse refresh failed:", err?.message);
   }
 
   saveDB();

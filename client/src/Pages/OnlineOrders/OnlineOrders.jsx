@@ -12,7 +12,6 @@ import {
   ChevronRight,
   X,
   Loader2,
-  CreditCard,
   Building,
   Truck,
   Store,
@@ -32,25 +31,24 @@ export default function OnlineOrders() {
   const [newStatusValue, setNewStatusValue] = useState("");
   const [statusDescription, setStatusDescription] = useState("");
 
-  const { putData, loading: isUpdatingStatus } = usePut();
+  const { putData, patchData, loading: isUpdatingStatus } = usePut();
 
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const isArabic = i18n.language === "ar";
 
-  const { data, isLoading, error } = useGet("api/online-order");
+  const { data, isLoading, error } = useGet("api/admin/pos-online-orders");
 
-  // Extract orders safely from payload
   useEffect(() => {
     if (data) {
       let extractedOrders = [];
 
       if (Array.isArray(data)) {
         extractedOrders = data;
-      } else if (Array.isArray(data.orders)) {
-        extractedOrders = data.orders;
       } else if (Array.isArray(data.data?.orders)) {
         extractedOrders = data.data.orders;
+      } else if (Array.isArray(data.orders)) {
+        extractedOrders = data.orders;
       } else if (Array.isArray(data.data)) {
         extractedOrders = data.data;
       }
@@ -64,7 +62,6 @@ export default function OnlineOrders() {
     }
   }, [data, error, t]);
 
-  // Sync local status select state
   useEffect(() => {
     if (selectedOrder) {
       setNewStatusValue(selectedOrder.status || "processing");
@@ -72,7 +69,6 @@ export default function OnlineOrders() {
     }
   }, [selectedOrder]);
 
-  // ✅ الحالات اللي بتتعرض في الفلتر (بتشمل processing للعرض)
   const filterStatuses = [
     "processing",
     "confirmed",
@@ -84,7 +80,6 @@ export default function OnlineOrders() {
     "scheduled",
   ];
 
-  // ✅ تحديد الحالات المتاحة حسب الحالة الحالية
   const getAvailableStatuses = (currentStatus) => {
     const transitions = {
       processing: ["confirmed", "canceled", "scheduled"],
@@ -112,6 +107,8 @@ export default function OnlineOrders() {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(
         (order) =>
+          order._id?.toLowerCase().includes(term) ||
+          order.reference?.toLowerCase().includes(term) ||
           order.cartItems?.some((item) =>
             item.product?.name?.toLowerCase().includes(term),
           ) ||
@@ -149,7 +146,7 @@ export default function OnlineOrders() {
   const formatDate = (dateString) => {
     if (!dateString) return "N/A";
     const date = new Date(dateString);
-    return date.toLocaleDateString("en-GB", {
+    return date.toLocaleDateString(isArabic ? "ar-EG" : "en-GB", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -158,12 +155,13 @@ export default function OnlineOrders() {
     });
   };
 
-  // ✅ build variant label (زي "Color: Red / Size: XL")
-  const buildVariantLabel = (variant) => {
-    if (!variant?.options?.length) return null;
+  // ✅ بناء variant label من الـ options الجديدة
+  const buildOptionsLabel = (options) => {
+    if (!Array.isArray(options) || options.length === 0) return null;
 
-    return variant.options
+    const text = options
       .map((opt) => {
+        if (typeof opt === "string") return opt;
         const variationName = isArabic
           ? opt.ar_variationName || opt.variationName
           : opt.variationName;
@@ -171,30 +169,50 @@ export default function OnlineOrders() {
           ? `${variationName}: ${opt.optionName}`
           : opt.optionName;
       })
+      .filter(Boolean)
       .join(" / ");
+
+    return text || null;
   };
 
-  // ✅ helper: يجيب أول منتج من الأوردر
+  // ✅ أول منتج من الأوردر
   const getFirstItem = (order) => {
     const item = order?.cartItems?.[0];
-    if (!item) return { product: null, variant: null, quantity: 0, price: 0 };
+    if (!item) {
+      return { product: null, variantLabel: null, quantity: 0, price: 0 };
+    }
+
+    const optionsText = buildOptionsLabel(item.options);
+    const variantLabel = optionsText || item.product?.fullName || null;
+
     return {
       product: item.product,
-      variant: item.variant,
+      variantLabel,
       quantity: item.quantity || 0,
       price: item.price || item.product?.price || 0,
     };
   };
 
-  // Handler for updating order status
   const handleUpdateStatus = async () => {
     if (!selectedOrder || isUpdatingStatus) return;
 
     try {
-      await putData(`api/online-order/${selectedOrder._id}/status`, {
+      const endpoint = `api/admin/pos-online-orders/${selectedOrder._id}/status`;
+
+      const payload = {
         status: newStatusValue,
         statusDescription: statusDescription || undefined,
-      });
+      };
+
+      try {
+        if (patchData) {
+          await patchData(endpoint, payload);
+        } else {
+          await putData(endpoint, payload, { method: "patch" });
+        }
+      } catch (patchErr) {
+        await putData(endpoint, payload);
+      }
 
       const updatedOrders = orders.map((o) =>
         o._id === selectedOrder._id
@@ -209,12 +227,10 @@ export default function OnlineOrders() {
       }));
 
       toast.success(
-        t("StatusUpdatedSuccessfully") || "Status updated successfully!",
+        t("StatusUpdatedSuccessfully", "Status updated successfully!"),
       );
     } catch (err) {
-      toast.error(
-        t("FailedToUpdateStatus") || "Failed to update order status.",
-      );
+      toast.error(t("FailedToUpdateStatus", "Failed to update order status."));
     }
   };
 
@@ -234,7 +250,7 @@ export default function OnlineOrders() {
             {t("OnlineOrders") || "Online Orders"}
           </h1>
           <p className="text-gray-600">
-            {t("TotalOrders") || "Total"}:{" "}
+            {t("TotalOrders", "Total Orders")}:{" "}
             <span className="font-semibold">{safeList.length}</span>
           </p>
         </div>
@@ -265,10 +281,10 @@ export default function OnlineOrders() {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
-              placeholder={
-                t("SearchByOrderNumber") ||
-                "Search by product, city, or address..."
-              }
+              placeholder={t(
+                "SearchByOrderNumber",
+                "Search by product, city, or address...",
+              )}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-bg-primary focus:border-transparent"
@@ -282,10 +298,10 @@ export default function OnlineOrders() {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-bg-primary focus:border-transparent appearance-none"
             >
-              <option value="all">{t("AllStatuses") || "All Statuses"}</option>
+              <option value="all">{t("AllStatuses", "All Statuses")}</option>
               {filterStatuses.map((status) => (
                 <option key={status} value={status}>
-                  {t(status) || status.replace(/_/g, " ")}
+                  {t(status, status.replace(/_/g, " "))}
                 </option>
               ))}
             </select>
@@ -302,44 +318,43 @@ export default function OnlineOrders() {
                 <th
                   className={`px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider ${isArabic ? "text-right" : "text-left"}`}
                 >
-                  {t("Product") || "Product"}
+                  {t("Product", "Product")}
                 </th>
                 <th
                   className={`px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider ${isArabic ? "text-right" : "text-left"}`}
                 >
-                  {t("Destination") || "Destination"}
+                  {t("Destination", "Destination")}
                 </th>
                 <th
                   className={`px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider ${isArabic ? "text-right" : "text-left"}`}
                 >
-                  {t("Warehouse") || "Warehouse"}
+                  {t("Warehouse", "Warehouse")}
                 </th>
                 <th
                   className={`px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider ${isArabic ? "text-right" : "text-left"}`}
                 >
-                  {t("Amount") || "Amount"}
+                  {t("Amount", "Amount")}
                 </th>
                 <th
                   className={`px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider ${isArabic ? "text-right" : "text-left"}`}
                 >
-                  {t("Status") || "Status"}
+                  {t("Status", "Status")}
                 </th>
                 <th
                   className={`px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider ${isArabic ? "text-right" : "text-left"}`}
                 >
-                  {t("DateTime") || "Date/Time"}
+                  {t("DateTime", "Date/Time")}
                 </th>
                 <th
                   className={`px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider ${isArabic ? "text-right" : "text-left"}`}
                 >
-                  {t("Type") || "Type"}
+                  {t("Type", "Type")}
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {safeList.map((order) => {
-                const { product, variant, quantity } = getFirstItem(order);
-                const variantLabel = buildVariantLabel(variant);
+                const { product, variantLabel, quantity } = getFirstItem(order);
 
                 return (
                   <tr
@@ -362,7 +377,7 @@ export default function OnlineOrders() {
                         )}
                         <div className="min-w-0">
                           <div className="text-sm font-medium text-gray-900 truncate max-w-[180px]">
-                            {product?.name || "Deleted Product"}
+                            {product?.name || t("DeletedProduct")}
                           </div>
                           {variantLabel && (
                             <div className="text-xs text-gray-500 truncate max-w-[180px]">
@@ -389,7 +404,7 @@ export default function OnlineOrders() {
                           </>
                         ) : (
                           <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
-                            {t("Pickup") || "Pickup"}
+                            {t("Pickup", "Pickup")}
                           </span>
                         )}
                       </div>
@@ -405,14 +420,14 @@ export default function OnlineOrders() {
                         {order.totalPriceAfterDiscount != null
                           ? Number(order.totalPriceAfterDiscount).toFixed(2)
                           : Number(order.totalOrderPrice || 0).toFixed(2)}{" "}
-                        EGP
+                        {t("EGP")}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(order.status)}`}
                       >
-                        {t(order.status) || order.status?.replace(/_/g, " ")}
+                        {t(order.status, order.status?.replace(/_/g, " "))}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -425,7 +440,9 @@ export default function OnlineOrders() {
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold uppercase ${order.orderType === "pickup" ? "bg-teal-50 text-teal-700" : "bg-indigo-50 text-indigo-700"}`}
                       >
-                        {order.orderType?.replace(/_/g, " ") || "N/A"}
+                        {order.orderType
+                          ? t(order.orderType, order.orderType.replace(/_/g, " "))
+                          : "N/A"}
                       </span>
                     </td>
                   </tr>
@@ -439,7 +456,7 @@ export default function OnlineOrders() {
           <div className="text-center py-12">
             <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-500">
-              {t("NoOrdersFound") || "No orders found"}
+              {t("NoOrdersFound", "No orders found")}
             </p>
           </div>
         )}
@@ -448,8 +465,7 @@ export default function OnlineOrders() {
       {/* Mobile Cards */}
       <div className="md:hidden space-y-4">
         {safeList.map((order) => {
-          const { product, variant, quantity } = getFirstItem(order);
-          const variantLabel = buildVariantLabel(variant);
+          const { product, variantLabel, quantity } = getFirstItem(order);
 
           return (
             <div
@@ -473,7 +489,7 @@ export default function OnlineOrders() {
                   <div className="flex justify-between items-start gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="font-semibold text-gray-900 truncate">
-                        {product?.name || "Deleted Product"}
+                        {product?.name || t("DeletedProduct")}
                       </div>
                       {variantLabel && (
                         <div className="text-xs text-gray-500 truncate">
@@ -485,13 +501,13 @@ export default function OnlineOrders() {
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border flex-shrink-0 ${getStatusColor(order.status)}`}
                     >
-                      {t(order.status) || order.status?.replace(/_/g, " ")}
+                      {t(order.status, order.status?.replace(/_/g, " "))}
                     </span>
                   </div>
                   <div className="text-xs text-gray-600 mt-1">
                     {order.shippingAddress
                       ? `${order.shippingAddress.city}, ${order.shippingAddress.zone}`
-                      : "Pickup"}
+                      : t("Pickup")}
                   </div>
                 </div>
               </div>
@@ -501,7 +517,7 @@ export default function OnlineOrders() {
                   {order.totalPriceAfterDiscount != null
                     ? Number(order.totalPriceAfterDiscount).toFixed(2)
                     : Number(order.totalOrderPrice || 0).toFixed(2)}{" "}
-                  EGP
+                  {t("EGP")}
                 </div>
                 <div className="flex items-center text-gray-600">
                   <MapPin className="w-4 h-4 text-gray-400 mr-1" />
@@ -526,7 +542,7 @@ export default function OnlineOrders() {
           <div className="text-center py-12 bg-white rounded-lg">
             <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-500">
-              {t("NoOrdersFound") || "No orders found"}
+              {t("NoOrdersFound", "No orders found")}
             </p>
           </div>
         )}
@@ -546,7 +562,7 @@ export default function OnlineOrders() {
               <button
                 onClick={() => setSelectedOrder(null)}
                 className="absolute top-4 right-4 w-9 h-9 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-full flex items-center justify-center text-white shadow-lg transition-all"
-                aria-label="Close modal"
+                aria-label={t("Close")}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -557,7 +573,7 @@ export default function OnlineOrders() {
                 </div>
                 <div>
                   <h2 className="text-lg md:text-xl font-bold text-white">
-                    {t("OrderDetails") || "Order Details"}
+                    {t("OrderDetails", "Order Details")}
                   </h2>
                   <p className="text-xs text-blue-100 mt-0.5">
                     ID: {selectedOrder._id}
@@ -565,16 +581,18 @@ export default function OnlineOrders() {
                 </div>
               </div>
 
-              <div className="mt-3 flex gap-2">
+              <div className="mt-3 flex gap-2 flex-wrap">
                 <span
                   className={`px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md shadow-sm ${getStatusColor(selectedOrder.status)}`}
                 >
-                  {t(selectedOrder.status) ||
-                    selectedOrder.status?.replace(/_/g, " ")}
+                  {t(
+                    selectedOrder.status,
+                    selectedOrder.status?.replace(/_/g, " "),
+                  )}
                 </span>
-                {selectedOrder.previousStatus && (
+                {selectedOrder.reference && (
                   <span className="px-3 py-1 rounded-full text-xs font-medium bg-white/15 text-white border border-white/20">
-                    ← {selectedOrder.previousStatus}
+                    {t("Reference")}: {selectedOrder.reference}
                   </span>
                 )}
               </div>
@@ -586,25 +604,28 @@ export default function OnlineOrders() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 flex flex-col">
                   <span className="text-xs text-gray-400 font-medium mb-1">
-                    {t("OrderType") || "Order Type"}
+                    {t("OrderType", "Order Type")}
                   </span>
                   <span className="text-sm font-semibold text-gray-800 uppercase">
-                    {selectedOrder.orderType?.replace(/_/g, " ")}
+                    {t(
+                    selectedOrder.orderType,
+                    selectedOrder.orderType?.replace(/_/g, " "),
+                  )}
                   </span>
                 </div>
                 <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 flex flex-col">
                   <span className="text-xs text-gray-400 font-medium mb-1">
-                    {t("PaymentStatus") || "Payment Status"}
+                    {t("PaymentStatus", "Payment Status")}
                   </span>
                   <span
                     className={`inline-flex w-fit px-2 py-0.5 rounded text-xs font-semibold uppercase ${selectedOrder.paymentStatus === "paid" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}
                   >
-                    {selectedOrder.paymentStatus || "unpaid"}
+                    {t(selectedOrder.paymentStatus || "unpaid")}
                   </span>
                 </div>
                 <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 flex flex-col">
                   <span className="text-xs text-gray-400 font-medium mb-1">
-                    {t("PaymentMethod") || "Payment Method"}
+                    {t("PaymentMethod", "Payment Method")}
                   </span>
                   <span className="text-sm font-semibold text-gray-800">
                     {isArabic
@@ -617,17 +638,20 @@ export default function OnlineOrders() {
                 </div>
               </div>
 
-              {/* ✅ Products Section (كل الـ cartItems) */}
+              {/* Products Section */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
                 <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
                   <Package className="w-4 h-4 text-blue-600" />
-                  {t("Products") || "Products"} (
+                  {t("Products", "Products")} (
                   {selectedOrder.cartItems?.length || 0})
                 </h3>
 
                 <div className="space-y-3">
                   {(selectedOrder.cartItems || []).map((item, idx) => {
-                    const variantLabel = buildVariantLabel(item.variant);
+                    const optionsText = buildOptionsLabel(item.options);
+                    const variantLabel =
+                      optionsText || item.product?.fullName || null;
+
                     const unitPrice = Number(
                       item.price ?? item.product?.price ?? 0,
                     );
@@ -653,8 +677,7 @@ export default function OnlineOrders() {
                         <div className="flex-1 min-w-0">
                           <div className="font-semibold text-gray-900 truncate">
                             {item.product?.name ||
-                              t("DeletedProduct") ||
-                              "Deleted Product"}
+                              t("DeletedProduct", "Deleted Product")}
                           </div>
 
                           {variantLabel && (
@@ -663,38 +686,12 @@ export default function OnlineOrders() {
                             </div>
                           )}
 
-                          {item.variant?.code && (
-                            <div className="text-[11px] text-gray-400 mt-0.5">
-                              {t("Code") || "Code"}: {item.variant.code}
-                            </div>
-                          )}
-
-                          {/* variant options badges */}
-                          {item.variant?.options?.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {item.variant.options.map((opt, i) => {
-                                const vName = isArabic
-                                  ? opt.ar_variationName || opt.variationName
-                                  : opt.variationName;
-                                return (
-                                  <span
-                                    key={i}
-                                    className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-100"
-                                  >
-                                    {vName ? `${vName}: ` : ""}
-                                    {opt.optionName}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          )}
-
                           <div className="flex justify-between items-center mt-2 text-sm">
                             <div className="text-gray-500">
-                              {unitPrice.toFixed(2)} EGP × {qty}
+                              {unitPrice.toFixed(2)} {t("EGP")} × {qty}
                             </div>
                             <div className="font-bold text-gray-900">
-                              {(unitPrice * qty).toFixed(2)} EGP
+                              {(unitPrice * qty).toFixed(2)} {t("EGP")}
                             </div>
                           </div>
                         </div>
@@ -705,7 +702,7 @@ export default function OnlineOrders() {
                   {(!selectedOrder.cartItems ||
                     selectedOrder.cartItems.length === 0) && (
                     <div className="text-center py-6 text-gray-400 text-sm">
-                      {t("NoProducts") || "No products in this order"}
+                      {t("NoProducts", "No products in this order")}
                     </div>
                   )}
                 </div>
@@ -715,50 +712,52 @@ export default function OnlineOrders() {
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
                 <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
                   <Tag className="w-4 h-4 text-blue-600" />
-                  {t("OrderSummary") || "Order Summary"}
+                  {t("OrderSummary", "Order Summary")}
                 </h3>
                 <div className="divide-y divide-gray-100 text-sm">
                   <div className="flex justify-between py-2">
                     <span className="text-gray-500">
-                      {t("Subtotal") || "Subtotal"}
+                      {t("Subtotal", "Subtotal")}
                     </span>
                     <span className="font-medium text-gray-900">
                       {Number(
                         selectedOrder.totalOrderPrice || 0,
                       ).toLocaleString()}{" "}
-                      EGP
+                      {t("EGP")}
                     </span>
                   </div>
                   <div className="flex justify-between py-2">
                     <span className="text-gray-500">
-                      {t("ServiceFee") || "Service Fee"}
+                      {t("ServiceFee", "Service Fee")}
                     </span>
                     <span className="font-medium text-gray-900">
-                      {Number(selectedOrder.serviceFee || 0).toFixed(2)} EGP
+                      {Number(selectedOrder.serviceFee || 0).toFixed(2)} {t("EGP")}
                     </span>
                   </div>
                   {selectedOrder.couponDiscount > 0 && (
                     <div className="flex justify-between py-2 text-green-600">
-                      <span>{t("CouponDiscount") || "Coupon Discount"}</span>
+                      <span>{t("CouponDiscount", "Coupon Discount")}</span>
                       <span className="font-medium">
-                        -{Number(selectedOrder.couponDiscount).toFixed(2)} EGP
+                        -{Number(selectedOrder.couponDiscount).toFixed(2)} {t("EGP")}
                       </span>
                     </div>
                   )}
                   {selectedOrder.shippingPrice > 0 && (
                     <div className="flex justify-between py-2">
                       <span className="text-gray-500">
-                        {t("ShippingPrice") || "Shipping Price"}
+                        {t("ShippingPrice", "Shipping Price")}
                       </span>
                       <span className="font-medium text-gray-900">
-                        {Number(selectedOrder.shippingPrice).toFixed(2)} EGP
+                        {Number(selectedOrder.shippingPrice).toFixed(2)} {t("EGP")}
                       </span>
                     </div>
                   )}
                   <div className="flex justify-between py-3 text-base font-bold text-gray-900">
                     <span>
-                      {t("TotalPriceAfterDiscount") ||
-                        "Total Price After Discount"}
+                      {t(
+                        "TotalPriceAfterDiscount",
+                        "Total Price After Discount",
+                      )}
                     </span>
                     <span className="text-blue-600">
                       {Number(
@@ -766,7 +765,7 @@ export default function OnlineOrders() {
                           selectedOrder.totalOrderPrice ??
                           0,
                       ).toFixed(2)}{" "}
-                      EGP
+                      {t("EGP")}
                     </span>
                   </div>
                 </div>
@@ -776,12 +775,12 @@ export default function OnlineOrders() {
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
                 <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
                   <Building className="w-4 h-4 text-blue-600" />
-                  {t("OrderDetails") || "Order Details"}
+                  {t("OrderDetails", "Order Details")}
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                   <div className="bg-gray-50 p-2.5 rounded-xl">
                     <span className="block text-xs text-gray-400">
-                      {t("Warehouse") || "Warehouse"}
+                      {t("Warehouse", "Warehouse")}
                     </span>
                     <span className="font-medium text-gray-800">
                       {selectedOrder.warehouse?.name || "N/A"}
@@ -789,7 +788,7 @@ export default function OnlineOrders() {
                   </div>
                   <div className="bg-gray-50 p-2.5 rounded-xl">
                     <span className="block text-xs text-gray-400">
-                      {t("PaymentGateway") || "Payment Gateway"}
+                      {t("PaymentGateway", "Payment Gateway")}
                     </span>
                     <span className="font-medium text-gray-800 uppercase">
                       {selectedOrder.paymentGateway || "N/A"}
@@ -797,28 +796,28 @@ export default function OnlineOrders() {
                   </div>
                   <div className="bg-gray-50 p-2.5 rounded-xl">
                     <span className="block text-xs text-gray-400">
-                      {t("CreatedDate") || "Created Date"}
+                      {t("Reference", "Reference")}
+                    </span>
+                    <span className="font-medium text-gray-800">
+                      {selectedOrder.reference || "N/A"}
+                    </span>
+                  </div>
+                  <div className="bg-gray-50 p-2.5 rounded-xl">
+                    <span className="block text-xs text-gray-400">
+                      {t("CreatedDate", "Created Date")}
                     </span>
                     <span className="font-medium text-gray-800">
                       {formatDate(selectedOrder.createdAt)}
                     </span>
                   </div>
-                  <div className="bg-gray-50 p-2.5 rounded-xl">
-                    <span className="block text-xs text-gray-400">
-                      {t("OrderStatus") || "Order Status"}
-                    </span>
-                    <span className="font-medium text-gray-800 uppercase">
-                      {selectedOrder.status}
-                    </span>
-                  </div>
                 </div>
               </div>
 
-              {/* Fulfillment */}
+              {/* Fulfillment Information */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
                 <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
                   <Truck className="w-4 h-4 text-blue-600" />
-                  {t("FulfillmentInformation") || "Fulfillment Information"}
+                  {t("FulfillmentInformation", "Fulfillment Information")}
                 </h3>
 
                 {selectedOrder.orderType === "pickup" ||
@@ -827,21 +826,22 @@ export default function OnlineOrders() {
                     <Store className="w-5 h-5 flex-shrink-0" />
                     <div>
                       <span className="font-bold block text-sm">
-                        {t("PickupOrder") || "Store Pickup Order"}
+                        {t("PickupOrder", "Store Pickup Order")}
                       </span>
                       <span className="text-xs text-amber-700">
-                        {t("CustomerWillPickupFromWarehouse") ||
-                          "Customer will pick up this order directly from the selected warehouse."}
+                        {t(
+                          "CustomerWillPickupFromWarehouse",
+                          "Customer will pick up this order directly from the selected warehouse.",
+                        )}
                       </span>
                     </div>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                    {/* City */}
                     {selectedOrder.shippingAddress.city && (
                       <div className="bg-gray-50 p-2.5 rounded-xl">
                         <span className="block text-xs text-gray-400">
-                          {t("City") || "City"}
+                          {t("City", "City")}
                         </span>
                         <span className="font-medium text-gray-800">
                           {selectedOrder.shippingAddress.city}
@@ -849,11 +849,10 @@ export default function OnlineOrders() {
                       </div>
                     )}
 
-                    {/* Zone */}
                     {selectedOrder.shippingAddress.zone && (
                       <div className="bg-gray-50 p-2.5 rounded-xl">
                         <span className="block text-xs text-gray-400">
-                          {t("Zone") || "Zone"}
+                          {t("Zone", "Zone")}
                         </span>
                         <span className="font-medium text-gray-800">
                           {selectedOrder.shippingAddress.zone}
@@ -861,11 +860,10 @@ export default function OnlineOrders() {
                       </div>
                     )}
 
-                    {/* Street */}
                     {selectedOrder.shippingAddress.street && (
                       <div className="bg-gray-50 p-2.5 rounded-xl">
                         <span className="block text-xs text-gray-400">
-                          {t("Street") || "Street"}
+                          {t("Street", "Street")}
                         </span>
                         <span className="font-medium text-gray-800">
                           {selectedOrder.shippingAddress.street}
@@ -873,11 +871,10 @@ export default function OnlineOrders() {
                       </div>
                     )}
 
-                    {/* Building Number */}
                     {selectedOrder.shippingAddress.buildingNumber != null && (
                       <div className="bg-gray-50 p-2.5 rounded-xl">
                         <span className="block text-xs text-gray-400">
-                          {t("BuildingNumber") || "Building Number"}
+                          {t("BuildingNumber", "Building Number")}
                         </span>
                         <span className="font-medium text-gray-800">
                           {selectedOrder.shippingAddress.buildingNumber}
@@ -885,11 +882,10 @@ export default function OnlineOrders() {
                       </div>
                     )}
 
-                    {/* Floor Number */}
                     {selectedOrder.shippingAddress.floorNumber != null && (
                       <div className="bg-gray-50 p-2.5 rounded-xl">
                         <span className="block text-xs text-gray-400">
-                          {t("FloorNumber") || "Floor Number"}
+                          {t("FloorNumber", "Floor Number")}
                         </span>
                         <span className="font-medium text-gray-800">
                           {selectedOrder.shippingAddress.floorNumber}
@@ -897,11 +893,10 @@ export default function OnlineOrders() {
                       </div>
                     )}
 
-                    {/* Apartment Number */}
                     {selectedOrder.shippingAddress.apartmentNumber != null && (
                       <div className="bg-gray-50 p-2.5 rounded-xl">
                         <span className="block text-xs text-gray-400">
-                          {t("ApartmentNumber") || "Apartment Number"}
+                          {t("ApartmentNumber", "Apartment Number")}
                         </span>
                         <span className="font-medium text-gray-800">
                           {selectedOrder.shippingAddress.apartmentNumber}
@@ -909,11 +904,10 @@ export default function OnlineOrders() {
                       </div>
                     )}
 
-                    {/* Unique Identifier */}
                     {selectedOrder.shippingAddress.uniqueIdentifier && (
                       <div className="bg-gray-50 p-2.5 rounded-xl">
                         <span className="block text-xs text-gray-400">
-                          {t("UniqueIdentifier") || "Unique Identifier"}
+                          {t("UniqueIdentifier", "Unique Identifier")}
                         </span>
                         <span className="font-medium text-gray-800">
                           {selectedOrder.shippingAddress.uniqueIdentifier}
@@ -921,11 +915,10 @@ export default function OnlineOrders() {
                       </div>
                     )}
 
-                    {/* Address Details (full width) */}
                     {selectedOrder.shippingAddress.details && (
                       <div className="bg-gray-50 p-2.5 sm:col-span-2 rounded-xl">
                         <span className="block text-xs text-gray-400">
-                          {t("AddressDetails") || "Address Details"}
+                          {t("AddressDetails", "Address Details")}
                         </span>
                         <span className="font-medium text-gray-800">
                           {selectedOrder.shippingAddress.details}
@@ -936,34 +929,36 @@ export default function OnlineOrders() {
                 )}
               </div>
 
-              {/* Status Update */}
+              {/* Status Update Section */}
               <div className="bg-gray-50 rounded-2xl border border-gray-200 p-4 space-y-4">
                 <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">
-                  {t("UpdateOrderStatus") || "Update Order Status"}
+                  {t("UpdateOrderStatus", "Update Order Status")}
                 </h3>
 
-                {/* Current Status Info */}
                 <div className="flex items-center gap-2 text-xs text-gray-500 bg-white px-3 py-2 rounded-lg border border-gray-200">
                   <span className="font-medium">
-                    {t("OrderStatus") || "Order Status"}:
+                    {t("OrderStatus", "Order Status")}:
                   </span>
                   <span
                     className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${getStatusColor(selectedOrder.status)}`}
                   >
-                    {t(selectedOrder.status) ||
-                      selectedOrder.status?.replace(/_/g, " ")}
+                    {t(
+                      selectedOrder.status,
+                      selectedOrder.status?.replace(/_/g, " "),
+                    )}
                   </span>
                 </div>
 
-                {/* New Status Select */}
                 <div className="space-y-2">
                   <label className="block text-xs font-medium text-gray-600">
-                    {t("NewStatus") || "New Status"}
+                    {t("NewStatus", "New Status")}
                   </label>
                   {getAvailableStatuses(selectedOrder.status).length === 0 ? (
                     <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                      {t("NoTransitionsAvailable") ||
-                        "No status transitions available for this order."}
+                      {t(
+                        "NoTransitionsAvailable",
+                        "No status transitions available for this order.",
+                      )}
                     </div>
                   ) : (
                     <select
@@ -973,23 +968,22 @@ export default function OnlineOrders() {
                       className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-medium text-gray-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 transition-all cursor-pointer hover:border-gray-400"
                     >
                       <option value="">
-                        {t("SelectNewStatus") || "Select new status..."}
+                        {t("SelectNewStatus", "Select new status...")}
                       </option>
                       {getAvailableStatuses(selectedOrder.status).map((st) => (
                         <option key={st} value={st}>
-                          {t(st) || st.replace(/_/g, " ")}
+                          {t(st, st.replace(/_/g, " "))}
                         </option>
                       ))}
                     </select>
                   )}
                 </div>
 
-                {/* Status Description */}
                 <div className="space-y-2">
                   <label className="block text-xs font-medium text-gray-600">
-                    {t("StatusDescription") || "Status Description"}{" "}
+                    {t("StatusDescription", "Status Description")}{" "}
                     <span className="text-gray-400 font-normal">
-                      ({t("Optional") || "Optional"})
+                      ({t("Optional", "Optional")})
                     </span>
                   </label>
                   <textarea
@@ -997,15 +991,14 @@ export default function OnlineOrders() {
                     onChange={(e) => setStatusDescription(e.target.value)}
                     disabled={isUpdatingStatus}
                     rows={2}
-                    placeholder={
-                      t("StatusDescriptionPlaceholder") ||
-                      "Add a note about this status change..."
-                    }
+                    placeholder={t(
+                      "StatusDescriptionPlaceholder",
+                      "Add a note about this status change...",
+                    )}
                     className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 transition-all resize-none placeholder:text-gray-400"
                   />
                 </div>
 
-                {/* Update Button */}
                 <button
                   onClick={handleUpdateStatus}
                   disabled={
@@ -1017,11 +1010,11 @@ export default function OnlineOrders() {
                 >
                   {isUpdatingStatus ? (
                     <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      {t("Updating") || "Updating..."}
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      {t("Updating", "Updating...")}
                     </>
                   ) : (
-                    t("UpdateStatus") || "Update Status"
+                    t("UpdateStatus", "Update Status")
                   )}
                 </button>
               </div>

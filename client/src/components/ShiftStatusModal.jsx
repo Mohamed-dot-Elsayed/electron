@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   CheckCircle2,
   Sparkles,
@@ -66,11 +66,11 @@ export default function ShiftStatusModal({
               {isWelcomeBack
                 ? t(
                     "WelcomeBackShift",
-                    isArabic ? "مرحباً بعودتك!" : "Welcome Back!"
+                    isArabic ? "مرحباً بعودتك!" : "Welcome Back!",
                   )
                 : t(
                     "ShiftStartedTitle",
-                    isArabic ? "تم بدء الوردية بنجاح" : "The shift has started"
+                    isArabic ? "تم بدء الوردية بنجاح" : "The shift has started",
                   )}
             </h2>
             <p className="text-sm text-gray-500 font-medium">
@@ -79,13 +79,13 @@ export default function ShiftStatusModal({
                     "WelcomeBackShiftDesc",
                     isArabic
                       ? "تم استعادة ورديتك النشطة بنجاح، يمكنك متابعة العمل كالمعتاد."
-                      : "Your active shift has been restored. You can continue working normally."
+                      : "Your active shift has been restored. You can continue working normally.",
                   )
                 : t(
                     "ShiftStartedDesc",
                     isArabic
                       ? "تم فتح الوردية بنجاح، يمكنك الآن البدء في تسجيل الطلبات."
-                      : "Your shift is now open. You can start creating orders."
+                      : "Your shift is now open. You can start creating orders.",
                   )}
             </p>
           </div>
@@ -121,7 +121,7 @@ export default function ShiftStatusModal({
             </div>
           </div>
 
-          {/* Action Button */}
+          {/* Action Button & Countdown */}
           <div className="pt-2 space-y-3">
             <button
               onClick={onConfirm}
@@ -131,7 +131,7 @@ export default function ShiftStatusModal({
                 {isWelcomeBack
                   ? t(
                       "ContinueShift",
-                      isArabic ? "متابعة الوردية" : "Continue Shift"
+                      isArabic ? "متابعة الوردية" : "Continue Shift",
                     )
                   : t("StartSelling", isArabic ? "بدء البيع" : "Start Selling")}
               </span>

@@ -3,7 +3,7 @@ import { useGet } from "@/Hooks/useGet";
 import { useMemo } from "react";
 
 export const useServiceFee = () => {
-  const { data, isLoading, error, refetch } = useGet("api/pos-home/service-fees");
+  const { data, isLoading, error, refetch } = useGet("api/admin/pos-home/service-fees");
 
   // Response shape: { success, data: { message, data: [ ...fees ] } }
   const serviceFeeData = useMemo(() => {

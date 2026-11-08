@@ -1,17 +1,11 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-} from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const ShiftContext = createContext();
 
 export const useShift = () => {
   const context = useContext(ShiftContext);
   if (!context) {
-    throw new Error("useShift must be used within a ShiftProvider");
+    throw new Error('useShift must be used within a ShiftProvider');
   }
   return context;
 };
@@ -22,31 +16,30 @@ export const ShiftProvider = ({ children }) => {
 
   // Check shift status from localStorage on mount
   useEffect(() => {
-    const shiftStatus = localStorage.getItem("shiftStatus");
-    const startTime = localStorage.getItem("shiftStartTime");
+    const shiftStatus = localStorage.getItem('shiftStatus');
+    const startTime = localStorage.getItem('shiftStartTime');
 
-    if (shiftStatus === "open" && startTime) {
+    if (shiftStatus === 'open' && startTime) {
       setIsShiftOpen(true);
       setShiftStartTime(new Date(startTime));
     }
   }, []);
 
-  const openShift = useCallback((serverStartTime) => {
-    // ✅ استخدم الـ start_time الحقيقي القادم من السيرفر لو موجود،
-    // ولو مفيش (شيفت جديد فعلاً) نستخدم الوقت الحالي كـ fallback
-    const now = serverStartTime ? new Date(serverStartTime) : new Date();
-    console.log("Opening shift at:", now); // Debug log
+  // openShift accepts an optional customStartTime (ISO string or Date)
+  // used when restoring an existing shift on re-login
+  const openShift = useCallback((customStartTime) => {
+    const now = customStartTime ? new Date(customStartTime) : new Date();
     setIsShiftOpen(true);
     setShiftStartTime(now);
-    localStorage.setItem("shiftStatus", "open");
-    localStorage.setItem("shiftStartTime", now.toISOString());
+    localStorage.setItem('shiftStatus', 'open');
+    localStorage.setItem('shiftStartTime', now.toISOString());
   }, []);
 
   const closeShift = useCallback(() => {
     setIsShiftOpen(false);
     setShiftStartTime(null);
-    localStorage.removeItem("shiftStatus");
-    localStorage.removeItem("shiftStartTime");
+    localStorage.removeItem('shiftStatus');
+    localStorage.removeItem('shiftStartTime');
   }, []);
 
   return (
@@ -60,4 +53,5 @@ export const ShiftProvider = ({ children }) => {
     >
       {children}
     </ShiftContext.Provider>
-  )};
+  );
+};

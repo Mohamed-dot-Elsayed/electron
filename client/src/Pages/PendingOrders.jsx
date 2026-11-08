@@ -3,16 +3,19 @@ import { useNavigate } from "react-router-dom";
 import Loading from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { useGet } from "@/Hooks/useGet";
+import { useDelete } from "@/Hooks/useDelete";
 import { toast } from "react-toastify";
-import { ArrowLeft, Clock, Package } from "lucide-react";
+import { ArrowLeft, Clock, Package, Trash2, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 export default function PendingOrders() {
   const navigate = useNavigate();
-  const { data: pendingOrders, loading, error, refetch } = useGet("api/pos/sales/pending");
+  const { data: pendingOrders, isLoading: loading, error, refetch } = useGet("api/admin/pos/sales/pending");
+  const { deleteData, loading: deleting } = useDelete();
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [orderDetailsEndpoint, setOrderDetailsEndpoint] = useState(null);
-  const { t, i18n } = useTranslation();
+  const [orderToDelete, setOrderToDelete] = useState(null);
+  const { t } = useTranslation();
 
   const {
     data: orderDetailsData,
@@ -84,7 +87,7 @@ export default function PendingOrders() {
         prepare_order: orderRawData.prepare_order || "0"
       }));
 
-      // التوجيه - تأكد من المسار هنا! 
+      // التوجيه - تأكد من المسار هنا!
       // بما أن basename هو /point-of-sale فإن "/" ستؤدي إلى الصفحة الرئيسية للـ POS
       navigate("/", {
         state: {
@@ -110,7 +113,43 @@ export default function PendingOrders() {
 
     console.log("Selecting order:", orderId);
     setSelectedOrderId(orderId);
-    setOrderDetailsEndpoint(`api/pos/sales/sales/pending/${orderId}`);
+    setOrderDetailsEndpoint(`api/admin/pos/sales/sales/pending/${orderId}`);
+  };
+
+  // حذف الطلب المعلق نهائيًا — من غير باسورد أو موافقة مدير
+  const handleDeleteOrder = async () => {
+    if (!orderToDelete || deleting) return;
+
+    try {
+      await deleteData(`api/admin/pos/sales/pending/${orderToDelete._id}`);
+
+      // لو الطلب المحذوف هو نفسه المفتوح في السلة، لازم نفضي السلة
+      // عشان مايتعملش checkout لطلب مش موجود
+      try {
+        const pendingInfo = JSON.parse(
+          sessionStorage.getItem("pending_order_info") || "null"
+        );
+        if (pendingInfo?.orderId === orderToDelete._id) {
+          sessionStorage.removeItem("pending_order_info");
+          sessionStorage.removeItem("cart");
+        }
+      } catch {
+        // ignore sessionStorage parse errors
+      }
+
+      toast.success(t("OrderDeletedSuccessfully"));
+      setOrderToDelete(null);
+      refetch();
+    } catch (e) {
+      // أخطاء الصلاحيات بيظهرلها توست مفصّل من الـ axios interceptor
+      if (e?.isPermissionError) return;
+
+      const message =
+        e?.response?.data?.error?.message ||
+        e?.response?.data?.message ||
+        t("DeleteOrderFailed");
+      toast.error(message);
+    }
   };
 
   const formatDate = (dateString) => {
@@ -121,30 +160,6 @@ export default function PendingOrders() {
       toast.error("Invalid date format", err);
       return dateString;
     }
-  };
-
-  const formatOrderItems = (orderDetails) => {
-    if (!Array.isArray(orderDetails)) return "No items";
-
-    const items = [];
-    orderDetails.forEach(orderDetail => {
-      if (orderDetail.product && Array.isArray(orderDetail.product)) {
-        // Handle nested product structure
-        orderDetail.product.forEach(productItem => {
-          if (productItem.product && productItem.product.name) {
-            items.push(`${productItem.product.name} x${productItem.count || 1}`);
-          }
-        });
-      } else if (orderDetail.product_name) {
-        // Handle direct product_name structure
-        items.push(`${orderDetail.product_name} x${orderDetail.count || 1}`);
-      } else if (orderDetail.name) {
-        // Handle name field
-        items.push(`${orderDetail.name} x${orderDetail.count || 1}`);
-      }
-    });
-
-    return items.length > 0 ? items.join(", ") : "No items available";
   };
 
   // ✅ Extract sales array from the new response structure
@@ -213,6 +228,19 @@ export default function PendingOrders() {
                         <span className="px-3 py-1 bg-teal-100 text-teal-800 rounded-full text-xs font-medium">
                           {sale.order_pending === 0 ? "Pending" : "Processed"}
                         </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOrderToDelete(sale);
+                          }}
+                          disabled={deleting}
+                          title={t("DeleteOrder")}
+                          aria-label={t("DeleteOrder")}
+                          className="p-2 rounded-full text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Trash2 size={18} />
+                        </button>
                       </div>
                     </div>
 
@@ -265,6 +293,50 @@ export default function PendingOrders() {
                 </div>
               ))
             )}
+          </div>
+        )}
+
+        {/* ✅ modal حذف الطلب المعلق (من غير باسورد) */}
+        {orderToDelete && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            onClick={() => !deleting && setOrderToDelete(null)}
+          >
+            <div
+              className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex items-center justify-center w-10 h-10 rounded-full bg-red-100 text-red-600">
+                  <AlertTriangle size={20} />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {t("DeleteOrder")}
+                </h3>
+              </div>
+              <p className="text-gray-600 mb-2">
+                {t("ConfirmDeleteOrder")}
+              </p>
+              <p className="text-sm text-gray-500 mb-6">
+                {t("Order")} #{orderToDelete.reference || orderToDelete._id}
+              </p>
+              <div className="flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setOrderToDelete(null)}
+                  disabled={deleting}
+                >
+                  {t("Cancel")}
+                </Button>
+                <Button
+                  onClick={handleDeleteOrder}
+                  disabled={deleting}
+                  className="bg-red-600 text-white hover:bg-red-700"
+                >
+                  {deleting ? t("DeletingOrder") : t("DeleteOrder")}
+                </Button>
+              </div>
+            </div>
           </div>
         )}
       </div>
