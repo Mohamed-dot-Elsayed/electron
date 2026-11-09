@@ -7,16 +7,20 @@ export function usePost() {
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
   const token = sessionStorage.getItem("token");
-  const postData = async (endpoint, body) => {
+  const postData = async (endpoint, body, config = {}) => {
     // <-- endpoint هنا
     setLoading(true);
     setError(null);
 
+    const { headers: extraHeaders, ...restConfig } = config || {};
+
     try {
       const response = await axiosInstance.post(`${baseUrl}${endpoint}`, body, {
+        ...restConfig,
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
+          ...(extraHeaders || {}),
         },
       });
       setData(response.data);

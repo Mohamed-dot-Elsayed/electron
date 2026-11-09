@@ -523,7 +523,7 @@ export default function Card({
             <tbody>
               {orderItems.map((item) => (
                 <tr key={item.temp_id}>
-                  <td style={{ border: "1px solid #000", padding: "8px" }}>{item.name}</td>
+                  <td style={{ border: "1px solid #000", padding: "8px" }}>{isArabic ? (item.name_ar || item.ar_name || item.name) : (item.name_en || item.name)}</td>
                   <td style={{ border: "1px solid #000", padding: "8px" }}>{item.quantity}</td>
                   <td style={{ border: "1px solid #000", padding: "8px" }}>{item.price.toFixed(2)}</td>
                   <td style={{ border: "1px solid #000", padding: "8px" }}>{(item.price * item.quantity).toFixed(2)}</td>

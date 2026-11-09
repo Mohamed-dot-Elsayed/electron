@@ -16,10 +16,27 @@ const extractId = (val: any): string | null => {
 };
 
 export const createTransfer = async (req: Request, res: Response) => {
+  const user = req.user as any;
+
+  // A scoped user can only send stock from their assigned warehouse — the
+  // POS client sends only `toWarehouseId`, exactly like the online backend.
+  if (user?.role !== "superadmin") {
+    const assignedWarehouseId = user?.warehouse_id
+      ? String(user.warehouse_id)
+      : null;
+
+    if (!assignedWarehouseId) {
+      throw new BadRequest("Warehouse is not assigned to this user");
+    }
+
+    req.body.fromWarehouseId = assignedWarehouseId;
+  }
+
   const { fromWarehouseId, toWarehouseId, products, reason } = req.body;
 
   if (!fromWarehouseId || !toWarehouseId) throw new BadRequest("Both warehouses are required");
-  if (fromWarehouseId === toWarehouseId) throw new BadRequest("Source and destination warehouse must be different");
+  if (String(fromWarehouseId) === String(toWarehouseId))
+    throw new BadRequest("Source and destination warehouse must be different");
   if (!Array.isArray(products) || products.length === 0) throw new BadRequest("At least one product is required");
 
   const fromWarehouse = WarehouseModel.findById(fromWarehouseId);

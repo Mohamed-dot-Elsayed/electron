@@ -50,7 +50,7 @@ export default function MainLayouts() {
 
   if (tenantLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+      <div className="flex h-full items-center justify-center bg-slate-50 dark:bg-slate-900">
         <Loading />
       </div>
     );
@@ -61,13 +61,13 @@ export default function MainLayouts() {
   }
 
   return (
-    <SidebarProvider>
-      <main className="w-full">
-        <div className="flex flex-col min-h-screen md:!ps-2 sm:!p-0 md:max-w-auto sm:w-full">
+    <SidebarProvider className="min-h-0 h-full">
+      <main className="h-full w-full">
+        <div className="flex h-full flex-col md:!ps-2 sm:!p-0 md:max-w-auto sm:w-full">
           {/* تطبيق شرط إخفاء الـ Navbar */}
           {!shouldHideNavbar && <Navbar className="!p-2" />}
 
-          <div className="relative flex-1 p-4">
+          <div className="relative flex-1 min-h-0 overflow-y-auto p-4">
             {isLoading && <Loading />}
             <Outlet />
           </div>

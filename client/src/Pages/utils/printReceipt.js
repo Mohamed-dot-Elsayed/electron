@@ -520,7 +520,7 @@ const formatCashierReceipt = (receiptData) => {
             <tbody>
             ${receiptData.items
               .map((item) => {
-                const productName = item.name || item.nameAr || "منتج";
+                const productName = (item.nameAr || item.name_ar || item.ar_name || item.name) || "منتج";
                 const qty = Number(item.qty || 1);
                 const itemTotal = Number(item.total || 0);
                 const unitPrice = (

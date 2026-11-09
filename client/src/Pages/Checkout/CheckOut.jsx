@@ -736,7 +736,7 @@ const CheckOut = ({
         .map(
           (item) =>
             `• ${item.qty}x ${
-              isArabic ? item.nameAr || item.name : item.name
+              isArabic ? item.nameAr || item.name_ar || item.ar_name || item.name : item.name_en || item.name
             } - ${item.total} ${t("EGP") || "EGP"}`,
         )
         .join("\n");

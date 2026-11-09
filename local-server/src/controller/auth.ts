@@ -35,6 +35,18 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     throw new UnauthorizedError("Invalid email or password");
   }
 
+  // ⛔ The Electron POS cannot work without a warehouse: block the login with
+  // a 400 so the client shows a "no warehouse" toast instead of entering the
+  // cashier screen and failing on every warehouse-scoped request.
+  const isPosClient =
+    String(req.headers["x-pos-client"] || "").toLowerCase() === "true";
+
+  if (isPosClient && !user.warehouse_id) {
+    throw new BadRequest("This user is not assigned to any warehouse", {
+      code: "USER_NO_WAREHOUSE",
+    });
+  }
+
   // ✅ جيب الـ permissions للـ Response (Frontend)
   let mappedPermissions: UserPermission[] = [];
   let roleName: string | null = null;

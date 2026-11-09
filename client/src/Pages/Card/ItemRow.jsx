@@ -1,5 +1,6 @@
 // ItemRow.jsx - تم إصلاح مشكلة عدم احتساب Addons في Dine-in
 import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import { PREPARATION_STATUSES } from "./constants";
 import { Trash2, FileText } from "lucide-react";
 import ProductDetailModalWrapper from "./ProductDetailModalWrapper";
@@ -61,6 +62,8 @@ const ItemRow = ({
   console.log("ItemRow → Rendering item:", item);
   const statusInfo = PREPARATION_STATUSES[item.preparation_status] || PREPARATION_STATUSES.pending;
   const StatusIcon = statusInfo.icon;
+  const { i18n } = useTranslation();
+  const isArabic = i18n.language === "ar";
 
   const orderedQty = Number(item.count || 1);
   const startQty = Number(item.start_quantaty || 0);
@@ -117,7 +120,7 @@ const ItemRow = ({
         >
           <div className="flex flex-col gap-0.5">
             <span className="text-gray-800 text-xs font-medium hover:text-purple-600 hover:underline cursor-pointer transition-colors leading-tight">
-              {item.name}
+              {isArabic ? (item.name_ar || item.ar_name || item.name) : (item.name_en || item.name)}
             </span>
 
             {/* Variant Badge / Name */}

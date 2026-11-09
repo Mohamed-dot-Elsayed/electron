@@ -220,7 +220,8 @@ const buildWarehouseProductList = async (
 
       return {
         _id: product._id,
-        name: product.ar_name || product.name,
+        name: product.name,
+        ar_name: product.ar_name,
         price: product.price,
         image: product.image,
         different_price,
@@ -323,11 +324,17 @@ export const getFeaturedProducts = async (
 // get all selections
 export const getAllSelections = async (req: Request, res: Response) => {
   const warehouseId = req.user?.warehouse_id;
-  const warehouses = (
-    warehouseId
-      ? WarehouseModel.find({ _id: warehouseId })
-      : WarehouseModel.find()
-  ).map(({ name }) => ({ name }));
+  // All warehouses are returned (like the online backend) so the POS can
+  // target another branch; the user's assigned warehouse is listed first.
+  const warehouses = WarehouseModel.find()
+    .map(({ _id, name }) => ({ _id: String(_id), name }))
+    .sort((a: any, b: any) =>
+      String(a._id) === String(warehouseId)
+        ? -1
+        : String(b._id) === String(warehouseId)
+          ? 1
+          : 0,
+    );
 
   const accounts = BankAccountModel.find({ in_POS: true, status: true })
     .filter((account) =>
@@ -688,11 +695,19 @@ export const selectCashier = async (req: Request, res: Response) => {
 export const getWarehouses = async (req: Request, res: Response) => {
   const warehouseId = req.user?.warehouse_id;
 
-  const warehouses = (
-    warehouseId
-      ? WarehouseModel.find({ _id: warehouseId })
-      : WarehouseModel.find()
-  ).map(({ name }) => ({ name }));
+  // Return EVERY warehouse, not only the user's own branch: the transfer
+  // screen builds the destination list from this payload (and excludes the
+  // user's branch client-side). `_id` must be present for that exclusion to
+  // work. The assigned warehouse is put first, mirroring the online backend.
+  const warehouses = WarehouseModel.find()
+    .map(({ _id, name }) => ({ _id: String(_id), name }))
+    .sort((a: any, b: any) =>
+      String(a._id) === String(warehouseId)
+        ? -1
+        : String(b._id) === String(warehouseId)
+          ? 1
+          : 0,
+    );
 
   SuccessResponse(res, { message: "Warehouses list", data: warehouses });
 };

@@ -701,7 +701,7 @@ const ProductModal = ({
           <div className="relative">
             <img
               src={displayedImage}
-              alt={selectedProduct.name}
+              alt={isArabic ? (selectedProduct.ar_name || selectedProduct.name) : (selectedProduct.name || selectedProduct.ar_name)}
               className="w-full h-52 object-cover rounded-t-2xl"
             />
             <button
@@ -735,7 +735,7 @@ const ProductModal = ({
               <div className="flex-1">
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <DialogTitle className="text-xl font-bold text-gray-900 leading-snug">
-                    {selectedProduct.name}
+                    {isArabic ? (selectedProduct.ar_name || selectedProduct.name) : (selectedProduct.name || selectedProduct.ar_name)}
                   </DialogTitle>
                   <button
                     type="button"

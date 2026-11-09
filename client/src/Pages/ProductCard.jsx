@@ -74,7 +74,7 @@ const ProductCard = ({ product, onAddToOrder, onOpenModal }) => {
         <div className="relative">
           <img
             src={product.image}
-            alt={product.name}
+            alt={isArabic ? (product.ar_name || product.name) : (product.name || product.ar_name)}
             className="w-full h-32 object-cover"
           />
           {hasVariants && (
@@ -92,7 +92,7 @@ const ProductCard = ({ product, onAddToOrder, onOpenModal }) => {
         </div>
         <div className="p-3">
           <h3 className="text-base font-semibold text-gray-800 truncate">
-            {product.name}
+            {isArabic ? (product.ar_name || product.name) : (product.name || product.ar_name)}
             <p className="text-sm text-gray-500 font-medium">{t("code")}:{product.product_code || product.code} </p>
           </h3>
         </div>

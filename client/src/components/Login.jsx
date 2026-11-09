@@ -27,6 +27,7 @@ import PosUpgradeRequiredModal from "@/components/PosUpgradeRequiredModal";
 import { useTranslation } from "react-i18next";
 import { Lock, RefreshCw, PhoneCall } from "lucide-react";
 import axios from "axios";
+import { toast } from "react-toastify";
 
 // ✅ validation schema
 const formSchema = z.object({
@@ -173,10 +174,24 @@ export default function LoginPage() {
 
     try {
       // ✅ بنبعت الـ endpoint مع الـ body
-      const res = await postData("api/admin/auth/login", values);
+      const res = await postData("api/admin/auth/login", values, {
+        headers: { "x-pos-client": "true" },
+      });
 
       if (res?.success) {
         const { token, user } = res.data;
+
+        // ⛔ Safety net: never continue into the POS without an assigned
+        // warehouse (the backend returns 400 for this case as well).
+        if (!user?.warehouse_id) {
+          toast.error(
+            isArabic
+              ? "هذا المستخدم غير مرتبط بأي مخزن. برجاء التواصل مع المسؤول لتعيين مخزن للحساب."
+              : "This user is not assigned to any warehouse. Please contact your administrator to assign one.",
+            { toastId: "user-no-warehouse" }
+          );
+          return;
+        }
 
         // ⛔ فحص صلاحية havePOS لهذا المستأجر فوراً قبل السماح بالدخول
         let tenantFeatures = null;
@@ -316,6 +331,19 @@ export default function LoginPage() {
       }
     } catch (err) {
       console.error("Login error:", err);
+
+      const errorCode = err?.response?.data?.error?.details?.code;
+
+      if (err?.response?.status === 400 && errorCode === "USER_NO_WAREHOUSE") {
+        // No token/user is stored on this path, so the user stays on the login
+        // page and never reaches the cashier screen.
+        toast.error(
+          isArabic
+            ? "هذا المستخدم غير مرتبط بأي مخزن. برجاء التواصل مع المسؤول لتعيين مخزن للحساب."
+            : "This user is not assigned to any warehouse. Please contact your administrator to assign one.",
+          { toastId: "user-no-warehouse" }
+        );
+      }
     }
   }
 

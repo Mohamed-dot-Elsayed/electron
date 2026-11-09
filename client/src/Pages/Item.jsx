@@ -355,6 +355,8 @@ export default function Item({ onAddToOrder }) {
     if (orderType === "take_away" || orderType === "delivery") {
       const newItem = {
         ...product,
+        name_en: product.name_en || product.name || "",
+        name_ar: product.name_ar || product.ar_name || "",
         temp_id: createTempId(product._id),
         product_price_id: resolvedProductPriceId,
         different_price: product.different_price || Boolean(resolvedProductPriceId),
@@ -430,6 +432,8 @@ export default function Item({ onAddToOrder }) {
           price: itemPrice,
           originalPrice: product.originalPrice || basePrice,
           totalPrice: itemTotal,
+          name_en: product.name_en || product.name || "",
+          name_ar: product.name_ar || product.ar_name || "",
           cart_id: cartId ? cartId.toString() : null,
           preparation_status: "pending",
           notes: product.notes || "",
@@ -450,6 +454,8 @@ export default function Item({ onAddToOrder }) {
       _id: bundle._id,
       temp_id: `bundle_${bundle._id}_${Date.now()}`,
       name: bundle.name,
+      name_en: bundle.name_en || bundle.name || "",
+      name_ar: bundle.name_ar || bundle.ar_name || "",
       price: bundle.price, // Discounted price
       originalPrice: bundle.price,
       totalPrice: bundle.price,
@@ -492,6 +498,8 @@ export default function Item({ onAddToOrder }) {
 
           newItems.push({
             ...product,
+            name_en: product.name_en || product.name || "",
+            name_ar: product.name_ar || product.ar_name || "",
             temp_id: createTempId(product._id),
             product_price_id: resolvedProductPriceId,
             different_price: product.different_price || Boolean(resolvedProductPriceId),
